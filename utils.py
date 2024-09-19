@@ -4,7 +4,7 @@ import numpy as np
 from typing import Callable, Optional
 
 
-def print_rows_with_nan(df:pd.DataFrame,col:str,return_rows = False)->Optional[pd.DataFrame]:
+def print_rows_with_nan(df:pd.DataFrame,col:str,return_rows = False, print_rows= True)->Optional[pd.DataFrame]:
     """
     Print rows with NaN values in the column col of the dataframe df.
 
@@ -13,12 +13,14 @@ def print_rows_with_nan(df:pd.DataFrame,col:str,return_rows = False)->Optional[p
     col: string
 
     Returns:
-    None
+    Rows with NaN values in the column col of the dataframe df.
     """
-
-    display(df[df[col].isna()])
+    nan_rows = df[df[col].isna()]   
+    
+    if print_rows:
+        display(nan_rows)
     if return_rows:
-        return df[df[col].isna()]
+        return nan_rows
     
 def get_col_types(df:pd.DataFrame,col:str)->pd.DataFrame:
     """
@@ -102,6 +104,6 @@ def row_with_value(df,column,value):
 
     Returns:
     pandas dataframe
-    
+
     """
     return df.where(df[column] == value).dropna(axis=0, how='all')    
