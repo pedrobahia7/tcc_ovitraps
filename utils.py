@@ -2,6 +2,8 @@ import pandas as pd
 from IPython.display import display
 import numpy as np
 from typing import Callable, Optional
+import matplotlib.pyplot as plt
+import pygame
 
 
 def print_rows_with_nan(df:pd.DataFrame,col:str,return_rows = False, print_rows= True)->Optional[pd.DataFrame]:
@@ -107,3 +109,61 @@ def row_with_value(df,column,value):
 
     """
     return df.where(df[column] == value).dropna(axis=0, how='all')    
+
+
+def estimate_transform(source_points, target_points):
+    # Calculate centroids
+    centroid_source = np.mean(source_points, axis=0)
+    centroid_target = np.mean(target_points, axis=0)
+
+    # Center the points
+    source_centered = source_points - centroid_source
+    target_centered = target_points - centroid_target
+
+    # Compute the covariance matrix
+    H = np.dot(source_centered.T, target_centered)
+
+    # Singular Value Decomposition
+    U, S, Vt = np.linalg.svd(H)
+
+    # Compute rotation matrix
+    R = np.dot(Vt.T, U.T)
+
+    # Ensure a right-handed coordinate system
+    if np.linalg.det(R) < 0:
+        Vt[-1, :] *= -1
+        R = np.dot(Vt.T, U.T)
+
+    # Compute translation
+    translation = centroid_target - np.dot(R, centroid_source)
+
+    return R, translation
+
+
+def hist_html(df,trap,create_hist=True):
+    if create_hist:
+        # Generate a histogram
+        plt.figure(figsize=(6, 4))
+        plt.hist(df, bins=1000, color='black', edgecolor='black')
+        plt.title(f'Histograma de contagem de ovos - armadilha {trap}')
+        plt.xlabel('Contagem de ovos')
+        plt.ylabel('Frequência')
+        plt.grid(axis='y', alpha=0.75)
+        plt.savefig(f'./histograms/histogram_{trap}.png', bbox_inches='tight', dpi=300)
+        plt.close()  # Close the plot to avoid displaying it in the output
+
+    return f'./histograms/histogram_{trap}.png'
+
+
+def play_finish_song(addr = 'D:/HD_backup/Pedro/Músicas/Músicas/Sinfonia To Cantata # 29.mp3'):
+    # Initialize the mixer
+    pygame.mixer.init()
+    # Load the MP3 file
+    pygame.mixer.music.load(addr)
+    # Play the MP3 file
+    pygame.mixer.music.play()
+
+def stop_finish_song():
+    pygame.mixer.music.stop()
+    # Optional: Clean up the mixer
+    pygame.mixer.quit()
