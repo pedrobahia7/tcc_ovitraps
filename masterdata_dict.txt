@@ -1,6 +1,6 @@
-exercicio [14]: [2018 2014 2023 2013 2015 2020]
-nplaca [523048]: [90000140 90000215 90000156 90000012 90000272 90000184]
-narmad [2066]: [901001 901002 901003 901004 901005 901006]
+exercicio [14]: Ano de depósito
+nplaca [523048]: identificação das placas. Unicidade por amostra
+narmad [2066]: identificação das armadilhas onde há depósito das placas. Unicidade por local 
 idarmad [2066]: [901374 901375 901376 901377 901378 901379]
 endarmad [2066]: [97222 97559 97541 97149 96964 96965]
 cep [1786]: [9.03069076e+09 9.03069224e+09 9.03069008e+09 9.03069075e+09
@@ -75,7 +75,13 @@ coordy [1781]: [7789798.  7790153.  7790764.5 7791000.  7790795.  7790677. ]
 qdnte [1402]: ['0303' '0333' '0365' '0395' '0364' '0397']
 ninsp [1]: [1.]
 scoreG [1716]: [287.3 163.  158.2 133.  123.1  43.5]
-GerCat [5]: ['A2' 'M ' 'B ' 'A1' 'ND']
+GerCat [5]: Categorias conforme número de ovos. Unicidade em relação a armadilhas 
+    (for n in data['narmad'].unique():
+        if utils.row_with_value(data, 'narmad',n)['GerCat'].unique().shape[0] > 1:
+        print(n)
+        print(utils.row_with_value(data, 'narmad',n)['GerCat'].unique())
+        print('-----------------')) print NONE
+
 Peso1 [720]: [287. 163. 158. 133. 123.  44.]
 Peso2 [2784]: [2009. 2296. 1722. 1435. 2583. 1141.]
 SumOvosP1 [48181]: [    0. 31570. 16933.  8036.  4879.  4018.]
