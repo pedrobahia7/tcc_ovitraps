@@ -4,6 +4,7 @@ import numpy as np
 from typing import Callable, Optional
 import matplotlib.pyplot as plt
 import pygame
+import time
 
 
 def print_rows_with_nan(df:pd.DataFrame,col:str,return_rows = False, print_rows= True)->Optional[pd.DataFrame]:
@@ -140,22 +141,21 @@ def estimate_transform(source_points, target_points):
     return R, translation
 
 
-def hist_html(df,trap,create_hist=True):
-    if create_hist:
-        # Generate a histogram
-        plt.figure(figsize=(6, 4))
-        plt.hist(df, bins=1000, color='black', edgecolor='black')
-        plt.title(f'Histograma de contagem de ovos - armadilha {trap}')
-        plt.xlabel('Contagem de ovos')
-        plt.ylabel('Frequência')
-        plt.grid(axis='y', alpha=0.75)
-        plt.savefig(f'./histograms/histogram_{trap}.png', bbox_inches='tight', dpi=300)
-        plt.close()  # Close the plot to avoid displaying it in the output
+def hist_html(df,trap):
+    # Generate a histogram
+    plt.figure(figsize=(6, 4))
+    plt.hist(df, bins=1000, color='black', edgecolor='black')
+    plt.title(f'Histograma de contagem de ovos - armadilha {trap}')
+    plt.xlabel('Contagem de ovos')
+    plt.ylabel('Frequência')
+    plt.grid(axis='y', alpha=0.75)
+    plt.savefig(f'./results/histograms/histogram_{trap}.png', bbox_inches='tight', dpi=300)
+    plt.close()  # Close the plot to avoid displaying it in the output
 
     return f'./histograms/histogram_{trap}.png'
 
 
-def play_finish_song(addr = 'D:/HD_backup/Pedro/Músicas/Músicas/Sinfonia To Cantata # 29.mp3'):
+def play_finish_song(addr = './data/Sinfonia To Cantata # 29.mp3'):
     # Initialize the mixer
     pygame.mixer.init()
     # Load the MP3 file
@@ -163,7 +163,34 @@ def play_finish_song(addr = 'D:/HD_backup/Pedro/Músicas/Músicas/Sinfonia To Ca
     # Play the MP3 file
     pygame.mixer.music.play()
 
-def stop_finish_song():
+
+def stop_finish_song(seconds = 5):
+    time.sleep(seconds)
     pygame.mixer.music.stop()
     # Optional: Clean up the mixer
     pygame.mixer.quit()
+
+
+def pareto_plot(data:pd.Series,plt_title:str,ax=plt ):
+    name = data.name                                        #get name of the column
+    df = data.value_counts().sort_index().reset_index()     #count values
+    df.drop(df[df[name] == 0].index, inplace=True)          #drop index 0
+    df = df.apply(lambda x: np.log(x))                      # apply log to values
+    ax.scatter(df[name], df['count'],s=1)
+    if ax == plt:
+        ax.title(plt_title)
+        ax.ylabel(f'Log of frequency')
+        ax.xlabel(f'Log of value')
+
+    else:
+        ax.set_title(plt_title)
+    
+    
+def pareto_plot_html(df,trap):
+    # Generate a histogram
+    plt.figure(figsize=(6, 4))
+    pareto_plot(df, f'Pareto plot - armadilha {trap}')
+    plt.savefig(f'./results/pareto_plot/pareto_plot_{trap}.png', bbox_inches='tight', dpi=300)
+    plt.close()  # Close the plot to avoid displaying it in the output
+
+    return f'./pareto_plot/pareto_plot_{trap}.png'
