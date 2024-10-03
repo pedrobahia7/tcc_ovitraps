@@ -1,0 +1,32 @@
+Derivar função de pareto 
+introduzir pareto na função de custo da NN (excluir zeros)
+Treinar NN e ver porcentagem de armadilhas maiores que "600"
+Comparar com Naïve e com função de custo quadrática
+
+
+Music Informatics - método para identificar reta e ponto onde ela começa/
+Séries temporais: 
+    novos individual armadilhas (html)
+    novos agregado mensal total
+    amostras agregado semanal total
+    novos categoria mensal (plotar todos juntos)
+    amostras categoria mensal (plotar todos juntos)
+    amostras categoria semanal (plotar todos juntos)
+
+Porcentagem de zeros por categoria 
+Porcentagem de zeros por armadilha (HTML) 
+Plotar paretos com 4 alfas diferentes e mtas amostras
+Tratamento de NaNs na Latitude/Longitude
+
+Informação Mútua para definir correlações
+
+
+
+
+Classificador para definir qual das distribuilções seguir
+Comparar análise bayesiana com inteiramente computacional
+
+
+
+Artigos:
+https://homepages.dcc.ufmg.br/~olmo/mypapers/p1319-vazdemelo.pdf (log logistic)
