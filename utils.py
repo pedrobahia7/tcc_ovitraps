@@ -5,8 +5,9 @@ from typing import Callable, Optional
 import matplotlib.pyplot as plt
 import pygame
 import time
-from geopy.distance import distance
-
+from geopy.distance import geodesic
+import itertools
+from tqdm import tqdm
 
 
 def print_rows_with_nan(df:pd.DataFrame,col:str,return_rows = False, print_rows= True)->Optional[pd.DataFrame]:
@@ -200,7 +201,6 @@ def pareto_plot_html(df:pd.DataFrame,trap:str) -> str:
 
     return f'./pareto_plot/pareto_plot_{trap}.png'
 
-
 def create_distance_matrix(position_matrix: pd.DataFrame) -> pd.DataFrame:
     """
     Function to create a distance matrix from a position matrix of traps
@@ -212,39 +212,91 @@ def create_distance_matrix(position_matrix: pd.DataFrame) -> pd.DataFrame:
     distance_matrix (pd.DataFrame): DataFrame with the distances between each trap.
     nbg  Trap numbers are used as index and columns
     """
-    distance_matrix = pd.DataFrame(index=position_matrix.index, columns=position_matrix.index)
-    coordinates = position_matrix.apply(lambda row: (row['latitude'], row['longitude']), axis=1)
-    for i, coord1 in enumerate(coordinates):
-        distance_matrix.iloc[i] = coordinates.apply(lambda coord2: distance(coord1, coord2).meters)
-    distance_matrix = distance_matrix.dropna(how='all',axis=1).dropna(how='all',axis=0)
-    distance_matrix.set_index(position_matrix['narmad'].values,inplace=True)
+
+    coordinates = position_matrix[['latitude', 'longitude']].to_numpy()
+
+    distance_list = []
+    for idx1,idx2 in tqdm(itertools.combinations(range(len(coordinates)), 2)):
+        distance_list.append(geodesic(coordinates[idx1], coordinates[idx2]).meters)
+
+    play_finish_song()
+    time.sleep(10)
+    stop_finish_song()
+    # Size of the matrix
+    n = len(coordinates)
+
+    # Create an empty square matrix
+    symmetric_matrix = np.zeros((n, n))
+
+    # Fill the upper triangular part (including the diagonal)
+    symmetric_matrix[np.triu_indices(n, 1)] = np.array(distance_list)
+
+    # Fill the lower triangular part by mirroring the upper part
+    symmetric_matrix += symmetric_matrix.T
+
+    # Convert the NumPy array to a DataFrame
+    distance_matrix = pd.DataFrame(distance_matrix, index=position_matrix.index, columns=position_matrix.index)
+
+    # Set index and columns to 'narmad' values
+    distance_matrix.index = position_matrix['narmad'].values
     distance_matrix.columns = position_matrix['narmad'].values
+
     return distance_matrix
 
-def add_lagged_rows(data:pd.DataFrame, armad:str|int,  tol:int = 0, lag:int = 1, order:int = None)->pd.DataFrame:
+
+def create_lagged_rows(data:pd.DataFrame, trap:str|int,  tol:int = 3, lag:int = 1)->pd.DataFrame:
     """
     Create a dataframe with the lagged samples of any trap. The rows are added only if the time difference between the 
     previous sample and the current one is equal to  14 days + a tolerance. 
 
     Parameters:
     data: dataframe with the complete data 
-    armad: number of trap to be analyzed
+    trap: number of the other trap to be analyzed
     tol: tolerance in days for the time difference between the previous sample and the current one
     lag: number of lagged samples to be added
-    order: cardinal number representing the order proximity. 0 is the trap itself, 1 is the closest trap, etc...
 
     Returns:
     df: dataframe with the lagged samples 
 
-    
-
     """
-    df = row_with_value(data,'narmad', armad)[['nplaca','novos','dtcol']].sort_values('dtcol')
-    df['dtcol'] = df['dtcol'].diff()    
-    df['good_dates'] = df['dtcol'].apply([lambda x: np.nan if x.days > 14 + tol or x.days < 14 - tol else 1])
+    df = row_with_value(data,'narmad', trap)[['nplaca','narmad','novos','dtcol']].sort_values('dtcol')
+    df['dtcol_diff_1'] = df['dtcol'].diff().dt.days    
+    df['good_dates'] = df['dtcol_diff_1'].apply([lambda x: np.nan if x > 14 + tol or x < 14 - tol else 1])
     
+    for count in range(1,lag):
+        df[f'dtcol_diff_{count+1}'] = df[f'dtcol_diff_{count}'] + df['dtcol_diff_1'].shift(count) 
+
     for count in range(1,lag+1):
-        df[f'novos_lag_{count}_close_{order}'] = df['novos'].shift(count)*df['good_dates'].shift(count-1)
-    df.drop(columns=['good_dates'],inplace=True)
+        df[f'novos_lag_{count}'] = df['novos'].shift(count)*df['good_dates'].shift(count-1)
+   
     df.set_index('nplaca',inplace=True)
     return df
+
+'''
+
+def merge_series(df1:pd.DataFrame, df2:pd.DataFrame, on:str = 'dtcol')->pd.DataFrame:
+    """
+    Merge two dataframes representing time series data. The dataframes are merged on the column "on".
+
+    Parameters:
+    df1: original df that will be filled with lagged data
+    df2: dataframe containing lagged data of some traps
+    on: string representing the column to be used as key for the merge. Initially, it is the collection date.
+    Traps are associated according to the most recent collection before the original trap.
+
+
+    Returns:
+    pandas dataframe with the merged data
+    """
+    for original_trap in df1['narmad'].iterrows():
+        diff_date = original_trap['dtcol'] - df2['dtcol']
+        other_trap_nplaca = diff_date[diff_date>=0].min()['nplaca'] #get the most recent collection date before the original trap
+        other_trap = row_with_value(df2,'nplaca',other_trap_nplaca)
+        other_trap[]
+        other_trap = other_trap.drop(columns=['nplaca','dtcol'])
+        
+        
+        df1.loc[original_trap] = df1.loc[original_trap].combine_first()
+    
+    return 
+'''
