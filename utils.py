@@ -219,9 +219,6 @@ def create_distance_matrix(position_matrix: pd.DataFrame) -> pd.DataFrame:
     for idx1,idx2 in tqdm(itertools.combinations(range(len(coordinates)), 2)):
         distance_list.append(geodesic(coordinates[idx1], coordinates[idx2]).meters)
 
-    play_finish_song()
-    time.sleep(10)
-    stop_finish_song()
     # Size of the matrix
     n = len(coordinates)
 
@@ -235,10 +232,9 @@ def create_distance_matrix(position_matrix: pd.DataFrame) -> pd.DataFrame:
     symmetric_matrix += symmetric_matrix.T
 
     # Convert the NumPy array to a DataFrame
-    distance_matrix = pd.DataFrame(distance_matrix, index=position_matrix.index, columns=position_matrix.index)
+    distance_matrix = pd.DataFrame(symmetric_matrix, index=position_matrix.index, columns=position_matrix.index)
 
     # Set index and columns to 'narmad' values
-    distance_matrix.index = position_matrix['narmad'].values
     distance_matrix.columns = position_matrix['narmad'].values
 
     return distance_matrix
