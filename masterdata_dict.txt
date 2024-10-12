@@ -3,17 +3,10 @@ nplaca [523048]: identificação das placas. Unicidade por amostra
 narmad [2066]: identificação das armadilhas onde há depósito das placas. Unicidade por local 
 idarmad [2066]: [901374 901375 901376 901377 901378 901379]
 endarmad [2066]: [97222 97559 97541 97149 96964 96965]
-cep [1786]: [9.03069076e+09 9.03069224e+09 9.03069008e+09 9.03069075e+09
- 9.03069072e+09 9.03069080e+09]
-dtinstal [2696]: <DatetimeArray>
-['2018-06-18 00:00:00', '2014-09-22 00:00:00', '2023-05-29 00:00:00',
- '2013-07-01 00:00:00', '2015-03-30 00:00:00', '2020-08-10 00:00:00']
-Length: 6, dtype: datetime64[ns]
-dtcol [2803]: <DatetimeArray>
-['2018-06-25 00:00:00', '2014-09-29 00:00:00', '2023-06-05 00:00:00',
- '2013-07-08 00:00:00', '2015-04-06 00:00:00', '2020-08-17 00:00:00']
-Length: 6, dtype: datetime64[ns]
-semepi [50]: [125 139 122 127 113 133]
+cep [1786]: cep da instalação
+dtinstal [2696]: data de instalação da armadilha (%Y-%m-%d)
+dtcol [2803]: data de coleta da armadilha (%Y-%m-%d)
+semepi [50]: semana epidemiológica - não há coletas nas semanas 51 e 52
 cdabrange [155]: [901460. 901400. 901300. 901260. 901250. 901290.]
 abrange [154]: ['C.S.REGINA' 'C.S.LINDEIA' 'C.S.ITAIPU' 'C.S.TUNEL DE IBIRITE'
  'C.S.TIROL' 'C.S.BARREIRO']
@@ -21,15 +14,15 @@ quadra [1803]: [9002489. 9005607. 9002173. 9002551. 9005938. 9008200.]
 cdbairro [484]: [900714. 900706. 901052. 901157. 901158. 901155.]
 nombairro [366]: ['LINDEIA' 'JATOBA' 'REGINA' 'ITAIPU' 'MARILANDIA' 'TUNEL DE IBIRITE']
 cddist [9]: [1 2 3 4 5 6]
-novos [997]: [  0. 110.  59.  28.  17.  14.]
-eclod [6]: [nan  1.  2.  4.  3.  5.]
-desid [6]: [nan  1.  5.  3.  4.  2.]
+novos [997]: numero de ovos
+eclod [6]: numero de ovos eclodidos (Na = 0)
+desid [6]: numero de ovos desidratados (Na = 0)
 CatRC [5]: [ 2.  3.  1. nan  0.]
 qarmadila [30]: [ 7. 11. 13. 12. 22. 17.]
 qarmadild [9]: [245. 217. 208. 224. 285. 178.]
 qarmadilrc [5]: [1053.  161.  766.   23.   64.]
 qarmadilbh [1]: [2067.]
-dia [31]: [18. 22. 29.  1. 30. 10.]
+dia [31]: dia de instalação da armadilha
 mes [12]: [6. 9. 5. 7. 3. 8.]
 ano [14]: [2018. 2014. 2023. 2013. 2015. 2020.]
 intvinstcol [39]: [ 7.  8.  6.  5.  9. 10.]
