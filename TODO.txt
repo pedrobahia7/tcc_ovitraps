@@ -21,6 +21,8 @@ Tratamento de NaNs na Latitude/Longitude
 Informação Mútua para definir correlações
 
 
+Ler: 
+
 
 
 Classificador para definir qual das distribuilções seguir
@@ -30,3 +32,6 @@ Comparar análise bayesiana com inteiramente computacional
 
 Artigos:
 https://homepages.dcc.ufmg.br/~olmo/mypapers/p1319-vazdemelo.pdf (log logistic)
+
+https://epubs.siam.org/doi/10.1137/070710111 (Renato)
+https://arxiv.org/abs/2406.16232 (Renato)
