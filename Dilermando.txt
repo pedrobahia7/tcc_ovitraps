@@ -1,0 +1,4 @@
+Latitude e longidtude de todas as armadilhas
+algumas armadilhas com mesma latitude e longidtude, porém com valores  array([902025, 902026, 902031, 902206, 902208, 908027, 908207, 908032,
+       908242, 908059, 908064, 908262, 908301])
+
