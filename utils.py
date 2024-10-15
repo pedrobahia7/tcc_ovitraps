@@ -140,7 +140,7 @@ def hist_html(df,trap):
     return f'./histograms/histogram_{trap}.png'
 
 
-def play_finish_song(addr = './data/Sinfonia To Cantata # 29.mp3'):
+def play_ending_song(addr = './data/Sinfonia To Cantata # 29.mp3'):
     # Initialize the mixer
     pygame.mixer.init()
     # Load the MP3 file
@@ -149,7 +149,7 @@ def play_finish_song(addr = './data/Sinfonia To Cantata # 29.mp3'):
     pygame.mixer.music.play()
 
 
-def stop_finish_song(seconds = 5):
+def stop_ending_song(seconds = 5):
     time.sleep(seconds)
     pygame.mixer.music.stop()
     # Optional: Clean up the mixer
