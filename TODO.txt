@@ -20,6 +20,8 @@ Tratamento de NaNs na Latitude/Longitude
 
 Informação Mútua para definir correlações
 
+Granger causality to add new traps and external variables
+
 
 Ler: 
 
