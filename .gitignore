@@ -2,3 +2,5 @@ data/
 venv_ovitraps/
 __pycache__/
 results/
+mlruns/
+mlartifacts/
