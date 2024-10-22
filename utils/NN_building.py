@@ -8,9 +8,10 @@ from torch.utils.data import DataLoader
 import os
 import utils.NN_preprocessing as NN_preprocessing
 import utils.generic as generic
-from datetime import datetime
-import json
 from sklearn.metrics import accuracy_score, confusion_matrix
+import mlflow
+import mlflow.pytorch
+
 
 
 class CustomDataset(Dataset):
@@ -312,7 +313,6 @@ def create_history_dict():
         'error_reg':[]
     }
 
-
 def append_history_dict(history_dict, *, total_loss, loss_class, loss_reg, acc_class, acc_reg, error_reg):
     history_dict['total_loss'].append(total_loss)
     history_dict['loss_class'].append(loss_class)
@@ -339,10 +339,70 @@ def calc_model_output(model, xtest,loss_func_reg=None):
         yhat_class = logit.argmax(1).cpu().numpy()
         return yhat_class, yhat_reg
     
+def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_history ):
+    """
+    Saves the model in the MLflow server.
+    """
+
+    mlflow.set_tracking_uri('http://localhost:5000')
+    mlflow.set_experiment('NN_ovitraps')
 
 
+    # Construct the filter to check model versio
+    filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items()])
 
-def NN_creation(parameters:dict, data_path:str= None)->None:
+    # Search for existing runs using the constructed filter string
+    existing_runs = mlflow.search_runs(filter_string=filter_string)
+    version = len(existing_runs) + 1
+    
+
+    output = {
+    'yhat': yhat.tolist(),
+    'ytest': ytest.cpu().numpy().tolist(),
+        }
+
+    # Start an MLflow run
+    with mlflow.start_run():
+        # metrics
+        metrics_dict = {
+                        'Test Classification Accuracy': test_history['acc_class'][-1],
+                        'Train Classification Accuracy': train_history['acc_class'][-1],
+                        'Test Regression Accuracy': test_history['acc_reg'][-1],
+                        'Train Regression Accuracy': train_history['acc_reg'][-1],
+                        'Test Regression Error': test_history['error_reg'][-1],
+                        'Train Regression Error': train_history['error_reg'][-1],
+                        'Percentage of Zeros in Test': (ytest == 0).sum().item()/len(ytest)
+                        }
+
+        mlflow.log_metrics(metrics_dict)
+
+        # historic results
+        mlflow.log_dict( test_history,'test_history.json')
+        mlflow.log_dict( train_history,'train_history.json')
+        
+        # Log parameters
+        for key, value in parameters.items():
+            mlflow.log_param(key, value)
+        
+        # Log outputs
+
+        mlflow.log_dict(output, "output.json")                             
+
+        
+        #tags
+        mlflow.set_tag('mlflow.runName', f"{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_version{version}")	
+        mlflow.set_tag('model_type', parameters['model_type'])                       # Log model type
+        mlflow.set_tag('ntraps', parameters['ntraps'])                               # Log number of traps
+        mlflow.set_tag('lags', parameters['lags'])                                   # Log number of lags
+        mlflow.set_tag('version', version)                                # Log version
+
+
+        #signature = mlflow.models.ModelSignature(inputs=x_train, outputs=y_train)
+        mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model
+ 
+
+
+def NN_pipeline(parameters:dict, data_path:str= None)->None:
     """
     Creates a neural network according to the parameters passed in the dictionary. 
     The dictionary must contain:
@@ -432,55 +492,23 @@ def NN_creation(parameters:dict, data_path:str= None)->None:
     generic.stop_ending_song(2)
 
 
-
     yhat = calc_model_output(model, xtest,loss_func_reg)
 
-    structure_path = f'./results/NN/save_structure/model{model_type}_lags{lags}_ntraps{3}_structure.pth'
-    new_results = {
-    'model': model_type,
-    'net_structure': structure_path,
-    'repetition': 1,
-    'parameters': parameters,
-    'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    'test_history': test_history,
-    'train_history': train_history,
-    #option yhat_reg and yhat_class
-    'yhat': yhat.tolist(),
-    'ytest': ytest.cpu().numpy().tolist(),
-        }
-
-    
-
-    torch.save(model, structure_path)
+    save_model_mlflow(parameters, model, yhat,ytest, test_history, train_history)
 
 
-    
-    # Load the existing JSON file
-    with open('./results/NN/model_accuracies.json', 'r') as f:
-        results = json.load(f)
-        
-
-    # Update with new results version
-    for item in results:
-        if item['parameters'] == new_results['parameters'] and item['net_structure'] == new_results['net_structure']:
-            new_results['repetition'] = item['repetition'] + 1
-
-    results.append(new_results)
 
 
-    with open('./results/NN/model_accuracies.json', 'w') as file:
-        json.dump(results, file, indent=4)
-    
-    """
+
+
+
+
+   
+
+"""
+
     if model_type == 'classifier':
         print(accuracy_score(y_test, yhat))
         print(confusion_matrix(y_test, yhat, normalize='true', labels=[0,1]))
 
-
- ncvj
-
-
-    """
-
-
-
+"""
