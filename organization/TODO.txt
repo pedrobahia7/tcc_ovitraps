@@ -1,3 +1,4 @@
+New:
 Derivar função de pareto 
 introduzir pareto na função de custo da NN (excluir zeros)
 Treinar NN e ver porcentagem de armadilhas maiores que "600"
@@ -15,29 +16,37 @@ Séries temporais:
 
 Porcentagem de zeros por categoria 
 Porcentagem de zeros por armadilha (HTML) 
-Plotar paretos com 4 alfas diferentes e mtas amostras
 Tratamento de NaNs na Latitude/Longitude
 
 Informação Mútua para definir correlações
 
 Granger causality to add new traps and external variables
 
-
-Ler: 
-
-
-
 Classificador para definir qual das distribuilções seguir
 Comparar análise bayesiana com inteiramente computacional
+Rede baseada em grafos
+
+Ler: 
+    Artigos:
+        https://homepages.dcc.ufmg.br/~olmo/mypapers/p1319-vazdemelo.pdf (log logistic)
+        https://epubs.siam.org/doi/10.1137/070710111 (Renato)
+        https://arxiv.org/abs/2406.16232 (Renato)
 
 
-
-Artigos:
-https://homepages.dcc.ufmg.br/~olmo/mypapers/p1319-vazdemelo.pdf (log logistic)
-
-https://epubs.siam.org/doi/10.1137/070710111 (Renato)
-https://arxiv.org/abs/2406.16232 (Renato)
 
 PROBLEMS:
 exponential model - all values of regression are 0. Use another method to evalaute them! Options NNL - how to make this useful?
 Loss function regresion >>> Loss function classification -> terrible network (everything is 0 or 1)
+Percentage of zeros in exponential_renato
+loss function logistic
+adapt input_3d to logistic and linear regressor
+treinar lambda apenas com anmostras não nulas
+3D dimension: lat, long, week, year consatants to original trap
+análise das distruibuições de dias (quantos são 14, quantos são 7) - analisar todo o dataset e os dataset utilizado na NN
+Normalizar lat e long apenas!
+aumentar número de vizinhos para testar
+scatter mediana/média/3°quartil das amostras anteriores vs novos (add jittle) - estações e anos com epidemia - e usar como entrada
+experança da distribuição como previsor
+lat long no lugar de dist
+sigmoid and RELU in the Network
+
