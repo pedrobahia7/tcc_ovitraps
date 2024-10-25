@@ -1,0 +1,81 @@
+exercicio [14]: Ano de depósito
+nplaca [523048]: identificação das placas. Unicidade por amostra
+narmad [2066]: identificação das armadilhas onde há depósito das placas. Unicidade por local 
+idarmad [2066]: [901374 901375 901376 901377 901378 901379]
+endarmad [2066]: [97222 97559 97541 97149 96964 96965]
+cep [1786]: cep da instalação
+dtinstal [2696]: data de instalação da armadilha (%Y-%m-%d)
+dtcol [2803]: data de coleta da armadilha (%Y-%m-%d)
+semepi [50]: semana epidemiológica - não há coletas nas semanas 51 e 52
+cdabrange [155]: [901460. 901400. 901300. 901260. 901250. 901290.]
+abrange [154]: ['C.S.REGINA' 'C.S.LINDEIA' 'C.S.ITAIPU' 'C.S.TUNEL DE IBIRITE'
+ 'C.S.TIROL' 'C.S.BARREIRO']
+quadra [1803]: [9002489. 9005607. 9002173. 9002551. 9005938. 9008200.]
+cdbairro [484]: [900714. 900706. 901052. 901157. 901158. 901155.]
+nombairro [366]: ['LINDEIA' 'JATOBA' 'REGINA' 'ITAIPU' 'MARILANDIA' 'TUNEL DE IBIRITE']
+cddist [9]: [1 2 3 4 5 6]
+novos [997]: numero de ovos
+eclod [6]: numero de ovos eclodidos (Na = 0)
+desid [6]: numero de ovos desidratados (Na = 0)
+CatRC [5]: [ 2.  3.  1. nan  0.]
+qarmadila [30]: [ 7. 11. 13. 12. 22. 17.]
+qarmadild [9]: [245. 217. 208. 224. 285. 178.]
+qarmadilrc [5]: [1053.  161.  766.   23.   64.]
+qarmadilbh [1]: [2067.]
+dia [31]: dia de instalação da armadilha
+mes [12]: [6. 9. 5. 7. 3. 8.]
+ano [14]: [2018. 2014. 2023. 2013. 2015. 2020.]
+intvinstcol [39]: [ 7.  8.  6.  5.  9. 10.]
+agintincol [4]: ['06 - 08' '01 - 05' '09 - 99' '']
+ovos [3]: ['Neg' 'Pos' '']
+bovos [3]: [ 0.  1. nan]
+agnovos [6]: ['0000 - 0000' '0101 - 9999' '0051 - 0100' '0016 - 0050' '0001 - 0015' '']
+nagnovos [6]: [ 0.  4.  3.  2.  1. nan]
+ovosdiacol [2274]: [ 0.        15.714286   8.428572   4.         2.4285715  2.       ]
+catovos [3]: [ 0.  1. nan]
+agovosdiacol [6]: ['000.00 - 000.00' '007.00 - 017.99' '002.00 - 006.99' ''
+ '018.00 - 999.99' '000.01 - 001.99']
+nagovosdiacol [6]: [ 0.  3.  2. nan  4.  1.]
+anoepid [14]: ['2018_19' '2014_15' '2022_23' '2013_14' '2020_21' '2021_22']
+nanoepid [14]: [21819. 21415. 22223. 21314. 22021. 22122.]
+mesepid [12]: [ 1.  4. 12.  2. 10.  3.]
+season [2]: [1. 2.]
+lustro [72]: [104. 123. 173. 107. 161. 115.]
+quinzena [24]: [112. 118. 110. 113. 106. 115.]
+quinzepid [24]: [102. 108. 124. 103. 120. 105.]
+Calustro [71]: [134. 153. 130. 137. 118. 145.]
+distrito [9]: ['BARREIRO' 'CENTRO-SUL' 'LESTE' 'NORDESTE' 'NOROESTE' 'NORTE']
+npesmes [3]: [2 3 1]
+npesano [25]: [24 23 22 16  9  8]
+npesanoepi [25]: [23 24 17 22  6  1]
+quadaa [1931]: [9.01460900e+12 9.01460901e+12 9.01460900e+12 9.01460900e+12
+ 9.01460901e+12 9.01460901e+12]
+quadist [1913]: [19002489. 19005607. 19002173. 19002551. 19005938. 19008200.]
+quadaadist [1931]: [1.9014609e+13 1.9014609e+13 1.9014609e+13 1.9014609e+13 1.9014609e+13
+ 1.9014609e+13]
+aadist [155]: [1901460. 1901400. 1901300. 1901260. 1901250. 1901290.]
+qaabh [1]: [154.]
+qaadist [7]: [20. 12. 14. 21. 17. 18.]
+qaaCatRC [5]: [84. 20. 47.  3.  2.]
+qquadbh [2]: [1802.   nan]
+qquadist [9]: [224. 201. 189. 212. 269. 176.]
+qquadaa [29]: [ 7. 11. 12. 22. 19. 15.]
+qquaCatRC [5]: [944. 150. 704.  23.  60.]
+peso1 [675]: [1127. 1176. 1344.  833. 1008. 1078.]
+peso2 [244]: [161. 168. 119. 154.  42.   7.]
+coordx [1817]: [598985.06 598808.   598881.75 598157.   598520.   599020.  ]
+coordy [1781]: [7789798.  7790153.  7790764.5 7791000.  7790795.  7790677. ]
+qdnte [1402]: ['0303' '0333' '0365' '0395' '0364' '0397']
+ninsp [1]: [1.]
+scoreG [1716]: [287.3 163.  158.2 133.  123.1  43.5]
+GerCat [5]: Categorias conforme número de ovos. Unicidade em relação a armadilhas 
+    (for n in data['narmad'].unique():
+        if utils.row_with_value(data, 'narmad',n)['GerCat'].unique().shape[0] > 1:
+        print(n)
+        print(utils.row_with_value(data, 'narmad',n)['GerCat'].unique())
+        print('-----------------')) print NONE
+
+Peso1 [720]: [287. 163. 158. 133. 123.  44.]
+Peso2 [2784]: [2009. 2296. 1722. 1435. 2583. 1141.]
+SumOvosP1 [48181]: [    0. 31570. 16933.  8036.  4879.  4018.]
+SumOvosP2 [55021]: [     0. 220990. 118531.  56252.  34153.  28126.]
