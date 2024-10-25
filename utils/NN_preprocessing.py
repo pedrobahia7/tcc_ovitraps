@@ -381,9 +381,39 @@ def scale_dataset(x_train, x_test, y_train, y_test, model_type, use_trap_info, e
 
 
 
+def create_3d_input(df, num_traps, num_lags):
+    """
+    Create a 3D NumPy array from a DataFrame with lagged trap and days data.
+    The DataFrame must have columns for each trap and each lag, with the format:
+    trap0_lag1, trap0_lag2, ..., trap0_lagN, trap1_lag1, ..., trapN_lagN, distance0, ..., distanceN,
+    days0_lag1, ..., daysN_lagN.
 
+    Parameters:
+    df: DataFrame with the lagged trap and days data
+    num_traps: Number of traps
+    num_lags: Number of lags
 
+    Returns:
+    result_3d_array: 3D NumPy array with shape (num_weeks, num_traps * num_lags, 3)   
+    
+    """
+    
+    num_weeks = df.shape[0]  # Number of rows (weeks)
 
+    # Extract trap lag columns, days lag columns, and distances into NumPy arrays
+    trap_lags = np.hstack([df[[f'trap{trap_num}_lag{i}' for i in range(1, num_lags + 1)]].values 
+                        for trap_num in range(num_traps)])
+
+    days_lags = np.hstack([df[[f'days{trap_num}_lag{i}' for i in range(1, num_lags + 1)]].values 
+                        for trap_num in range(num_traps)])
+
+    distances = np.hstack([df[[f'distance{trap_num}']].values.repeat(num_lags, axis=1) 
+                        for trap_num in range(num_traps)])
+
+    # Stack trap lags, days lags, and distances into a 3D array
+    # Shape: (num_weeks, num_traps * num_lags, 3)
+    result_3d_array = np.stack((trap_lags, days_lags, distances), axis=-1)
+    return result_3d_array
 
 
 
