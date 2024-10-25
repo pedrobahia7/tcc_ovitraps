@@ -11,15 +11,18 @@ import utils.generic as generic
 from sklearn.metrics import accuracy_score, confusion_matrix
 import mlflow
 import mlflow.pytorch
+import numpy as np
+import pdb
+
 
 
 
 class CustomDataset(Dataset):
     def __init__(self, features, targets, model_type):
         self.features  = features.clone().detach().float()
-        if model_type == 'classifier':
+        if model_type == 'classifier' or model_type == 'logistical':
             self.targets =  targets.clone().detach().long()
-        elif model_type == 'regressor':
+        elif model_type == 'regressor' or model_type == 'linear_regressor':
             self.targets = targets.clone().detach().float()
         elif model_type == 'exponential_renato':
             self.targets = targets.clone().detach().float()
@@ -69,17 +72,32 @@ class CustomLoss(nn.Module):
             raise ValueError('Distribution not found')
 
 class NeuralNetwork(nn.Module):
-    def __init__(self,model_input,model_output,model_type):
+    def __init__(self,model_input,model_output,model_type,input_3d):
         super().__init__()
         self.model_type = model_type
-        self.layer1 = nn.Linear(model_input, 20)
+        self.input_3d = input_3d    
+
+        if input_3d:
+            depth = 3  # Fixed depth as novos + day + distance
+        
+            self.conv1 = nn.Conv1d(in_channels=depth, out_channels=1, kernel_size=depth, padding=1)
+            self.flatten_size = model_input 
+            self.layer1 = nn.Linear(self.flatten_size, 20) 
+        else:
+            self.layer1 = nn.Linear(model_input, 20)
+
         self.layer2 = nn.Linear(20, 10)
         self.layer3 = nn.Linear(10, 5)    
         self.layer4 = nn.Linear(5, model_output)
         if model_type == 'exponential_renato':
             self.exp = nn.Linear(5 + model_output, 1) # exponential distribution
-      
+
     def forward(self, x):
+        if self.input_3d:
+            x = x.permute(0,2,1)
+            x = torch.relu(self.conv1(x))
+            x = x.view(x.size(0), -1) 
+
         out1 = self.layer1(x)
         out2 = self.layer2(out1)
         out3 = self.layer3(out2)
@@ -90,22 +108,48 @@ class NeuralNetwork(nn.Module):
             return out4, lamb
         return out4
 
+class LogisticRegression(nn.Module):
+    def __init__(self, model_input,input_3d, model_type):
+        super(LogisticRegression, self).__init__()
+        self.model_type = model_type
+        self.input_3d = input_3d
+        if self.input_3d:
+            depth = 3  # Fixed depth as novos + day + distance
+            self.conv1 = nn.Conv1d(in_channels=depth, out_channels=1, kernel_size=depth, padding=1)
+            self.flatten_size = model_input 
+            self.layer1 = nn.Linear(self.flatten_size, 20) 
+        else:
+            self.layer1 = nn.Linear(model_input, 1)  
+
+    def forward(self, x):
+        if self.input_3d:
+            x = x.permute(0,2,1)
+            x = torch.relu(self.conv1(x))
+            x = x.view(x.size(0), -1)
+        if self.model_type == 'logistical':
+            return torch.sigmoid(self.layer1(x)) 
+        elif self.model_type == 'linear_regressor':
+            return self.layer1(x)
+
 def torch_accuracy(yref, yhat,model_type):
-    if model_type == 'classifier':
+    if model_type == 'classifier' or model_type == 'logistical':
         return (yhat.argmax(1) == yref).type(torch.float).sum().item()
-    if model_type == 'regressor':
+    if model_type == 'regressor' or model_type == 'linear_regressor':
         return ((torch.round(yhat) == yref).type(torch.float)).sum().item()
 
 def evaluate_NN(model,loss_func_class, loss_func_reg, yhat, y ):
 
-    if model.model_type == 'classifier':
-        loss_class = loss_func_class(yhat, y) # yhat = logit
+    if model.model_type == 'classifier' or model.model_type == 'logistical':
+        if model.model_type == 'logistical':
+            loss_class = loss_func_class(yhat.squeeze(), y.type(torch.float))
+        else:
+            loss_class = loss_func_class(yhat.squeeze(), y) # yhat = logit
         loss_reg =  torch.tensor(0)
         acc_class = torch_accuracy(y,  yhat, model.model_type)
         acc_reg =  0
         error_reg =  0
 
-    elif model.model_type == 'regressor':
+    elif model.model_type == 'regressor' or model.model_type == 'linear_regressor':
         yhat = yhat.squeeze()
         loss_class =  torch.tensor(0)
         loss_reg = loss_func_reg(yhat, y)
@@ -210,38 +254,58 @@ def test_loop(dataloader, model, loss_func_class, loss_func_reg):
 
     return total_loss_test, loss_class_test, loss_reg_test, acc_class_test, acc_reg_test, error_reg_test
 
-def transform_data_to_tensor(x_train, x_test, y_train, y_test, model_type, device):
-    xtrain = torch.tensor(x_train.values, dtype=torch.float32).to(device)
-    xtest = torch.tensor(x_test.values, dtype=torch.float32).to(device)
-    if model_type == 'classifier':
-        ytrain = torch.tensor(y_train.values, dtype=torch.long).to(device)
-        ytest = torch.tensor(y_test.values, dtype=torch.long).to(device)
-    elif model_type == 'regressor' or model_type == 'exponential_renato':
-        ytrain = torch.tensor(y_train.values, dtype=torch.float32).to(device)
-        ytest = torch.tensor(y_test.values, dtype=torch.float32).to(device)
+def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.array, y_test: np.array, model_type: str, device: str)->Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Transform numpy arrays to tensors and send them to the device
+
+    Parameters:
+    x_train: numpy array with the training data
+    x_test: numpy array with the test data
+    y_train: numpy array with the training data
+    y_test: numpy array with the test data
+    model_type: classifier, regressor, exponential_renato, linear_regressor or logistical
+    device: device to send the tensors
+
+    Returns:
+    xtrain: tensor with the training data
+    xtest: tensor with the test data
+    ytrain: tensor with the training data
+    ytest: tensor with the test data    
+    """
+
+    if model_type == 'classifier' or model_type == 'logistical':
+        output_type = torch.long
+    elif model_type == 'regressor' or model_type == 'exponential_renato' or 'linear_regressor':
+        output_type = torch.float32
+
+    xtrain = torch.tensor(x_train, dtype=torch.float32).to(device)
+    xtest = torch.tensor(x_test, dtype=torch.float32).to(device)
+    ytrain = torch.tensor(y_train, dtype=output_type).to(device)
+    ytest = torch.tensor(y_test, dtype=output_type).to(device)
+
     return xtrain, xtest, ytrain, ytest
 
-def input_output_sizes(lags, ntraps, use_trap_info,model_type):
+def input_output_sizes(lags, ntraps, use_trap_info,model_type,input_3d):
     # Network structure
     if use_trap_info:
-        model_input = lags*ntraps + ntraps-1 + ntraps*lags # sum  of eggs, distances minus one and days
+        if input_3d:
+            model_input = lags*ntraps # dimension of traps. depth (days and distances) is fixed 
+        else:
+            model_input = lags*ntraps + ntraps-1 + ntraps*lags # sum  of eggs, distances minus one and days
     else:
         model_input = lags*ntraps
         
-    if model_type == 'classifier' or model_type == 'exponential_renato':
+    if model_type == 'classifier' or model_type == 'exponential_renato' or model_type == 'logistical':
         model_output = 2
-    elif model_type == 'regressor':
+    elif model_type == 'regressor' or model_type == 'linear_regressor':
         model_output = 1
-    elif model_type == 'exponential_renato':
-        model_output = 2 # returns logit of cross entropy
-                    # and lambda of exponential distribution
     return model_input, model_output
 
 def xy_definition(model_type, data, use_trap_info, ovos_flag,days_columns,distance_columns):
 # definition of x and y
-    if model_type == 'classifier':
+    if model_type == 'classifier' or model_type == 'logistical':
         y = ovos_flag
-    elif model_type == 'regressor':
+    elif model_type == 'regressor' or model_type == 'linear_regressor':
         y = data['novos']
     elif model_type == 'exponential_renato':
         y = pd.concat([ovos_flag.rename('ovos_flag', inplace=True),data['novos']],axis=1)
@@ -257,7 +321,10 @@ def define_loss_functions(model_type):
     if model_type == 'classifier':
         loss_func_class = nn.CrossEntropyLoss()
         loss_func_reg = None
-    elif model_type == 'regressor':
+    elif model_type == 'logistical':
+        loss_func_class = nn.BCEWithLogitsLoss()
+        loss_func_reg = None
+    elif model_type == 'regressor' or model_type == 'linear_regressor':
         loss_func_class = None
         loss_func_reg = nn.MSELoss()
     elif model_type == 'exponential_renato':
@@ -273,6 +340,10 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[DataLoader, Data
     random_split = parameters['random_split']
     test_size = parameters['test_size']
     scale = parameters['scale']
+    input_3d = parameters['input_3d']
+
+    if use_trap_info == False:
+        assert input_3d == False , '3D input is only available if trap information is used'
 
     if data_path is None:
         data_path = f'./results/final_dfs/final_df_lag{lags}_ntraps{ntraps}.csv'
@@ -283,22 +354,32 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[DataLoader, Data
         data = NN_preprocessing.create_final_matrix(ntraps, lags)
 
     nplaca_index = data['nplaca']
-    data.drop(columns=['nplaca','distance0'], inplace=True) # drop distance0 because it is always zero
+    data.drop(columns=['nplaca'], inplace=True)
     ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else 0)#.rename('ovos_flag', inplace=True)
 
     # divide columns into groups
     days_columns = [f'days{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
-    distance_columns = [f'distance{i}' for i in range(1,ntraps)]
+    distance_columns = [f'distance{i}' for i in range(ntraps)]
     eggs_columns = [f'trap{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
 
     x, y = xy_definition(model_type, data, use_trap_info, ovos_flag,days_columns,distance_columns)
     
+    if use_trap_info == True and input_3d == False:
+            x.drop(columns=['distance0'], inplace=True)
+
     # train test split
     x_train, x_test, y_train, y_test = NN_preprocessing.data_train_test_split(x, y, test_size, random_split,ovos_flag)
     # scaling
     if scale:
         x_train, x_test, y_train, y_test = NN_preprocessing.scale_dataset(x_train.copy(), 
                                             x_test.copy(), y_train.copy(), y_test.copy(), model_type, use_trap_info, eggs_columns, distance_columns, days_columns)
+    #convert to numpy with the correct shape
+    if input_3d:
+        x_train = NN_preprocessing.create_3d_input(x_train, ntraps, lags)
+        x_test = NN_preprocessing.create_3d_input(x_test, ntraps, lags)
+        y_train, y_test = y_train.to_numpy(), y_test.to_numpy()
+    else:
+        x_train, x_test, y_train, y_test = x_train.to_numpy(), x_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy()
 
 
     return x_train, x_test, y_train, y_test, nplaca_index
@@ -323,10 +404,10 @@ def append_history_dict(history_dict, *, total_loss, loss_class, loss_reg, acc_c
 
 def calc_model_output(model, xtest,loss_func_reg=None):
 
-    if model.model_type == 'classifier':
+    if model.model_type == 'classifier' or model.model_type == 'logistical':
         yhat = model(xtest).argmax(1).cpu().numpy()
         return yhat
-    elif model.model_type == 'regressor':
+    elif model.model_type == 'regressor' or model.model_type == 'linear_regressor':
         yhat = model(xtest).round().cpu().detach().numpy() 
         return yhat.squeeze()
     elif model.model_type == 'exponential_renato':
@@ -336,8 +417,10 @@ def calc_model_output(model, xtest,loss_func_reg=None):
         x_dist = x_dist.repeat(lamb.shape[0], 1)
         y_dist = loss_func_reg.pdf(x_dist, **param_dict) # pdf of the distribution is saved in the NN
         yhat_reg = y_dist.argmax(1)
-        yhat_class = logit.argmax(1).cpu().numpy()
-        return yhat_class, yhat_reg
+        yhat_class = logit.argmax(1)
+        yhat = torch.stack((yhat_class, yhat_reg) ,dim=1)
+
+        return yhat
     
 def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_history ):
     """
@@ -402,113 +485,5 @@ def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_hi
  
 
 
-def NN_pipeline(parameters:dict, data_path:str= None)->None:
-    """
-    Creates a neural network according to the parameters passed in the dictionary. 
-    The dictionary must contain:
-        model_type: classifier, regressor, exponential_renato
-        use_trap_info: flag to use the traps information like days and distances
-        ntraps: number of traps to be considered
-        lags: number of lags to be considered
-        random_split: flag to use random test/train split or not 
-        test_size: percentage of the test set
-        scale: flag to scale the data or not using the MinMaxScaler
-        learning_rate: learning rate of the optimizer
-        batch_size: batch size of the DataLoader
-        epochs: number of epochs to train the model
-    
-    
-    """
-
-    model_type = parameters['model_type']
-    use_trap_info = parameters['use_trap_info']
-    ntraps = parameters['ntraps']
-    lags = parameters['lags']
-    random_split = parameters['random_split']
-    learning_rate = parameters['learning_rate']
-    batch_size = parameters['batch_size']
-    epochs = parameters['epochs']
 
 
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
-    )
-    print(f"Using {device} device")
-
-
-    # create dataset
-
-    x_train, x_test, y_train, y_test, nplaca_index = create_dataset(parameters, data_path)
-
-
-    # transform to tensor
-    xtrain, xtest, ytrain, ytest = transform_data_to_tensor(x_train, x_test, y_train, y_test, model_type, device)
-
-    train_dataset = NN_building.CustomDataset(xtrain, ytrain,model_type)
-    test_dataset = NN_building.CustomDataset(xtest, ytest,model_type)
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=random_split)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=random_split)
-
-
-    # Network structure
-    model_input, model_output = input_output_sizes(lags, ntraps, use_trap_info,model_type)
-    model = NeuralNetwork(model_input, model_output,model_type).to(device)
-
-    # Loss functions
-    loss_func_class, loss_func_reg = define_loss_functions(model_type)
-    # Optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-
-
-
-    train_history = create_history_dict()
-    test_history = create_history_dict()
-
-
-    # Network Loop
-    for t in range(epochs):
-        print(f"Epoch {t+1}\n-------------------------------")
-        total_loss_train, loss_class_train, loss_reg_train, acc_class_train, acc_reg_train, error_reg_train = train_loop(train_dataloader,
-                                                                              model, loss_func_class, loss_func_reg, optimizer)        
-        
-        total_loss_test, loss_class_test, loss_reg_test, acc_class_test, acc_reg_test, error_reg_test = test_loop(test_dataloader,
-                                                                                        model, loss_func_class, loss_func_reg)
-
-        # Append Metrics
-        append_history_dict(train_history, total_loss=total_loss_train, loss_class=loss_class_train, loss_reg=loss_reg_train, 
-                            acc_class=acc_class_train, acc_reg=acc_reg_train, error_reg=error_reg_train)
-        append_history_dict(test_history, total_loss=total_loss_test, loss_class=loss_class_test, loss_reg=loss_reg_test, 
-                            acc_class=acc_class_test, acc_reg=acc_reg_test, error_reg=error_reg_test)
-        
-        torch.save(model.state_dict(), f'./results/NN/save_parameters/model{model_type}_lags{lags}_ntraps{ntraps}_epoch{t}.pth')
-
-        
-    print("Done!")
-    generic.play_ending_song()
-    generic.stop_ending_song(2)
-
-
-    yhat = calc_model_output(model, xtest,loss_func_reg)
-
-    save_model_mlflow(parameters, model, yhat,ytest, test_history, train_history)
-
-
-
-
-
-
-
-
-   
-
-"""
-
-    if model_type == 'classifier':
-        print(accuracy_score(y_test, yhat))
-        print(confusion_matrix(y_test, yhat, normalize='true', labels=[0,1]))
-
-"""
