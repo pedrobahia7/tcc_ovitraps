@@ -3,7 +3,7 @@ import pygame
 import time
 
 
-def play_ending_song(addr:str = './data/Sinfonia To Cantata # 29.mp3')-> None:
+def play_ending_song(addr:str = '../data/Sinfonia To Cantata # 29.mp3')-> None:
     """
     Function to play a song when the program ends
 
