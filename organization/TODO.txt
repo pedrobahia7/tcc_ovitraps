@@ -6,17 +6,8 @@ Comparar com Naïve e com função de custo quadrática
 
 
 Music Informatics - método para identificar reta e ponto onde ela começa/
-Séries temporais: 
-    novos individual armadilhas (html)
-    novos agregado mensal total
-    amostras agregado semanal total
-    novos categoria mensal (plotar todos juntos)
-    amostras categoria mensal (plotar todos juntos)
-    amostras categoria semanal (plotar todos juntos)
 
-Porcentagem de zeros por categoria 
-Porcentagem de zeros por armadilha (HTML) 
-Tratamento de NaNs na Latitude/Longitude
+Tratamento de NaNs na Latitude/Longitude (perguntar dilermando )
 
 Informação Mútua para definir correlações
 
@@ -35,18 +26,30 @@ Ler:
 
 
 PROBLEMS:
-exponential model - all values of regression are 0. Use another method to evalaute them! Options NNL - how to make this useful?
-Loss function regresion >>> Loss function classification -> terrible network (everything is 0 or 1)
+exponential model - all values of regression are 0. Use another method to evalaute them! expectation!
+Loss function regresion >>> Loss function classification -> terrible network (everything is 0 or 1). Create a second network only with non null values. after classification or before it? 
 Percentage of zeros in exponential_renato
 loss function logistic
 adapt input_3d to logistic and linear regressor
-treinar lambda apenas com anmostras não nulas
 3D dimension: lat, long, week, year consatants to original trap
-análise das distruibuições de dias (quantos são 14, quantos são 7) - analisar todo o dataset e os dataset utilizado na NN
 Normalizar lat e long apenas!
 aumentar número de vizinhos para testar
-scatter mediana/média/3°quartil das amostras anteriores vs novos (add jittle) - estações e anos com epidemia - e usar como entrada
-experança da distribuição como previsor
 lat long no lugar de dist
 sigmoid and RELU in the Network
+
+
+
+
+análise das distruibuições de dias (quantos são 14, quantos são 7) - analisar todo o dataset e os dataset utilizado na NN
+scatter mediana/média/3°quartil das amostras anteriores vs novos (add jittle) - estações e anos com epidemia - e usar como entrada
+Séries temporais: 
+    novos individual armadilhas (html)
+    novos agregado mensal total
+    amostras agregado semanal total
+    novos categoria mensal (plotar todos juntos)
+    amostras categoria mensal (plotar todos juntos)
+    amostras categoria semanal (plotar todos juntos)
+Porcentagem de zeros por categoria 
+Porcentagem de zeros por armadilha (HTML)
+
 
