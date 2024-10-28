@@ -64,3 +64,37 @@ def pareto_plot_html(df:pd.DataFrame,trap:str) -> str:
     plt.close()  # Close the plot to avoid displaying it in the output
 
     return f'./pareto_plot/pareto_plot_{trap}.png'
+
+
+def time_series_html(df:pd.DataFrame,trap:str) -> str:
+    """
+    Generate a Pareto plot of the data of a specific trap so it can be saved as an image file and used in the html
+
+    Parameters:
+    df: pandas DataFrame with the number of traps, novos, dtcol
+    trap: string refering to the trap number
+
+    Returns:
+    str: path to the image file
+    """
+    # Generate a histogram
+    plt.figure(figsize=(6, 4))
+    
+    
+    
+    
+    
+    plt.plot(df, bins=1000, color='black', edgecolor='black')
+
+
+
+
+
+    plt.title(f'Série temporal da contagem de ovos - armadilha {trap}')
+    plt.xlabel('Amostra')
+    plt.ylabel('Contagem de ovos')
+    plt.grid(axis='y', alpha=0.75)
+    plt.savefig(f'./results/time_serie/time_series_{trap}.png', bbox_inches='tight', dpi=300)
+    plt.close()  # Close the plot to avoid displaying it in the output
+
+    return f'./time_serie/time_series_{trap}.png'
