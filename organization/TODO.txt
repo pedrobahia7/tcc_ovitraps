@@ -1,21 +1,37 @@
 New:
-Derivar função de pareto 
-introduzir pareto na função de custo da NN (excluir zeros)
-Treinar NN e ver porcentagem de armadilhas maiores que "600"
-Comparar com Naïve e com função de custo quadrática
 
+
+Treinar NN e ver porcentagem de armadilhas maiores que "600"
+
+Comparar com Naïve e com função de custo quadrática
 
 Music Informatics - método para identificar reta e ponto onde ela começa/
 
 Tratamento de NaNs na Latitude/Longitude (perguntar dilermando )
 
-Informação Mútua para definir correlações
+Informação Mútua e correlação de Spearman para definir correlações
 
 Granger causality to add new traps and external variables
 
 Classificador para definir qual das distribuilções seguir
+
 Comparar análise bayesiana com inteiramente computacional
+
 Rede baseada em grafos
+
+pacotes de ajuste de distriuição automatica
+
+log da variavel de saída -> histograma para verificar se cauda pesada está ausente (mesma análise para boxcox)
+
+cluster espacial como variável (análise espacia!) -> talvez introdução de variáveis exógenas tirem a dependcência geográfica (modelar e analisar resíduos)
+
+Modelos ARIMA, SARIMA, RF, SVM
+
+Modelagem de baixa frgequência para verificar tendência e comparar com armadilhas vizinhas. Talvez elas tenham curvas parecidas, apenas multiplicadas por um fator de escala
+    
+Introduzir informação de sazonalidade e de posição na modelagem
+
+
 
 Ler: 
     Artigos:
@@ -26,28 +42,23 @@ Ler:
 
 
 PROBLEMS:
-exponential model - all values of regression are 0. Use another method to evalaute them! expectation!
-Loss function regresion >>> Loss function classification -> terrible network (everything is 0 or 1). Create a second network only with non null values. after classification or before it? 
 Percentage of zeros in exponential_renato
 loss function logistic
 adapt input_3d to logistic and linear regressor
 3D dimension: lat, long, week, year consatants to original trap
-Normalizar lat e long apenas!
+dias negativos na matrix final 
+january data is dropped in final matrix with lag 3 
+diferenças dos dias de armação e coleta -> se forem muito grandes, adicionar como variável da NN? Valores absurdos. Filtrar?
+
+
+
+Loss function regresion >>> Loss function classification -> terrible network (everything is 0 or 1). Create a second network only with non null values. after classification or before it? 
 aumentar número de vizinhos para testar
-lat long no lugar de dist
 sigmoid and RELU in the Network
+substituir dia por semana epid
+exponential model - all values of regression are 0. Use another method to evalaute them! expectation!
+Semanas pares e ímpares número de Nans no week 2023
 
-
-
-
-análise das distruibuições de dias (quantos são 14, quantos são 7) - analisar todo o dataset e os dataset utilizado na NN
-scatter mediana/média/3°quartil das amostras anteriores vs novos (add jittle) - estações e anos com epidemia - e usar como entrada
-Séries temporais: 
-
-    novos individual armadilhas (html)
-
-
-Porcentagem de zeros por categoria 
-Porcentagem de zeros por armadilha (HTML)
-
-
+Derivar função de pareto 
+introduzir pareto na função de custo da NN (excluir zeros)
+introduzir double poisson na função de custo 

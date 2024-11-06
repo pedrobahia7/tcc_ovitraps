@@ -4,11 +4,11 @@ from torch import nn
 import pandas as pd
 from typing import Tuple
 import utils.NN_building as NN_building
+import utils.NN_lib as NN_lib
 from torch.utils.data import DataLoader
 import os
 import utils.NN_preprocessing as NN_preprocessing
 import utils.generic as generic
-from sklearn.metrics import accuracy_score, confusion_matrix
 import mlflow
 import mlflow.pytorch
 import numpy as np
@@ -37,7 +37,7 @@ class CustomDataset(Dataset):
 
 class CustomLoss(nn.Module):
     """
-    Class to create a custom loss and calculate the pdf of its original distribution if necessary. The name of the distribution must 
+    Class to create a custom loss and calculonge the pdf of its original distribution if necessary. The name of the distribution must 
     be passed in the constructor
     
     Currently available distributions:
@@ -70,66 +70,6 @@ class CustomLoss(nn.Module):
             return lamb*torch.exp(-lamb*x)
         else:
             raise ValueError('Distribution not found')
-
-class NeuralNetwork(nn.Module):
-    def __init__(self,model_input,model_output,model_type,input_3d):
-        super().__init__()
-        self.model_type = model_type
-        self.input_3d = input_3d    
-
-        if input_3d:
-            depth = 3  # Fixed depth as novos + day + distance
-        
-            self.conv1 = nn.Conv1d(in_channels=depth, out_channels=1, kernel_size=depth, padding=1)
-            self.flatten_size = model_input 
-            self.layer1 = nn.Linear(self.flatten_size, 20) 
-        else:
-            self.layer1 = nn.Linear(model_input, 20)
-
-        self.layer2 = nn.Linear(20, 10)
-        self.layer3 = nn.Linear(10, 5)    
-        self.layer4 = nn.Linear(5, model_output)
-        if model_type == 'exponential_renato':
-            self.exp = nn.Linear(5 + model_output, 1) # exponential distribution
-
-    def forward(self, x):
-        if self.input_3d:
-            x = x.permute(0,2,1)
-            x = torch.relu(self.conv1(x))
-            x = x.view(x.size(0), -1) 
-
-        out1 = self.layer1(x)
-        out2 = self.layer2(out1)
-        out3 = self.layer3(out2)
-        out4 = self.layer4(out3)
-        if self.model_type == 'exponential_renato':
-            lamb = self.exp(torch.cat((out3, out4), dim=1)) # concat weights and logits. To use class instead, change to torch.cat((out3, logit.argmax(1)), dim=1) and self.exp
-            lamb = nn.ReLU()(lamb) + 0.00001 # noise added
-            return out4, lamb
-        return out4
-
-class LogisticRegression(nn.Module):
-    def __init__(self, model_input,input_3d, model_type):
-        super(LogisticRegression, self).__init__()
-        self.model_type = model_type
-        self.input_3d = input_3d
-        if self.input_3d:
-            depth = 3  # Fixed depth as novos + day + distance
-            self.conv1 = nn.Conv1d(in_channels=depth, out_channels=1, kernel_size=depth, padding=1)
-            self.flatten_size = model_input 
-            self.layer1 = nn.Linear(self.flatten_size, 20) 
-        else:
-            self.layer1 = nn.Linear(model_input, 1)  
-
-    def forward(self, x):
-        if self.input_3d:
-            x = x.permute(0,2,1)
-            x = torch.relu(self.conv1(x))
-            x = x.view(x.size(0), -1)
-        if self.model_type == 'logistical':
-            return torch.sigmoid(self.layer1(x)) 
-        elif self.model_type == 'linear_regressor':
-            return self.layer1(x)
 
 def torch_accuracy(yref, yhat,model_type):
     if model_type == 'classifier' or model_type == 'logistical':
@@ -291,7 +231,7 @@ def input_output_sizes(lags, ntraps, use_trap_info,model_type,input_3d):
         if input_3d:
             model_input = lags*ntraps # dimension of traps. depth (days and distances) is fixed 
         else:
-            model_input = lags*ntraps + ntraps-1 + ntraps*lags # sum  of eggs, distances minus one and days
+            model_input = lags*ntraps + ntraps*2 + ntraps*lags # sum  of eggs, lats and long, and days
     else:
         model_input = lags*ntraps
         
@@ -301,7 +241,7 @@ def input_output_sizes(lags, ntraps, use_trap_info,model_type,input_3d):
         model_output = 1
     return model_input, model_output
 
-def xy_definition(model_type, data, use_trap_info, ovos_flag,days_columns,distance_columns):
+def xy_definition(model_type, data, use_trap_info, ovos_flag,days_columns,lat_columns,long_columns):
 # definition of x and y
     if model_type == 'classifier' or model_type == 'logistical':
         y = ovos_flag
@@ -313,7 +253,7 @@ def xy_definition(model_type, data, use_trap_info, ovos_flag,days_columns,distan
     if use_trap_info:
         x = data.drop(columns=['novos'])
     else:
-        drop_cols = ['novos'] + days_columns + distance_columns
+        drop_cols = ['novos'] + days_columns + lat_columns + long_columns
         x = data.drop(columns=drop_cols)
     return x, y
 
@@ -332,57 +272,6 @@ def define_loss_functions(model_type):
         loss_func_reg = NN_building.CustomLoss(model_type)
     return loss_func_class, loss_func_reg
 
-def create_dataset(parameters:dict, data_path:str= None)->Tuple[DataLoader, DataLoader]:
-    ntraps = parameters['ntraps']
-    lags = parameters['lags']
-    model_type = parameters['model_type']
-    use_trap_info = parameters['use_trap_info']
-    random_split = parameters['random_split']
-    test_size = parameters['test_size']
-    scale = parameters['scale']
-    input_3d = parameters['input_3d']
-
-    if use_trap_info == False:
-        assert input_3d == False , '3D input is only available if trap information is used'
-
-    if data_path is None:
-        data_path = f'./results/final_dfs/final_df_lag{lags}_ntraps{ntraps}.csv'
-    if os.path.exists(data_path):
-        # data import and preprocessing
-        data = pd.read_csv(data_path)
-    else:
-        data = NN_preprocessing.create_final_matrix(ntraps, lags)
-
-    nplaca_index = data['nplaca']
-    data.drop(columns=['nplaca'], inplace=True)
-    ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else 0)#.rename('ovos_flag', inplace=True)
-
-    # divide columns into groups
-    days_columns = [f'days{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
-    distance_columns = [f'distance{i}' for i in range(ntraps)]
-    eggs_columns = [f'trap{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
-
-    x, y = xy_definition(model_type, data, use_trap_info, ovos_flag,days_columns,distance_columns)
-    
-    if use_trap_info == True and input_3d == False:
-            x.drop(columns=['distance0'], inplace=True)
-
-    # train test split
-    x_train, x_test, y_train, y_test = NN_preprocessing.data_train_test_split(x, y, test_size, random_split,ovos_flag)
-    # scaling
-    if scale:
-        x_train, x_test, y_train, y_test = NN_preprocessing.scale_dataset(x_train.copy(), 
-                                            x_test.copy(), y_train.copy(), y_test.copy(), model_type, use_trap_info, eggs_columns, distance_columns, days_columns)
-    #convert to numpy with the correct shape
-    if input_3d:
-        x_train = NN_preprocessing.create_3d_input(x_train, ntraps, lags)
-        x_test = NN_preprocessing.create_3d_input(x_test, ntraps, lags)
-        y_train, y_test = y_train.to_numpy(), y_test.to_numpy()
-    else:
-        x_train, x_test, y_train, y_test = x_train.to_numpy(), x_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy()
-
-
-    return x_train, x_test, y_train, y_test, nplaca_index
 
 def create_history_dict():
     return {
@@ -482,8 +371,57 @@ def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_hi
 
         #signature = mlflow.models.ModelSignature(inputs=x_train, outputs=y_train)
         mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model
- 
 
 
+def create_dataset(parameters:dict, data_path:str= None)->Tuple[DataLoader, DataLoader]:
+    ntraps = parameters['ntraps']
+    lags = parameters['lags']
+    model_type = parameters['model_type']
+    use_trap_info = parameters['use_trap_info']
+    random_split = parameters['random_split']
+    test_size = parameters['test_size']
+    scale = parameters['scale']
+    input_3d = parameters['input_3d']
+
+    if use_trap_info == False:
+        assert input_3d == False , '3D input is only available if trap information is used'
+    if data_path is None:
+        data_path = f'./results/final_dfs/final_df_lag{lags}_ntraps{ntraps}.csv'
+    if os.path.exists(data_path):
+        # data import and preprocessing
+        data = pd.read_csv(data_path)
+        if 'Unnamed: 0' in data.columns:
+            data.drop('Unnamed: 0',axis=1,inplace = True)
+    else:
+        data = NN_preprocessing.create_final_matrix(lags,ntraps)
+
+    nplaca_index = data['nplaca']
+    data.drop(columns=['nplaca'], inplace=True)
+    ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else 0)#.rename('ovos_flag', inplace=True)
+
+    # divide columns into groups
+    days_columns = [f'days{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
+    lat_columns = [f'lat{i}' for i in range(ntraps)]
+    long_columns = [f'long{i}' for i in range(ntraps)]
+    eggs_columns = [f'trap{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
+    x, y = xy_definition(model_type, data, use_trap_info, ovos_flag,days_columns,lat_columns,long_columns)
+
+
+    # train test split
+    x_train, x_test, y_train, y_test = NN_preprocessing.data_train_test_split(x, y, test_size, random_split,ovos_flag)
+    # scaling
+    if scale:
+        x_train, x_test, y_train, y_test = NN_preprocessing.scale_dataset(x_train.copy(), 
+                                            x_test.copy(), y_train.copy(), y_test.copy(), model_type, use_trap_info, eggs_columns, lat_columns,long_columns, days_columns)
+    #convert to numpy with the correct shape
+    if input_3d:
+        x_train = NN_preprocessing.create_3d_input(x_train, ntraps, lags)
+        x_test = NN_preprocessing.create_3d_input(x_test, ntraps, lags)
+        y_train, y_test = y_train.to_numpy(), y_test.to_numpy()
+    else:
+        x_train, x_test, y_train, y_test = x_train.to_numpy(), x_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy()
+
+
+    return x_train, x_test, y_train, y_test, nplaca_index
 
 

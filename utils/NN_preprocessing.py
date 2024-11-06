@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from typing import Tuple
-
+import pdb
 
 
 
@@ -176,7 +176,8 @@ def convert_dates_to_ordinal(df:pd.DataFrame)->pd.DataFrame:
 
 
 def final_matrix_logic(valid_samples:pd.DataFrame, day_df:pd.DataFrame, distance_matrix:np.array, nan_count_matrix:np.array, lagged_eggs:np.array, 
-                        lagged_days:np.array, info_df:dict, trap_index_dict:dict, nplaca_index_dict:dict, lags:int, n_traps:int)->pd.DataFrame:
+                        lagged_days:np.array, info_df:dict, trap_index_dict:dict, index_trap_dict:dict, nplaca_index_dict:dict, lags:int, n_traps:int, nplaca_lat_dict:dict,
+                        nplaca_long_dict:dict)->pd.DataFrame:
     """
     Function to create the final matrix to be used in the neural network model
 
@@ -189,9 +190,13 @@ def final_matrix_logic(valid_samples:pd.DataFrame, day_df:pd.DataFrame, distance
     lagged_days: numpy array with the lagged days in ordinal 
     info_df: pandas dataframe with the information of each trap. It must contain the columns 'narmad' and 'nplaca' 
     trap_index_dict: dictionary with the index of each trap in the egg matrix and distance matrix
+    index_trap_dict: dictionary with the trap of each index in the egg matrix
     nplaca_index_dict: dictionary with the index of each placa in the egg matrix
     lags: number of lags to be created
     n_traps: number of traps to be considered, including the original trap
+    nplaca_lat_dict: dictionary with the latitude of each placa
+    nplaca_long_dict: dictionary with the longitude of each placa
+
 
     Returns:
     final_df: pandas dataframe with the final matrix to be used in the neural network model
@@ -220,7 +225,7 @@ def final_matrix_logic(valid_samples:pd.DataFrame, day_df:pd.DataFrame, distance
             week_index = nplaca_index_dict[placa]                                                   # get the index of the eggs matrix referring to the week
 
             
-            if nan_count_matrix[week_index,original_trap_index] > lags:                             # remove samples of original traps that doesn't have enough 
+            if nan_count_matrix[week_index,original_trap_index] > lags:                             # remove samples of original traps that doesn't have enough data
                 continue                                                                            # autoregressive samples 
                
             #iterate over the traps closest to the original trap
@@ -234,10 +239,12 @@ def final_matrix_logic(valid_samples:pd.DataFrame, day_df:pd.DataFrame, distance
                     #if order_index > 50: #avoid arbitrarily distant traps #it was not necessary
                         #break
                 
-                lagged_samples = lagged_eggs[:,week_index,trap_index]                             # get the eggs of all the lags. [lag x week x trap] -> novos
+                lagged_samples = lagged_eggs[:,week_index,trap_index]                               # get the eggs of all the lags. [lag x week x trap] -> novos
 
                 [add_row.append(i) for i in lagged_samples[~np.isnan(lagged_samples)]]              # add lagged eggs
-                add_row.append(distance_matrix_np[original_trap_index,trap_index])                  # add distance between the two traps
+                add_row.append(nplaca_lat_dict[index_trap_dict[trap_index]])            # add latitude of the second trap
+                add_row.append(nplaca_long_dict[index_trap_dict[trap_index]])           # add longitude of the second trap
+
                 
                 #subtract lagged days from orignal sample day [lag x week x trap] -> ordinal days
                 lagged_samples_days = lagged_days[:,week_index,trap_index]
@@ -259,7 +266,8 @@ def final_matrix_logic(valid_samples:pd.DataFrame, day_df:pd.DataFrame, distance
     for j in range(n_traps): 
         for i in range(1,lags+1):
             columns_names.extend(['trap'+str(j)+'_lag'+str(i)])
-        columns_names.extend(['distance'+str(j)])
+        columns_names.extend(['latitude'+str(j)])
+        columns_names.extend(['longitude'+str(j)])
         for i in range(1,lags+1):
             columns_names.extend(['days'+str(j)+'_lag'+str(i)])
     final_df.columns = columns_names  
@@ -283,6 +291,7 @@ def create_final_matrix(lags:str, n_traps:str, data_addr:str = './data/final_dat
     Returns:
     final_df: pandas dataframe with the final matrix to be used in the neural network model
     """
+    print('Creating final matrix')
     data = pd.read_csv('./data/final_data.csv',parse_dates=['dtcol'])
     valid_samples = get_valid_samples(data)
 
@@ -315,17 +324,30 @@ def create_final_matrix(lags:str, n_traps:str, data_addr:str = './data/final_dat
 
     #useful dicts   
     trap_index_dict = {trap: index for index,trap in enumerate(distance_matrix.columns)}                                           # trap: index 
+    index_trap_dict = {index: trap for index,trap in enumerate(distance_matrix.columns)}                                           # trap: index 
+    
     yearweek_index_dict = {(year,week): index for index,(year,week) in enumerate(week_trap_df.index)}                           # (year,week): index
     nplaca_week_dict = {nplaca: (year, week) for nplaca,week,year in zip(info_df['nplaca'],info_df['semepi'],info_df['ano'])}   # nplaca: (year,week)
     nplaca_index_dict = {nplaca: yearweek_index_dict[(year, week)] for nplaca,week,year in zip(info_df['nplaca'],info_df['semepi'],info_df['ano'])}   # nplaca: week index 
+    
+    
+    unique_position = valid_samples[['latitude','longitude']].drop_duplicates().dropna().reset_index(drop=True)
+    lat_mean = unique_position['latitude'].mean()
+    long_mean = unique_position['longitude'].mean()
+    lat_std = unique_position['latitude'].std()
+    long_std = unique_position['longitude'].std()
+    
+    trap_lat_dict = {narmad: (lat - lat_mean)/lat_std for narmad,lat in zip(info_df['narmad'],info_df['latitude'])}                                  # narmad: latitude
+    trap_long_dict = {narmad: (long - long_mean)/long_std for narmad,long in zip(info_df['narmad'],info_df['longitude'])}                              # nplaca: longitude
 
     #final matrix
-    final_df = final_matrix_logic(valid_samples,day_df, distance_matrix, nan_count_matrix,
-            lagged_eggs, lagged_days, info_df, trap_index_dict, nplaca_index_dict, lags, n_traps)
+    final_df = final_matrix_logic(valid_samples, day_df, distance_matrix, nan_count_matrix,
+            lagged_eggs, lagged_days, info_df, trap_index_dict, index_trap_dict, nplaca_index_dict, lags, n_traps,trap_lat_dict,trap_long_dict)
 
     final_df.sort_values(by=['dtcol'],inplace=True)
     final_df.drop(columns=['dtcol'],inplace=True)
-    final_df.to_csv(f'./results/final_dfs/final_df_lag{lags}_ntraps{n_traps}2.csv')
+
+    final_df.to_csv(f'./results/final_dfs/final_df_lag{lags}_ntraps{n_traps}.csv')
     return final_df
 
 
@@ -365,11 +387,10 @@ def scale_column(x_train:pd.DataFrame, x_test:pd.DataFrame, column:list)->Tuple[
 
 
 
-def scale_dataset(x_train, x_test, y_train, y_test, model_type, use_trap_info, eggs_columns, distance_columns, days_columns):
+def scale_dataset(x_train, x_test, y_train, y_test, model_type, use_trap_info, eggs_columns, lat_columns,long_columns, days_columns):
 
     x_train, x_test, max_eggs = scale_column(x_train, x_test, eggs_columns)
     if use_trap_info:
-        x_train, x_test, max_distance = scale_column(x_train, x_test, distance_columns)
         x_train, x_test, max_days = scale_column(x_train, x_test, days_columns)
     if model_type == 'regressor':
         y_train = y_train/max_eggs
