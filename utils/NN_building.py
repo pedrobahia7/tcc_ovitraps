@@ -17,6 +17,104 @@ import pdb
 
 
 
+def xy_definition(model_type, data, use_trap_info, ovos_flag,days_columns,lat_columns,long_columns):
+# definition of x and y
+    if model_type == 'classifier' or model_type == 'logistical':
+        y = ovos_flag
+    elif model_type == 'regressor' or model_type == 'linear_regressor':
+        y = data['novos']
+    elif model_type == 'exponential_renato' or model_type == 'pareto':
+        y = pd.concat([ovos_flag.rename('ovos_flag', inplace=True),data['novos']],axis=1)
+
+    if use_trap_info:
+        x = data.drop(columns=['novos'])
+    else:
+        drop_cols = ['novos'] + days_columns + lat_columns + long_columns
+        x = data.drop(columns=drop_cols)
+    return x, y
+
+def create_dataset(parameters:dict, data_path:str= None)->Tuple[DataLoader, DataLoader]:
+    ntraps = parameters['ntraps']
+    lags = parameters['lags']
+    model_type = parameters['model_type']
+    use_trap_info = parameters['use_trap_info']
+    random_split = parameters['random_split']
+    test_size = parameters['test_size']
+    scale = parameters['scale']
+    input_3d = parameters['input_3d']
+
+    if use_trap_info == False:
+        assert input_3d == False , '3D input is only available if trap information is used'
+    if data_path is None:
+        data_path = f'./results/final_dfs/final_df_lag{lags}_ntraps{ntraps}.csv'
+    if os.path.exists(data_path):
+        # data import and preprocessing
+        data = pd.read_csv(data_path)
+        if 'Unnamed: 0' in data.columns:
+            data.drop('Unnamed: 0',axis=1,inplace = True)
+    else:
+        data = NN_preprocessing.create_final_matrix(lags,ntraps)
+
+    nplaca_index = data['nplaca']
+    data.drop(columns=['nplaca'], inplace=True)
+    ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else 0)#.rename('ovos_flag', inplace=True)
+
+    # divide columns into groups
+    days_columns = [f'days{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
+    lat_columns = [f'lat{i}' for i in range(ntraps)]
+    long_columns = [f'long{i}' for i in range(ntraps)]
+    eggs_columns = [f'trap{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
+    x, y = xy_definition(model_type, data, use_trap_info, ovos_flag,days_columns,lat_columns,long_columns)
+
+
+    # train test split
+    x_train, x_test, y_train, y_test = NN_preprocessing.data_train_test_split(x, y, test_size, random_split,ovos_flag)
+    # scaling
+    if scale:
+        x_train, x_test, y_train, y_test = NN_preprocessing.scale_dataset(x_train.copy(), 
+                                            x_test.copy(), y_train.copy(), y_test.copy(), model_type, use_trap_info, eggs_columns, lat_columns,long_columns, days_columns)
+    #convert to numpy with the correct shape
+    if input_3d:
+        x_train = NN_preprocessing.create_3d_input(x_train, ntraps, lags)
+        x_test = NN_preprocessing.create_3d_input(x_test, ntraps, lags)
+        y_train, y_test = y_train.to_numpy(), y_test.to_numpy()
+    else:
+        x_train, x_test, y_train, y_test = x_train.to_numpy(), x_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy()
+
+
+    return x_train, x_test, y_train, y_test, nplaca_index
+
+def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.array, y_test: np.array, model_type: str, device: str)->Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Transform numpy arrays to tensors and send them to the device
+
+    Parameters:
+    x_train: numpy array with the training data
+    x_test: numpy array with the test data
+    y_train: numpy array with the training data
+    y_test: numpy array with the test data
+    model_type: classifier, regressor, exponential_renato, linear_regressor or logistical
+    device: device to send the tensors
+
+    Returns:
+    xtrain: tensor with the training data
+    xtest: tensor with the test data
+    ytrain: tensor with the training data
+    ytest: tensor with the test data    
+    """
+
+    if model_type == 'classifier' or model_type == 'logistical':
+        output_type = torch.long
+    elif model_type == 'regressor' or model_type == 'exponential_renato' or 'linear_regressor' or model_type == 'pareto':
+        output_type = torch.float32
+
+    xtrain = torch.tensor(x_train, dtype=torch.float32).to(device)
+    xtest = torch.tensor(x_test, dtype=torch.float32).to(device)
+    ytrain = torch.tensor(y_train, dtype=output_type).to(device)
+    ytest = torch.tensor(y_test, dtype=output_type).to(device)
+
+    return xtrain, xtest, ytrain, ytest
+
 class CustomDataset(Dataset):
     def __init__(self, features, targets, model_type):
         self.features  = features.clone().detach().float()
@@ -24,7 +122,7 @@ class CustomDataset(Dataset):
             self.targets =  targets.clone().detach().long()
         elif model_type == 'regressor' or model_type == 'linear_regressor':
             self.targets = targets.clone().detach().float()
-        elif model_type == 'exponential_renato':
+        elif model_type == 'exponential_renato' or model_type == 'pareto':
             self.targets = targets.clone().detach().float()
 
 
@@ -35,41 +133,21 @@ class CustomDataset(Dataset):
     def __getitem__(self, idx):
         return self.features[idx], self.targets[idx]
 
-class CustomLoss(nn.Module):
-    """
-    Class to create a custom loss and calculonge the pdf of its original distribution if necessary. The name of the distribution must 
-    be passed in the constructor
-    
-    Currently available distributions:
-    exponential - **params['lamb']
-
-    """
-    def __init__(self, model_type:str):
-        """
-        Distribution: name of the distribution to be used as reference. 
-        
-        
-        """
-        super(CustomLoss, self).__init__()
-        self.model_type = model_type
-
-    def forward(self, y, **params):
-        if self.model_type == 'exponential_renato':
-            # Example: NNL of the exponential distribution
-            lamb = params.get('lamb')
-            loss = 0
-            for i in range(len(lamb)):
-                loss += torch.log(lamb[i]) - lamb[i]*y[i]
-            return -loss
+def input_output_sizes(lags, ntraps, use_trap_info,model_type,input_3d):
+    # Network structure
+    if use_trap_info:
+        if input_3d:
+            model_input = lags*ntraps # dimension of traps. depth (days and distances) is fixed 
         else:
-            raise ValueError('Distribution not found')
+            model_input = lags*ntraps + ntraps*2 + ntraps*lags # sum  of eggs, lats and long, and days
+    else:
+        model_input = lags*ntraps
         
-    def pdf(self, x, **params):
-        if self.model_type == 'exponential_renato':
-            lamb = params.get('lamb')
-            return lamb*torch.exp(-lamb*x)
-        else:
-            raise ValueError('Distribution not found')
+    if model_type == 'classifier' or model_type == 'exponential_renato' or model_type == 'logistical' or model_type == 'pareto':
+        model_output = 2
+    elif model_type == 'regressor' or model_type == 'linear_regressor':
+        model_output = 1
+    return model_input, model_output
 
 def torch_accuracy(yref, yhat,model_type):
     if model_type == 'classifier' or model_type == 'logistical':
@@ -99,24 +177,79 @@ def evaluate_NN(model,loss_func_class, loss_func_reg, yhat, y ):
     
     elif model.model_type == 'exponential_renato':
         logit, lamb = yhat
-        param_dict = {'lamb': lamb}
         # evaluate the pdf of the distribution
-        x_dist = torch.linspace(0, 5000, 5001)
-        x_dist = x_dist.repeat(lamb.shape[0], 1)
-        y_dist = loss_func_reg.pdf(x_dist, **param_dict) # pdf of the distribution is saved in the NN
-        yhat = y_dist.argmax(1)
+        
+        yhat = torch.round(1/(lamb + 0.00001)) # rounded mean of the distribution
         # split NN output
         y_class =  y[:,0].long()
         y_reg = y[:,1]
         # calculate metrics
         loss_class = loss_func_class(logit, y_class)
-        loss_reg = loss_func_reg(y_reg, **param_dict)
+        loss_reg = loss_func_reg(y_reg, lamb)
         acc_class = torch_accuracy(y_class, logit, 'classifier')
         acc_reg = torch_accuracy(y_reg, yhat, 'regressor')
         error_reg = ((yhat - y_reg)**2).sum().item() #mse
 
+    elif model.model_type == 'pareto':
+
+        logit, alpha = yhat
+        x_m = 1 # TODO: if x_m must be implemented as a parameter, it must be passed in yhat 
+        # evaluate the pdf of the distribution
+        yhat = alpha*x_m/(alpha - 1) 
+
+        y_class =  y[:,0].long()
+        y_reg = y[:,1]
+        # calculate metrics
+        loss_class = loss_func_class(logit, y_class)
+        loss_reg = loss_func_reg(y_reg, alpha)
+        acc_class = torch_accuracy(y_class, logit, 'classifier')
+        acc_reg = torch_accuracy(y_reg, yhat, 'regressor')
+        error_reg = ((yhat - y_reg)**2).sum().item() #mse
+
+
     return loss_class, loss_reg, acc_class, acc_reg, error_reg
 
+
+
+def define_model(model_type, model_input, model_output, input_3d,device):
+    if model_type == 'logistical' or model_type == 'linear_regressor':
+        model = NN_arquitectures.LogisticRegression(model_input,input_3d, model_type).to(device)
+    elif model_type == 'exponential_renato':
+        model = NN_arquitectures.NeuralNetworkExponential(model_input, model_output,model_type,input_3d).to(device)
+    elif model_type == 'pareto':
+        model = NN_arquitectures.NeuralNetworkPareto(model_input, model_output,model_type,input_3d).to(device)
+    else:
+        model = NN_arquitectures.NeuralNetwork(model_input, model_output,model_type,input_3d).to(device)
+    return model
+
+def define_loss_functions(model_type):
+    if model_type == 'classifier':
+        loss_func_class = nn.CrossEntropyLoss()
+        loss_func_reg = None
+    elif model_type == 'logistical':
+        loss_func_class = nn.BCEWithLogitsLoss()
+        loss_func_reg = None
+    elif model_type == 'regressor' or model_type == 'linear_regressor':
+        loss_func_class = None
+        loss_func_reg = nn.MSELoss()
+    elif model_type == 'exponential_renato':
+        loss_func_class = nn.CrossEntropyLoss()
+        loss_func_reg = NN_arquitectures.ExponentialLoss()
+    elif model_type =='pareto':
+        loss_func_class = nn.CrossEntropyLoss()
+        loss_func_reg = NN_arquitectures.ParetoLoss()
+
+    return loss_func_class, loss_func_reg
+
+def create_history_dict():
+    return {
+        'total_loss': [],
+        'loss_class': [],
+        'loss_reg': [],
+        'acc_class': [],
+        'acc_reg': [],
+        'error_reg':[]
+    }
 
 # Create train and test loops
 def train_loop(dataloader, model, loss_func_class, loss_func_reg, optimizer):
@@ -129,8 +262,8 @@ def train_loop(dataloader, model, loss_func_class, loss_func_reg, optimizer):
         # Compute prediction and loss
         optimizer.zero_grad()
         # Calculate loss
-
         yhat = model(xtrain)
+
         loss_class, loss_reg, acc_class, acc_reg, error_reg = evaluate_NN(model,loss_func_class, loss_func_reg, yhat, ytrain) # depend on model type
         
         # save losses
@@ -194,96 +327,8 @@ def test_loop(dataloader, model, loss_func_class, loss_func_reg):
 
     return total_loss_test, loss_class_test, loss_reg_test, acc_class_test, acc_reg_test, error_reg_test
 
-def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.array, y_test: np.array, model_type: str, device: str)->Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Transform numpy arrays to tensors and send them to the device
-
-    Parameters:
-    x_train: numpy array with the training data
-    x_test: numpy array with the test data
-    y_train: numpy array with the training data
-    y_test: numpy array with the test data
-    model_type: classifier, regressor, exponential_renato, linear_regressor or logistical
-    device: device to send the tensors
-
-    Returns:
-    xtrain: tensor with the training data
-    xtest: tensor with the test data
-    ytrain: tensor with the training data
-    ytest: tensor with the test data    
-    """
-
-    if model_type == 'classifier' or model_type == 'logistical':
-        output_type = torch.long
-    elif model_type == 'regressor' or model_type == 'exponential_renato' or 'linear_regressor':
-        output_type = torch.float32
-
-    xtrain = torch.tensor(x_train, dtype=torch.float32).to(device)
-    xtest = torch.tensor(x_test, dtype=torch.float32).to(device)
-    ytrain = torch.tensor(y_train, dtype=output_type).to(device)
-    ytest = torch.tensor(y_test, dtype=output_type).to(device)
-
-    return xtrain, xtest, ytrain, ytest
-
-def input_output_sizes(lags, ntraps, use_trap_info,model_type,input_3d):
-    # Network structure
-    if use_trap_info:
-        if input_3d:
-            model_input = lags*ntraps # dimension of traps. depth (days and distances) is fixed 
-        else:
-            model_input = lags*ntraps + ntraps*2 + ntraps*lags # sum  of eggs, lats and long, and days
-    else:
-        model_input = lags*ntraps
-        
-    if model_type == 'classifier' or model_type == 'exponential_renato' or model_type == 'logistical':
-        model_output = 2
-    elif model_type == 'regressor' or model_type == 'linear_regressor':
-        model_output = 1
-    return model_input, model_output
-
-def xy_definition(model_type, data, use_trap_info, ovos_flag,days_columns,lat_columns,long_columns):
-# definition of x and y
-    if model_type == 'classifier' or model_type == 'logistical':
-        y = ovos_flag
-    elif model_type == 'regressor' or model_type == 'linear_regressor':
-        y = data['novos']
-    elif model_type == 'exponential_renato':
-        y = pd.concat([ovos_flag.rename('ovos_flag', inplace=True),data['novos']],axis=1)
-
-    if use_trap_info:
-        x = data.drop(columns=['novos'])
-    else:
-        drop_cols = ['novos'] + days_columns + lat_columns + long_columns
-        x = data.drop(columns=drop_cols)
-    return x, y
-
-def define_loss_functions(model_type):
-    if model_type == 'classifier':
-        loss_func_class = nn.CrossEntropyLoss()
-        loss_func_reg = None
-    elif model_type == 'logistical':
-        loss_func_class = nn.BCEWithLogitsLoss()
-        loss_func_reg = None
-    elif model_type == 'regressor' or model_type == 'linear_regressor':
-        loss_func_class = None
-        loss_func_reg = nn.MSELoss()
-    elif model_type == 'exponential_renato':
-        loss_func_class = nn.CrossEntropyLoss()
-        loss_func_reg = NN_building.CustomLoss(model_type)
-    return loss_func_class, loss_func_reg
-
-
-def create_history_dict():
-    return {
-        'total_loss': [],
-        'loss_class': [],
-        'loss_reg': [],
-        'acc_class': [],
-        'acc_reg': [],
-        'error_reg':[]
-    }
-
-def append_history_dict(history_dict, *, total_loss, loss_class, loss_reg, acc_class, acc_reg, error_reg):
+def append_history_dict(history_dict, results):
+    total_loss, loss_class, loss_reg, acc_class, acc_reg, error_reg = results
     history_dict['total_loss'].append(total_loss)
     history_dict['loss_class'].append(loss_class)
     history_dict['loss_reg'].append(loss_reg)
@@ -301,15 +346,25 @@ def calc_model_output(model, xtest,loss_func_reg=None):
         return yhat.squeeze()
     elif model.model_type == 'exponential_renato':
         logit, lamb = model(xtest)
-        param_dict = {'lamb': lamb}
-        x_dist = torch.linspace(0, 5000, 5001)
-        x_dist = x_dist.repeat(lamb.shape[0], 1)
-        y_dist = loss_func_reg.pdf(x_dist, **param_dict) # pdf of the distribution is saved in the NN
-        yhat_reg = y_dist.argmax(1)
+        yhat_reg = 1/lamb
         yhat_class = logit.argmax(1)
-        yhat = torch.stack((yhat_class, yhat_reg) ,dim=1)
-
+        yhat = torch.stack((yhat_class.unsqueeze(1), yhat_reg) ,dim=1)
         return yhat
+    elif model.model_type == 'pareto':
+        logit, alpha = model(xtest)
+        x_m = 1 # TODO x_m must be passed as a parameter
+        
+        yhat_class = logit.argmax(1)
+        yhat_reg = yhat_class
+        for i in range(len(yhat_reg)):
+            if alpha[i]> 1:
+                yhat_reg[i] = alpha[i]*x_m/(alpha[i] - 1)*yhat_reg[i]
+            else:
+                yhat_reg[i] = 1000000*yhat_reg[i]
+        yhat = torch.stack((yhat_class, yhat_reg) ,dim=1)
+        return yhat
+    else:
+        raise ValueError('Model type not found')
     
 def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_history ):
     """
@@ -371,57 +426,4 @@ def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_hi
 
         #signature = mlflow.models.ModelSignature(inputs=x_train, outputs=y_train)
         mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model
-
-
-def create_dataset(parameters:dict, data_path:str= None)->Tuple[DataLoader, DataLoader]:
-    ntraps = parameters['ntraps']
-    lags = parameters['lags']
-    model_type = parameters['model_type']
-    use_trap_info = parameters['use_trap_info']
-    random_split = parameters['random_split']
-    test_size = parameters['test_size']
-    scale = parameters['scale']
-    input_3d = parameters['input_3d']
-
-    if use_trap_info == False:
-        assert input_3d == False , '3D input is only available if trap information is used'
-    if data_path is None:
-        data_path = f'./results/final_dfs/final_df_lag{lags}_ntraps{ntraps}.csv'
-    if os.path.exists(data_path):
-        # data import and preprocessing
-        data = pd.read_csv(data_path)
-        if 'Unnamed: 0' in data.columns:
-            data.drop('Unnamed: 0',axis=1,inplace = True)
-    else:
-        data = NN_preprocessing.create_final_matrix(lags,ntraps)
-
-    nplaca_index = data['nplaca']
-    data.drop(columns=['nplaca'], inplace=True)
-    ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else 0)#.rename('ovos_flag', inplace=True)
-
-    # divide columns into groups
-    days_columns = [f'days{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
-    lat_columns = [f'lat{i}' for i in range(ntraps)]
-    long_columns = [f'long{i}' for i in range(ntraps)]
-    eggs_columns = [f'trap{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
-    x, y = xy_definition(model_type, data, use_trap_info, ovos_flag,days_columns,lat_columns,long_columns)
-
-
-    # train test split
-    x_train, x_test, y_train, y_test = NN_preprocessing.data_train_test_split(x, y, test_size, random_split,ovos_flag)
-    # scaling
-    if scale:
-        x_train, x_test, y_train, y_test = NN_preprocessing.scale_dataset(x_train.copy(), 
-                                            x_test.copy(), y_train.copy(), y_test.copy(), model_type, use_trap_info, eggs_columns, lat_columns,long_columns, days_columns)
-    #convert to numpy with the correct shape
-    if input_3d:
-        x_train = NN_preprocessing.create_3d_input(x_train, ntraps, lags)
-        x_test = NN_preprocessing.create_3d_input(x_test, ntraps, lags)
-        y_train, y_test = y_train.to_numpy(), y_test.to_numpy()
-    else:
-        x_train, x_test, y_train, y_test = x_train.to_numpy(), x_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy()
-
-
-    return x_train, x_test, y_train, y_test, nplaca_index
-
 
