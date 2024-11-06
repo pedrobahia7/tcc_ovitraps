@@ -1,4 +1,11 @@
+import sys
+import os
+current_dir = os.getcwd()
+project_root = os.path.abspath(os.path.join(current_dir, '.'))
+sys.path.append(project_root)
+
 import utils.NN_building as NN_building
+import utils.NN_arquitectures as NN_arquitectures
 import torch
 from torch.utils.data import DataLoader
 
@@ -58,10 +65,10 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
     # Network structure
     model_input, model_output = NN_building.input_output_sizes(lags, ntraps, use_trap_info,model_type,input_3d)
     if model_type == 'logistical' or model_type == 'linear_regressor':
-        model = NN_building.LogisticRegression(model_input,input_3d, model_type).to(device)
+        model = NN_arquitectures.LogisticRegression(model_input,input_3d, model_type).to(device)
 
     else:
-        model = NN_building.NeuralNetwork(model_input, model_output,model_type,input_3d).to(device)
+        model = NN_arquitectures.NeuralNetwork(model_input, model_output,model_type,input_3d).to(device)
 
     # Loss functions
     loss_func_class, loss_func_reg = NN_building.define_loss_functions(model_type)
@@ -77,10 +84,10 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
     # Network Loop
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
-        total_loss_train, loss_class_train, loss_reg_train, acc_class_train, acc_reg_train, error_reg_train = train_loop(train_dataloader,
+        total_loss_train, loss_class_train, loss_reg_train, acc_class_train, acc_reg_train, error_reg_train = NN_building.train_loop(train_dataloader,
                                                                               model, loss_func_class, loss_func_reg, optimizer)        
         
-        total_loss_test, loss_class_test, loss_reg_test, acc_class_test, acc_reg_test, error_reg_test = test_loop(test_dataloader,
+        total_loss_test, loss_class_test, loss_reg_test, acc_class_test, acc_reg_test, error_reg_test = NN_building.test_loop(test_dataloader,
                                                                                         model, loss_func_class, loss_func_reg)
 
         # Append Metrics
@@ -106,13 +113,16 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
 
 
 if __name__ == '__main__':
+    '''
+    Define different parameters and call pipeline
+    '''
     # Parameters
 
-    repeat = 3 # Number of times the model will be trained and tested
+    repeat = 1 # Number of times the model will be trained and tested
 
     model_type =  'regressor' # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'logistical'
     use_trap_info = True
-    ntraps = 3
+    ntraps = 1
     lags = 3
     random_split = True
     test_size = 0.2
@@ -139,11 +149,11 @@ if __name__ == '__main__':
     metatron = ['classifier' ,'regressor' ,'exponential_renato' ,'linear_regressor' ,'logistical']
     bool_list = [True, False]
 
-    for boolean1 in bool_list:
+    """    for boolean1 in bool_list:
         parameters['use_trap_info'] = boolean1
         for boolean2 in bool_list:
             parameters['random_split'] = boolean2
             for type in metatron:
                 parameters['model_type'] = type
-                for i in range(repeat):
-                    NN_pipeline(parameters)
+                for i in range(repeat):"""
+    NN_pipeline(parameters)
