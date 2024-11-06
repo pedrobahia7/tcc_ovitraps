@@ -67,6 +67,9 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
     if model_type == 'logistical' or model_type == 'linear_regressor':
         model = NN_arquitectures.LogisticRegression(model_input,input_3d, model_type).to(device)
 
+    elif model_type == 'exponential_renato':
+        model = NN_arquitectures.NeuralNetworkExponential(model_input, model_output,model_type,input_3d).to(device)
+
     else:
         model = NN_arquitectures.NeuralNetwork(model_input, model_output,model_type,input_3d).to(device)
 
@@ -120,7 +123,7 @@ if __name__ == '__main__':
 
     repeat = 1 # Number of times the model will be trained and tested
 
-    model_type =  'regressor' # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'logistical'
+    model_type =  'classifier' # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'logistical'
     use_trap_info = True
     ntraps = 1
     lags = 3
