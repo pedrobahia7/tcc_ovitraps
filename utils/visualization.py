@@ -1,9 +1,13 @@
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from pathlib import Path
+from selenium import webdriver
+import plotly.express as px
+
+
 
 def hist_html(df,trap):
     # Generate a histogram
@@ -17,7 +21,6 @@ def hist_html(df,trap):
     plt.close()  # Close the plot to avoid displaying it in the output
 
     return f'./histograms/histogram_{trap}.png'
-
 
 def pareto_plot(data:pd.Series,plt_title:str,ax=plt ):
     """
@@ -42,8 +45,7 @@ def pareto_plot(data:pd.Series,plt_title:str,ax=plt ):
         ax.xlabel(f'Log of value')
 
     else:
-        ax.set_title(plt_title)
-    
+        ax.set_title(plt_title)    
     
 def pareto_plot_html(df:pd.DataFrame,trap:str) -> str:
     """
@@ -63,7 +65,6 @@ def pareto_plot_html(df:pd.DataFrame,trap:str) -> str:
     plt.close()  # Close the plot to avoid displaying it in the output
 
     return f'./pareto_plot/pareto_plot_{trap}.png'
-
 
 def plot_time_series_yearly(df:pd.DataFrame, column:str, xaxis:str ,title:str, xaxis_title:str, yaxis_title:str, global_plot:bool = False)->None:
     """
@@ -208,8 +209,6 @@ def plot_time_series_cat(df:pd.DataFrame, column:str, xaxis:str ,title:str, xaxi
     # Show the figure
     fig.show()
 
-
-
 def time_series_html(df:pd.DataFrame,trap:str) -> str:
     """
     Generate a Pareto plot of the data of a specific trap so it can be saved as an image file and used in the html
@@ -240,3 +239,141 @@ def time_series_html(df:pd.DataFrame,trap:str) -> str:
     plt.savefig(f'../results/time_series/time_series_{trap}.png', bbox_inches='tight', dpi=300)
     plt.close()  # Close the plot to avoid displaying it in the output
     return f'../results/time_series/time_series_{trap}.png'
+
+def convert_html_to_image(html_path):
+    # Convert the local path to a file URL
+    html_file_url = Path(html_path).resolve().as_uri()
+
+    # Set up Selenium WebDriver (Chrome in this case)
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')  # Run Chrome in headless mode
+    options.add_argument('--disable-gpu')  # Disable GPU acceleration
+    options.add_argument('--window-size=1200x800')  # Set window size for screenshot
+
+    driver = webdriver.Chrome(options=options)
+
+    # Open the HTML file using the file URL
+    driver.get(html_file_url)
+
+    # Take a screenshot and save it as an image
+    image_path = html_path.replace('.html', '.png')
+    driver.save_screenshot(image_path)
+
+    # Close the driver
+    driver.quit()
+
+    return image_path
+
+
+def NovosxRelation_plot_traps(data, lags, ntraps, relation, jitter_strength=1, wrt='lags'):
+    """
+    Function to plot scatter plots of a relation of lagged traps vs novos for each trap and lag
+    Traps are constant for each plot and the relation is calculated for the change of lags
+
+    Parameters:
+    data (DataFrame): The input data containing lagged traps and novos
+    lags (int): The number of lags to consider
+    ntraps (int): The number of traps to consider
+    relation (str): The relation to plot ('median' or 'mean')
+    jitter_strength (float): The strength of jitter to add to the plot
+
+    Returns:
+    None    
+    """
+
+
+
+    for j in range(ntraps): 
+        
+        # calculate the relation for the current trap
+        lags_list = [f'trap{j}_lag{i}' for i in range(1, lags + 1)] # list of column name for all lagged values for the neighbor trap
+        if relation == 'median':
+            relation_data = data[lags_list].median(axis=1)
+        elif relation == 'mean':
+            relation_data = data[lags_list].mean(axis=1)
+        else:
+            raise ValueError("relation must be 'median' or 'mean'")
+        
+
+        # Add jitter to the data
+        data_plot = {}
+        jitter_strength = 1
+        jitter1 = np.random.uniform(-jitter_strength, jitter_strength, size=data.shape[0])
+        data_plot['relation'] = relation_data + jitter1
+        jitter2 = np.random.uniform(-jitter_strength, jitter_strength, size=data.shape[0])
+
+        data_plot['novos'] = data['novos'] + jitter2
+
+        # Create scatter plot
+        fig = px.scatter(data_plot, y='relation', x='novos', title=f'Scatter Plot of {relation} Traps vs. Novos - trap {j} lags{[i for i in range(1, lags + 1)]}')
+        fig.update_traces(marker=dict(size=1,color='black'))  # 'size=1' as a close equivalent to 's=0.01'
+        fig.update_layout(yaxis_title=f"{relation} of traps", xaxis_title="Novos", xaxis=dict(range=[0, 250]),yaxis=dict(range=[0, 250]))
+        fig.show()
+
+
+
+def NovosxRelation_plot_lags(data, lags, ntraps, relation, jitter_strength=1, wrt='lags'):
+    """
+    Function to plot scatter plots of a relation of lagged traps vs novos for each trap and lag
+    Lags are constant for each plot and the relation is calculated for the change of neighbors traps
+
+    Parameters:
+    data (DataFrame): The input data containing lagged traps and novos
+    lags (int): The number of lags to consider
+    ntraps (int): The number of traps to consider
+    relation (str): The relation to plot ('median' or 'mean')
+    jitter_strength (float): The strength of jitter to add to the plot
+
+    Returns:
+    None    
+    """
+
+
+
+    for j in range(1, lags + 1):
+        
+        # calculate the relation for the current trap
+        lags_list = [f'trap{i}_lag{j}' for i in range(ntraps)] # list of column name for all lagged values for the neighbor trap
+        if relation == 'median':
+            relation_data = data[lags_list].median(axis=1)
+        elif relation == 'mean':
+            relation_data = data[lags_list].mean(axis=1)
+        else:
+            raise ValueError("relation must be 'median' or 'mean'")
+        
+
+        # Add jitter to the data
+        data_plot = {}
+        jitter_strength = 1
+        jitter1 = np.random.uniform(-jitter_strength, jitter_strength, size=data.shape[0])
+        jitter2 = np.random.uniform(-jitter_strength, jitter_strength, size=data.shape[0])
+        data_plot['relation'] = relation_data + jitter1
+        data_plot['novos'] = data['novos'] + jitter2
+
+        # Create scatter plot
+        fig = px.scatter(data_plot, y='relation', x='novos', title=f'Scatter Plot of {relation} Traps vs. Novos - trap {[i for i in range(ntraps)]} lags{j}')
+        fig.update_traces(marker=dict(size=1,color='black'))  # 'size=1' as a close equivalent to 's=0.01'
+        fig.update_layout(yaxis_title=f"{relation} of traps", xaxis_title="Novos", xaxis=dict(range=[0, 250]),yaxis=dict(range=[0, 250]))
+        fig.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
