@@ -4,7 +4,7 @@ from torch import nn
 import pandas as pd
 from typing import Tuple
 import utils.NN_building as NN_building
-import utils.NN_lib as NN_lib
+import utils.NN_arquitectures as NN_arquitectures
 from torch.utils.data import DataLoader
 import os
 import utils.NN_preprocessing as NN_preprocessing
