@@ -197,7 +197,7 @@ class LogisticRegression(nn.Module):
             x = x.permute(0,2,1)
             x = torch.relu(self.conv1(x))
             x = x.view(x.size(0), -1)
-        if self.model_type == 'logistical':
+        if self.model_type == 'logistic':
             return torch.sigmoid(self.layer1(x)) 
         elif self.model_type == 'linear_regressor':
             return self.layer1(x)
