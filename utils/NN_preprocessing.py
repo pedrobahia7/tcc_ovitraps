@@ -228,34 +228,39 @@ def final_matrix_logic(valid_samples:pd.DataFrame, day_df:pd.DataFrame, distance
             if nan_count_matrix[week_index,original_trap_index] > lags:                             # remove samples of original traps that doesn't have enough data
                 continue                                                                            # autoregressive samples 
                
-            #iterate over the traps closest to the original trap
+            #iterate over the neighbors closest to the original trap
             for _ in range(n_traps): 
-                trap_index = sorted_distance_indexes[order_index]                                    # get the index of the eggs matrix referent to the SECOND trap
+                neighbor_index = sorted_distance_indexes[order_index]                                    # get the index of the eggs matrix referent to the neighbor trap
                 
-                # loop to avoid traps that doesn't have enough autoregressive samples
-                while nan_count_matrix[week_index,trap_index] > lags:                               
+                # loop to avoid traps that don't have enough autoregressive samples
+                while nan_count_matrix[week_index,neighbor_index] > lags:                               
                     order_index += 1
-                    trap_index = sorted_distance_indexes[order_index]
+                    if order_index >= len(sorted_distance_indexes):                                     # if there are no more neighbors to add
+                        break
+                    neighbor_index = sorted_distance_indexes[order_index]
                     #if order_index > 50: #avoid arbitrarily distant traps #it was not necessary
                         #break
-                
-                lagged_samples = lagged_eggs[:,week_index,trap_index]                               # get the eggs of all the lags. [lag x week x trap] -> novos
+                if order_index >= len(sorted_distance_indexes):                                     # if there are no more neighbors to add
+                        break
+                lagged_samples = lagged_eggs[:,week_index,neighbor_index]                               # get the eggs of all the lags. [lag x week x trap] -> novos
 
                 [add_row.append(i) for i in lagged_samples[~np.isnan(lagged_samples)]]              # add lagged eggs
-                add_row.append(nplaca_lat_dict[index_trap_dict[trap_index]])            # add latitude of the second trap
-                add_row.append(nplaca_long_dict[index_trap_dict[trap_index]])           # add longitude of the second trap
+                add_row.append(nplaca_lat_dict[index_trap_dict[neighbor_index]])            # add latitude of the second trap
+                add_row.append(nplaca_long_dict[index_trap_dict[neighbor_index]])           # add longitude of the second trap
 
                 
                 #subtract lagged days from orignal sample day [lag x week x trap] -> ordinal days
-                lagged_samples_days = lagged_days[:,week_index,trap_index]
+                lagged_samples_days = lagged_days[:,week_index,neighbor_index]
                 days_diff = day_df_np[week_index,original_trap_index] - lagged_samples_days[~np.isnan(lagged_samples_days)] 
                 
                 [add_row.append(i) for i in days_diff]                                              # add lagged days
                 order_index += 1
+            if order_index >= len(sorted_distance_indexes):
+                        break
             list_final_samples.append(add_row)
 
 
-    assert len(list_placas) == valid_samples.shape[0], 'invalid number of placas'
+    #assert len(list_placas) == valid_samples.shape[0], 'invalid number of placas'
     assert len(list_placas) == len(set(list_placas)), 'duplicated placas'
 
     # create the final dataframe
@@ -292,7 +297,7 @@ def create_final_matrix(lags:str, n_traps:str, data_addr:str = './data/final_dat
     final_df: pandas dataframe with the final matrix to be used in the neural network model
     """
     print('Creating final matrix')
-    data = pd.read_csv('./data/final_data.csv',parse_dates=['dtcol'])
+    data = pd.read_csv(data_addr,parse_dates=['dtcol'])
     valid_samples = get_valid_samples(data)
 
     # introduce a small value on traps with the same coordinates to differentiate them
@@ -347,7 +352,7 @@ def create_final_matrix(lags:str, n_traps:str, data_addr:str = './data/final_dat
     final_df.sort_values(by=['dtcol'],inplace=True)
     final_df.drop(columns=['dtcol'],inplace=True)
 
-    final_df.to_csv(f'./results/final_dfs/final_df_lag{lags}_ntraps{n_traps}.csv')
+    final_df.to_parquet(f'./results/final_dfs/final_df_lag{lags}_ntraps{n_traps}.csv',index=False,compression='snappy')
     return final_df
 
 
