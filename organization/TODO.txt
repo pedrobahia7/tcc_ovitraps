@@ -7,8 +7,6 @@ Comparar com Naïve e com função de custo quadrática
 
 Music Informatics - método para identificar reta e ponto onde ela começa/
 
-Tratamento de NaNs na Latitude/Longitude (perguntar dilermando )
-
 Informação Mútua e correlação de Spearman para definir correlações
 
 Granger causality to add new traps and external variables
@@ -29,7 +27,7 @@ Modelos ARIMA, SARIMA, RF, SVM
 
 Modelagem de baixa frgequência para verificar tendência e comparar com armadilhas vizinhas. Talvez elas tenham curvas parecidas, apenas multiplicadas por um fator de escala
     
-Introduzir informação de sazonalidade e de posição na modelagem
+Introduzir informação de sazonalidade na modelagem
 
 
 
@@ -42,23 +40,46 @@ Ler:
 
 
 PROBLEMS:
-Percentage of zeros in exponential_renato
+Percentage of zeros in exponential_renato is doubled
 loss function logistic
 adapt input_3d to logistic and linear regressor
 3D dimension: lat, long, week, year consatants to original trap
 dias negativos na matrix final 
 january data is dropped in final matrix with lag 3 
 diferenças dos dias de armação e coleta -> se forem muito grandes, adicionar como variável da NN? Valores absurdos. Filtrar?
-
-
+Tratamento de NaNs na Latitude/Longitude (perguntar dilermando )
+Substituir logistic and linear regression por sklearn
+Semanas pares e ímpares número de Nans no week 2023
+retirar pareto individual do mapa
 
 Loss function regresion >>> Loss function classification -> terrible network (everything is 0 or 1). Create a second network only with non null values. after classification or before it? 
-aumentar número de vizinhos para testar
-sigmoid and RELU in the Network
 substituir dia por semana epid
-exponential model - all values of regression are 0. Use another method to evalaute them! expectation!
-Semanas pares e ímpares número de Nans no week 2023
 
-Derivar função de pareto 
-introduzir pareto na função de custo da NN (excluir zeros)
 introduzir double poisson na função de custo 
+
+LOGISTICA:
+ELM
+outras variaveis
+seleção de entradas via correlation
+
+
+
+
+Renato:
+
+Plots series temporais para introdução de variavel sazonal
+categorias como forma de predição (alto número de zeros) - mapa e tabela em treated_df_exploration
+Plots de mediana de lags x atual
+Diferença de dias por lag
+diferença dtcol 
+difernça entre samples
+dados de janeiro
+!!!rede exponencial separada!!!
+alfa < 1: truncar com relu
+double poisson: aprendendo ferramenta para incorporar 
+
+vairaveis exogenas
+log da variavel de saída 
+pacotes de ajuste de distriuição automatica
+cluster regional
+Modelos ARIMA, SARIMA, RF, SVM
