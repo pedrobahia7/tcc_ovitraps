@@ -6,6 +6,7 @@ from plotly.subplots import make_subplots
 from pathlib import Path
 from selenium import webdriver
 import plotly.express as px
+import itertools
 
 
 
@@ -274,7 +275,7 @@ def NovosxRelation_plot_traps(data, lags, ntraps, relation, jitter_strength=1, w
     data (DataFrame): The input data containing lagged traps and novos
     lags (int): The number of lags to consider
     ntraps (int): The number of traps to consider
-    relation (str): The relation to plot ('median' or 'mean')
+    relation (str): The relation to plot ('median' or 'mean' or 'sum')
     jitter_strength (float): The strength of jitter to add to the plot
 
     Returns:
@@ -291,13 +292,15 @@ def NovosxRelation_plot_traps(data, lags, ntraps, relation, jitter_strength=1, w
             relation_data = data[lags_list].median(axis=1)
         elif relation == 'mean':
             relation_data = data[lags_list].mean(axis=1)
+        elif relation == 'sum':
+            relation_data = data[lags_list].sum(axis=1)
         else:
             raise ValueError("relation must be 'median' or 'mean'")
         
 
         # Add jitter to the data
         data_plot = {}
-        jitter_strength = 1
+        jitter_strength = 0.5
         jitter1 = np.random.uniform(-jitter_strength, jitter_strength, size=data.shape[0])
         data_plot['relation'] = relation_data + jitter1
         jitter2 = np.random.uniform(-jitter_strength, jitter_strength, size=data.shape[0])
@@ -321,7 +324,7 @@ def NovosxRelation_plot_lags(data, lags, ntraps, relation, jitter_strength=1, wr
     data (DataFrame): The input data containing lagged traps and novos
     lags (int): The number of lags to consider
     ntraps (int): The number of traps to consider
-    relation (str): The relation to plot ('median' or 'mean')
+    relation (str): The relation to plot ('median' or 'mean'or 'sum')
     jitter_strength (float): The strength of jitter to add to the plot
 
     Returns:
@@ -338,6 +341,8 @@ def NovosxRelation_plot_lags(data, lags, ntraps, relation, jitter_strength=1, wr
             relation_data = data[lags_list].median(axis=1)
         elif relation == 'mean':
             relation_data = data[lags_list].mean(axis=1)
+        elif relation == 'sum':
+            relation_data = data[lags_list].sum(axis=1)
         else:
             raise ValueError("relation must be 'median' or 'mean'")
         
@@ -359,6 +364,54 @@ def NovosxRelation_plot_lags(data, lags, ntraps, relation, jitter_strength=1, wr
 
 
 
+
+def NovosxRelation_plot_all(data, lags, ntraps, relation, jitter_strength=1, wrt='lags', plot_title = None):
+    """
+    Function to plot scatter plots of a relation of lagged traps vs novos for each trap and lag
+    Lags are constant for each plot and the relation is calculated for the change of neighbors traps
+
+    Parameters:
+    data (DataFrame): The input data containing lagged traps and novos
+    lags (int): The number of lags to consider
+    ntraps (int): The number of traps to consider
+    relation (str): The relation to plot ('median' or 'mean'or 'sum')
+    jitter_strength (float): The strength of jitter to add to the plot
+
+    Returns:
+    None    
+    """
+
+
+    
+    # calculate the relation for the current trap
+    lags_list = [f'trap{i}_lag{j}' for i,j in itertools.product(range(ntraps),range(1,lags+1))] # list of column name for all lags and neighbors traps
+    if relation == 'median':
+        relation_data = data[lags_list].median(axis=1)
+    elif relation == 'mean':
+        relation_data = data[lags_list].mean(axis=1)
+    elif relation == 'sum':
+        relation_data = data[lags_list].sum(axis=1)
+    else:
+        raise ValueError("relation must be 'median' or 'mean'")
+    
+
+    # Add jitter to the data
+    data_plot = {}
+    jitter_strength1 = 1
+    jitter_strength2 = 0.2
+
+    jitter1 = np.random.uniform(-jitter_strength1, jitter_strength1, size=data.shape[0])
+    jitter2 = np.random.uniform(-jitter_strength2, jitter_strength2, size=data.shape[0])
+    data_plot['relation'] = relation_data + jitter1
+    data_plot['novos'] = data['novos'] + jitter2
+
+    # Create scatter plot
+    if plot_title == None:
+        plot_title = f'Scatter Plot of {relation} of lagged Traps vs. Novos'
+    fig = px.scatter(data_plot, y='novos', x='relation', title=plot_title )
+    fig.update_traces(marker=dict(size=1,color='black'))  # 'size=1' as a close equivalent to 's=0.01'
+    fig.update_layout(xaxis_title=f"{relation} of traps", yaxis_title="Novos")
+    fig.show()
 
 
 
