@@ -6,11 +6,13 @@ sys.path.append(project_root)
 
 import utils.NN_building as NN_building
 import utils.NN_arquitectures as NN_arquitectures
+import utils.generic as generic
 import torch
 from torch.utils.data import DataLoader
 import pdb
 import tqdm
 import itertools
+import statsmodels.api as sm
 
 def NN_pipeline(parameters:dict, data_path:str= None)->None:
     """
@@ -52,15 +54,13 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
 
     # create dataset
     x_train, x_test, y_train, y_test, nplaca_index = NN_building.create_dataset(parameters, data_path)
-    # transform to tensor
+    pdb.set_trace()
     xtrain, xtest, ytrain, ytest = NN_building.transform_data_to_tensor(x_train, x_test, y_train, y_test, model_type, device)
-    train_dataset = NN_building.CustomDataset(xtrain, ytrain,model_type)
-    test_dataset = NN_building.CustomDataset(xtest, ytest,model_type)
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=random_split)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=random_split)
+
+    # transform to tensor
+
     # Network structure
     model_input, model_output = NN_building.input_output_sizes(lags, ntraps, use_trap_info,model_type,input_3d)
-    model = NN_building.define_model(model_type, model_input, model_output, input_3d,device)
 
     # Loss functions
     loss_func_class, loss_func_reg = NN_building.define_loss_functions(model_type)
@@ -71,17 +71,25 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
     test_history = NN_building.create_history_dict()
 
     if model_type == 'logistic':
-            model.fit(xtrain, ytrain)
-            yhat_train = model.predict(xtrain)
-            yhat = model.predict(xtest)
+            model = sm.Logit(y_train,x_train).fit()   
+            yhat_train = (model.predict(x_train) >= 0.5).astype(int)
+            yhat = (model.predict(x_test) >= 0.5).astype(int)
 
-            results_train = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat_train, ytrain) # depend on model type
-            results_test = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, ytest) # depend on model type
+            results_train = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat_train, y_train) # depend on model type
+            results_test = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y_test) # depend on model type
             NN_building.append_history_dict(train_history, results_train)
             NN_building.append_history_dict(test_history, results_test)
     
 
-    else:
+    else: #Pytorch models
+        
+        train_dataset = NN_building.CustomDataset(xtrain, ytrain,model_type)
+        test_dataset = NN_building.CustomDataset(xtest, ytest,model_type)
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=random_split)
+        test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=random_split)
+
+        model = NN_building.define_model(model_type, model_input, model_output, input_3d,device)
+
         # Optimizer
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         # Network Loop
@@ -101,9 +109,6 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
         
         print("Done!")
         
-        #generic.play_ending_song()
-        #generic.stop_ending_song(2)
-
 
         yhat = NN_building.calc_model_output(model, xtest,loss_func_reg)
         
@@ -119,10 +124,12 @@ if __name__ == '__main__':
     # Parameters
 
     repeat = 1 # Number of times the model will be trained and tested
+    play_song = False
+    stop_time = 2
 
     models = ['logistic']  # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'logistic'
-    neigh_num = [1,2,3,5,8,10,13,15,17,20]
-    lags = [1,3,5,8,10,13]  # max 13
+    neigh_num = [2]
+    lags = [1]  # max 13
     test_size = 0.2
     learning_rate =1e-3
     batch_size = 64
@@ -167,3 +174,7 @@ if __name__ == '__main__':
                 parameters['ntraps'] = ntraps
                 print(f'Iteration {i} - Model {model} - Lags {lag} - Neigh {ntraps}')
                 NN_pipeline(parameters)
+
+    if play_song: 
+        generic.play_ending_song()
+        generic.stop_ending_song(stop_time)
