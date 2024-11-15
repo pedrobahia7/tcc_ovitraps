@@ -16,7 +16,7 @@ import numpy as np
 import pdb
 import sklearn
 from sklearn.linear_model import LogisticRegression as scikit_LogisticRegression
-
+import statsmodels.api as sm 
 
 
 
@@ -43,7 +43,7 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
         unnamed_cols = data.columns [['Unnamed' in col for col in data.columns] ] #TODO create function to load data
         data.drop(unnamed_cols,axis=1,inplace = True)
     else:
-        data = NN_preprocessing.create_final_matrix(lags,ntraps) # TODO add perc zero and mesepid
+        data = NN_preprocessing.create_final_matrix(lags,ntraps,save_path=data_path) # TODO add perc zero and mesepid
 
     nplaca_index = data['nplaca']
     data.drop(columns=['nplaca'], inplace=True)
@@ -54,18 +54,24 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
     # divide columns into groups
     days_columns = [f'days{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
     eggs_columns = [f'trap{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
-    lat_columns = [f'latitude{i}' for i in range(ntraps)]
-    long_columns = [f'longitude{i}' for i in range(ntraps)]
+    lat_column = ['latitude0']
+    long_column = ['longitude0']
 
-    info_cols = days_columns + lat_columns + long_columns + ['mesepid'] + ['zero_perc']
+    info_cols = days_columns + lat_column + long_column + ['mesepid'] + ['zero_perc']
     
     #transform values to 0 and 1
     if bool_input:
         transformed_data = data[eggs_columns].map(lambda x: 1 if x > 0 else 0)
         data[eggs_columns] = transformed_data
-    
-    x, y = xy_definition(model_type, data, use_trap_info, ovos_flag, info_cols)
 
+    # Remove latitudes and longitudes of neighbors
+    lat_columns = [f'latitude{i}' for i in range(1,ntraps)]
+    long_columns = [f'longitude{i}' for i in range(1,ntraps)]
+    data.drop(columns=lat_columns + long_columns, inplace=True)
+
+
+    x, y = xy_definition(model_type, data, use_trap_info, ovos_flag, info_cols)
+    pdb.set_trace()
     # train test split
     x_train, x_test, y_train, y_test = NN_preprocessing.data_train_test_split(x, y, test_size, random_split,ovos_flag)
     # scaling
@@ -115,7 +121,8 @@ def xy_definition(model_type:str, data:pd.DataFrame, use_trap_info:bool, ovos_fl
         x = data.drop(columns=info_cols)
     else:
         x = data
-
+    if model_type == 'logistic':
+        x = sm.add_constant(data)
     return x, y
 
 def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.array, y_test: np.array, model_type: str, device: str)->Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -185,7 +192,7 @@ def input_output_sizes(lags, ntraps, use_trap_info,model_type,input_3d):
 
 def define_model(model_type, model_input, model_output, input_3d,device):
     if  model_type == 'logistic':
-        model = scikit_LogisticRegression(penalty=None, max_iter=5000)
+        pass
     elif model_type == 'linear_regressor':
         model = NN_arquitectures.LogisticRegression(model_input,input_3d, model_type).to(device)
     elif model_type == 'exponential_renato':
@@ -465,7 +472,7 @@ def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_hi
 
         #signature = mlflow.models.ModelSignature(inputs=x_train, outputs=y_train)
         if parameters['model_type'] == 'logistic':
-            mlflow.sklearn.log_model(model, "model")#,signature=signature)                      # Log model
+            mlflow.statsmodels.log_model(model, "model")#,signature=signature)                      # Log model
         
         else:
             mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model
