@@ -284,13 +284,14 @@ def final_matrix_logic(valid_samples:pd.DataFrame, day_df:pd.DataFrame, distance
     return final_df
 
 
-def create_final_matrix(lags:str, n_traps:str, data_addr:str = './data/final_data.csv')->pd.DataFrame:
+def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = './data/final_data.csv')->pd.DataFrame:
     """
     Function to create the final matrix to be used in the neural network model
 
     Parameters:
     lags: number of lags to be created
     n_traps: number of traps to be considered, including the original trap
+    save_path: string with the address to save the final matrix
     data_addr: string with the address of the data file
 
     Returns:
@@ -348,11 +349,26 @@ def create_final_matrix(lags:str, n_traps:str, data_addr:str = './data/final_dat
     #final matrix
     final_df = final_matrix_logic(valid_samples, day_df, distance_matrix, nan_count_matrix,
             lagged_eggs, lagged_days, info_df, trap_index_dict, index_trap_dict, nplaca_index_dict, lags, n_traps,trap_lat_dict,trap_long_dict)
+    
+    # add the week of the principal trap
+    info_df['semepi'] = info_df['semepi'] - 100
+    final_df = final_df.merge(info_df[['nplaca','semepi']], on='nplaca', how='left') 
+
+    #add zero perc
+    zero_perc = pd.DataFrame()
+    for trap in distance_matrix.columns:
+        trap_df = data[data['narmad'] == trap][['novos','dtcol','nplaca']].sort_values(by='dtcol').reset_index(drop=True)  
+
+        trap_df['is_zero'] = trap_df['novos'] == 0
+        trap_df['cumulative_zeros'] = trap_df['is_zero'].cumsum().shift(1)
+        trap_df['zero_perc'] = (trap_df['cumulative_zeros']/ (trap_df.index))
+        zero_perc = pd.concat([zero_perc,trap_df[['nplaca','zero_perc']]])
+    final_df = pd.merge(final_df,zero_perc[['nplaca','zero_perc']],on='nplaca',how='left')
 
     final_df.sort_values(by=['dtcol'],inplace=True)
     final_df.drop(columns=['dtcol'],inplace=True)
-
-    final_df.to_parquet(f'./results/final_dfs/final_df_lag{lags}_ntraps{n_traps}.csv',index=False,compression='snappy')
+    final_df.reset_index(drop=True)
+    final_df.to_parquet(save_path,index=False,compression='snappy')
     return final_df
 
 
