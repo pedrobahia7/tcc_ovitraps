@@ -51,18 +51,10 @@ Tratamento de NaNs na Latitude/Longitude (perguntar dilermando )
 Substituir logistic and linear regression por sklearn
 Semanas pares e ímpares número de Nans no week 2023
 retirar pareto individual do mapa
-
 Loss function regresion >>> Loss function classification -> terrible network (everything is 0 or 1). Create a second network only with non null values. after classification or before it? 
 substituir dia por semana epid
 
 introduzir double poisson na função de custo 
-
-LOGISTICA:
-ELM
-outras variaveis
-seleção de entradas via correlation
-
-
 
 
 Renato:
@@ -83,3 +75,24 @@ log da variavel de saída
 pacotes de ajuste de distriuição automatica
 cluster regional
 Modelos ARIMA, SARIMA, RF, SVM
+
+
+
+
+LOGISTICA:
+step to automaticaly choose variables
+truncate x traps in 100 
+semepid as a sin and sin^2 and spline(with different degrees)
+
+10x1 
+1x1
+
+ScoreG in half of the dataset and use the other half for training and test
+truncatey y traps in 100 and create linear regression 
+
+ELM
+outras variaveis
+seleção de entradas via correlation
+
+
+
