@@ -80,12 +80,15 @@ Modelos ARIMA, SARIMA, RF, SVM
 
 
 LOGISTICA:
-step to automaticaly choose variables
 truncate x traps in 100 
-semepid as a sin and sin^2 and spline(with different degrees)
+spline(with different degrees)
 
-10x1 
-1x1
+version:
+1: lags, days, lat long
+2: mesepid
+3: perc_zero
+4: perc_one
+5: semedpid, semepid2, sin_semepid
 
 ScoreG in half of the dataset and use the other half for training and test
 truncatey y traps in 100 and create linear regression 
