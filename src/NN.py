@@ -54,10 +54,9 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
 
     # create dataset
     x_train, x_test, y_train, y_test, nplaca_index = NN_building.create_dataset(parameters, data_path)
-    pdb.set_trace()
-    xtrain, xtest, ytrain, ytest = NN_building.transform_data_to_tensor(x_train, x_test, y_train, y_test, model_type, device)
 
     # transform to tensor
+    xtrain, xtest, ytrain, ytest = NN_building.transform_data_to_tensor(x_train, x_test, y_train, y_test, model_type, device)
 
     # Network structure
     model_input, model_output = NN_building.input_output_sizes(lags, ntraps, use_trap_info,model_type,input_3d)
@@ -71,9 +70,9 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
     test_history = NN_building.create_history_dict()
 
     if model_type == 'logistic':
-            model = sm.Logit(y_train,x_train).fit()   
-            yhat_train = (model.predict(x_train) >= 0.5).astype(int)
-            yhat = (model.predict(x_test) >= 0.5).astype(int)
+            model, features = NN_building.select_model_stepwise(x_train, y_train)
+            yhat_train = (model.predict(x_train[features]) >= 0.5).astype(int)
+            yhat = (model.predict(x_test[features]) >= 0.5).astype(int)
 
             results_train = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat_train, y_train) # depend on model type
             results_test = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y_test) # depend on model type
@@ -113,7 +112,7 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
         yhat = NN_building.calc_model_output(model, xtest,loss_func_reg)
         
         torch.save(model.state_dict(), f'./results/NN/save_parameters/model{model_type}_lags{lags}_ntraps{ntraps}_final.pth')
-    NN_building.save_model_mlflow(parameters, model, yhat, ytest, test_history, train_history,experiment_name = 'Classification')
+    NN_building.save_model_mlflow(parameters, model, yhat, ytest, test_history, train_history,features,experiment_name = 'Classification')
 
 
 
@@ -128,8 +127,8 @@ if __name__ == '__main__':
     stop_time = 2
 
     models = ['logistic']  # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'logistic'
-    neigh_num = [2]
-    lags = [1]  # max 13
+    neigh_num = [1,2,3,5,8,10,13,15,17,20]
+    lags = [1,3,5,8,10,13]  # max 13
     test_size = 0.2
     learning_rate =1e-3
     batch_size = 64
