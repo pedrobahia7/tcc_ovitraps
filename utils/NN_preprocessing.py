@@ -372,7 +372,24 @@ def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = './
     return final_df
 
 
-def data_train_test_split(x, y, test_size, random_split,ovos_flag):
+def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, test_size:float, random_split:bool,ovos_flag:pd.Series)->Tuple[pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame]:
+    """
+    Split the data into train and test sets
+
+    Parameters:
+    x: pandas dataframe with the features
+    y: pandas dataframe with the target
+    test_size: float with the proportion of the test set
+    random_split: boolean to define if the split is random
+    ovos_flag: pandas series with the flag of the ovos
+
+    Returns:
+    x_train: pandas dataframe with the features of the train set
+    x_test: pandas dataframe with the features of the test set
+    y_train: pandas dataframe with the target of the train set
+    y_test: pandas dataframe with the target of the test set
+    """
+
     n = x.shape[0]
 
     if random_split:
