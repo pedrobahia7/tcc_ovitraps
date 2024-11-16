@@ -57,7 +57,7 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
     lat_column = ['latitude0']
     long_column = ['longitude0']
 
-    info_cols = days_columns + lat_column + long_column + ['mesepid'] + ['zero_perc']
+    info_cols = days_columns + lat_column + long_column + ['semepi'] + ['zero_perc'] +['semepi2'] + ['sin_semepi']
     
     #transform values to 0 and 1
     if bool_input:
@@ -69,9 +69,10 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
     long_columns = [f'longitude{i}' for i in range(1,ntraps)]
     data.drop(columns=lat_columns + long_columns, inplace=True)
 
-
+    # add semepi^2 and half sin(semedi)
+    data['semepi2'] = data['semepi']**2 
+    data['sin_semepi'] = np.sin(np.pi*data['semepi']/max(data['semepi']))
     x, y = xy_definition(model_type, data, use_trap_info, ovos_flag, info_cols)
-    pdb.set_trace()
     # train test split
     x_train, x_test, y_train, y_test = NN_preprocessing.data_train_test_split(x, y, test_size, random_split,ovos_flag)
     # scaling
@@ -83,7 +84,8 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
         x_train = NN_preprocessing.create_3d_input(x_train, ntraps, lags)
         x_test = NN_preprocessing.create_3d_input(x_test, ntraps, lags)
         y_train, y_test = y_train.to_numpy(), y_test.to_numpy()
-    else:
+    
+    if model_type != 'logistic':    #return a 
         x_train, x_test, y_train, y_test = x_train.to_numpy(), x_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy()
 
     return x_train, x_test, y_train, y_test, nplaca_index
@@ -148,6 +150,15 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
         output_type = torch.long
     elif model_type == 'regressor' or model_type == 'exponential_renato' or 'linear_regressor' or model_type == 'pareto':
         output_type = torch.float32
+
+    if isinstance(x_train, pd.DataFrame):
+        x_train = x_train.to_numpy()
+    if isinstance(x_test, pd.DataFrame):
+        x_test = x_test.to_numpy()
+    if isinstance(y_train, pd.DataFrame) or isinstance(y_train, pd.Series):
+        y_train = y_train.to_numpy()
+    if isinstance(y_test, pd.DataFrame) or isinstance(y_test, pd.Series):
+        y_test = y_test.to_numpy()
 
     xtrain = torch.tensor(x_train, dtype=torch.float32).to(device)
     xtest = torch.tensor(x_test, dtype=torch.float32).to(device)
@@ -415,7 +426,7 @@ def calc_model_output(model, xtest,loss_func_reg=None):
     else:
         raise ValueError('Model type not found')
     
-def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_history, experiment_name = 'NN_ovitraps'):
+def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_history,features, experiment_name = 'NN_ovitraps'):
     """
     Saves the model in the MLflow server.
     """
@@ -464,6 +475,9 @@ def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_hi
 
         mlflow.log_dict(output, "output.json")                             
 
+        # Log features
+        mlflow.log_param('features', features)
+
         
         #tags
         mlflow.set_tag('mlflow.runName', f"{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_version{version}")	
@@ -477,3 +491,103 @@ def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_hi
         else:
             mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model
             
+def forward_stepwise(X, y):
+    """
+    Perform forward stepwise selection to select the best features for a logistic regression model.
+    The function starts with an empty set of features and adds the feature that minimizes the AIC at each step.
+    This process is repeated until the AIC stops decreasing.
+
+    Parameters:
+    X: pd.DataFrame with the input features
+    y: pd.Series with the target variable
+
+    Returns:
+    final_model: the final logistic regression model
+    selected_features: list with the selected features
+    """
+
+    best_aic = np.inf
+    remaining_features = list(X.columns)
+    selected_features = []
+
+    while remaining_features:
+        aic_values = []
+        for feature in remaining_features:
+            model = sm.Logit(y, X[selected_features + [feature]]).fit()
+            aic_values.append((feature, model.aic))
+        
+        # Select the feature with the lowest AIC
+        best_feature, best_model_aic = min(aic_values, key=lambda x: x[1])
+        
+        if best_model_aic < best_aic:
+            best_aic = best_model_aic
+            selected_features.append(best_feature)
+            remaining_features.remove(best_feature)
+        else:
+            break
+    
+    # Fit the final model with selected features
+    final_model = sm.Logit(y, X[selected_features]).fit()
+    return final_model, selected_features
+
+def backward_stepwise(X, y):
+    """
+    Perform backward stepwise selection to select the best features for a logistic regression model.
+    The function fits a logistic regression model with all features, then removes the feature with the highest AIC.
+    This process is repeated until the AIC stops decreasing.
+
+    Parameters:
+    X: pd.DataFrame with the input features
+    y: pd.Series with the target variable
+
+    Returns:
+    final_model: the final logistic regression model
+    selected_features: list with the selected features
+    """
+
+    selected_features = list(X.columns)
+    best_aic = np.inf
+
+    while len(selected_features) > 0:
+        aic_values = []
+        for feature in selected_features:
+            remaining_features = selected_features.copy()
+            remaining_features.remove(feature)
+            model = sm.Logit(y, X[remaining_features]).fit()
+            aic_values.append((feature, model.aic))
+        
+        # Remove the feature with the highest AIC
+        worst_feature, worst_model_aic = max(aic_values, key=lambda x: x[1])
+        
+        if worst_model_aic < best_aic:
+            best_aic = worst_model_aic
+            selected_features.remove(worst_feature)
+        else:
+            break
+    
+    # Fit the final model with selected features
+    final_model = sm.Logit(y, X[selected_features]).fit()
+    return final_model, selected_features
+
+def select_model_stepwise(x_train:pd.DataFrame, y_train:pd.DataFrame):
+    """
+    Select the best model using forward and backward stepwise selection.
+    The function compares the AIC of the models obtained with forward and backward stepwise selection
+    and returns the model with the lowest AIC.
+
+    Parameters:
+    x_train: pd.DataFrame with the input features
+    y_train: pd.Series with the target variable
+
+    Returns:
+    model: the selected logistic regression model
+    selected_features: list with the selected features
+    """
+    
+    model_backward, features_backward = backward_stepwise(x_train, y_train)
+    return model_backward, features_backward
+"""    model_forward, features_forward = forward_stepwise(x_train, y_train)
+    if model_backward.aic < model_forward.aic:
+    else:
+        return model_forward, features_forward
+    """
