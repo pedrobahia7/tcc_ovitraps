@@ -68,7 +68,6 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
 
     train_history = NN_building.create_history_dict()
     test_history = NN_building.create_history_dict()
-
     if model_type == 'logistic':
             model, features = NN_building.select_model_stepwise(x_train, y_train)
             yhat_train = (model.predict(x_train[features]) >= 0.5).astype(int)
@@ -137,7 +136,8 @@ if __name__ == '__main__':
     scale = False
     random_split = False
     input_3d = False
-    bool_input = True
+    bool_input = False
+    truncate_100 = True
 
     parameters = {
         'model_type': [],

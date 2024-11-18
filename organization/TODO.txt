@@ -89,6 +89,7 @@ version:
 3: perc_zero
 4: perc_one
 5: semedpid, semepid2, sin_semepid
+6: 100 truncado
 
 ScoreG in half of the dataset and use the other half for training and test
 truncatey y traps in 100 and create linear regression 
@@ -98,4 +99,10 @@ outras variaveis
 seleção de entradas via correlation
 
 
+C:\Users\UFMG\Periodos\Periodo_XIV\TCC\Projeto\Códigos\tcc_ovitraps\utils\NN_building.py:73: PerformanceWarning: DataFrame is highly fragmented.  
+This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  data['semepi2'] = data['semepi']**2
+C:\Users\UFMG\Periodos\Periodo_XIV\TCC\Projeto\Códigos\tcc_ovitraps\utils\NN_building.py:74: PerformanceWarning: DataFrame is highly fragmented.  
+This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  data['sin_semepi'] = np.sin(np.pi*data['semepi']/max(data['semepi']))
 
