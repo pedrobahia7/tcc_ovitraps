@@ -32,6 +32,7 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
     scale = parameters['scale']
     input_3d = parameters['input_3d']
     bool_input = parameters['bool_input']
+    truncate_100 = parameters['truncate_100']
 
     if use_trap_info == False:
         assert input_3d == False , '3D input is only available if trap information is used'
@@ -60,8 +61,14 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
     info_cols = days_columns + lat_column + long_column + ['semepi'] + ['zero_perc'] +['semepi2'] + ['sin_semepi']
     
     #transform values to 0 and 1
+    assert ~(truncate_100 == False and bool_input == True), 'Truncate 100 and bool input cannot be true at the same time' 
+    
     if bool_input:
-        transformed_data = data[eggs_columns].map(lambda x: 1 if x > 0 else 0)
+        transformed_data = data[eggs_columns].map(lambda x: 1 if x > 1 else x) # TODO not bool input flag
+        data[eggs_columns] = transformed_data
+    
+    if truncate_100:
+        transformed_data = data[eggs_columns].map(lambda x: 100 if x > 100 else x) # TODO not bool input flag
         data[eggs_columns] = transformed_data
 
     # Remove latitudes and longitudes of neighbors
