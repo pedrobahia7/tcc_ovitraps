@@ -68,8 +68,10 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
 
     train_history = NN_building.create_history_dict()
     test_history = NN_building.create_history_dict()
-    if model_type == 'logistic':
-            model, features = NN_building.select_model_stepwise(x_train, y_train)
+
+    if model_type == 'logistic' or model_type == 'GAM':
+            #model, features = NN_building.select_model_stepwise(x_train, y_train,parameters)
+            model, features = NN_building.select_model_stepwise(x_train, y_train,parameters)
             yhat_train = (model.predict(x_train[features]) >= 0.5).astype(int)
             yhat = (model.predict(x_test[features]) >= 0.5).astype(int)
 
@@ -77,8 +79,8 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
             results_test = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y_test) # depend on model type
             NN_building.append_history_dict(train_history, results_train)
             NN_building.append_history_dict(test_history, results_test)
-    
 
+    
     else: #Pytorch models
         
         train_dataset = NN_building.CustomDataset(xtrain, ytrain,model_type)
@@ -111,7 +113,7 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
         yhat = NN_building.calc_model_output(model, xtest,loss_func_reg)
         
         torch.save(model.state_dict(), f'./results/NN/save_parameters/model{model_type}_lags{lags}_ntraps{ntraps}_final.pth')
-    NN_building.save_model_mlflow(parameters, model, yhat, ytest, test_history, train_history,features,experiment_name = 'Classification')
+    NN_building.save_model_mlflow(parameters, model, yhat, ytest, test_history, train_history,features,experiment_name = 'Spline')
 
 
 
@@ -125,7 +127,7 @@ if __name__ == '__main__':
     play_song = False
     stop_time = 2
 
-    models = ['logistic']  # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'logistic'
+    models = ['GAM']  # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'logistic' or 'GAM'
     neigh_num = [1,2,3,5,8,10,13,15,17,20]
     lags = [1,3,5,8,10,13]  # max 13
     test_size = 0.2
@@ -151,7 +153,8 @@ if __name__ == '__main__':
         'batch_size': batch_size,
         'epochs': epochs,
         'input_3d': input_3d,
-        'bool_input': bool_input
+        'bool_input': bool_input,
+        'truncate_100': truncate_100
 
         }
 
