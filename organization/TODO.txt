@@ -3,7 +3,7 @@ New:
 
 Treinar NN e ver porcentagem de armadilhas maiores que "600"
 
-Comparar com Naïve e com função de custo quadrática
+Comparar com Naïve e modelar erro do naive
 
 Music Informatics - método para identificar reta e ponto onde ela começa/
 
@@ -15,7 +15,7 @@ Classificador para definir qual das distribuilções seguir
 
 Comparar análise bayesiana com inteiramente computacional
 
-Rede baseada em grafos
+Rede baseada em grafosd
 
 pacotes de ajuste de distriuição automatica
 
@@ -23,11 +23,13 @@ log da variavel de saída -> histograma para verificar se cauda pesada está aus
 
 cluster espacial como variável (análise espacia!) -> talvez introdução de variáveis exógenas tirem a dependcência geográfica (modelar e analisar resíduos)
 
-Modelos ARIMA, SARIMA, RF, SVM
+Modelos ARIMA, SARIMA, RF, SVM(com kernels diferentes)
 
 Modelagem de baixa frgequência para verificar tendência e comparar com armadilhas vizinhas. Talvez elas tenham curvas parecidas, apenas multiplicadas por um fator de escala
     
 Introduzir informação de sazonalidade na modelagem
+
+aprendizado hebbiano para lidar com dados espaço temporais w_hebb = x_0y_0                  
 
 
 
@@ -56,7 +58,6 @@ substituir dia por semana epid
 
 introduzir double poisson na função de custo 
 
-
 Renato:
 
 Plots series temporais para introdução de variavel sazonal
@@ -74,14 +75,22 @@ vairaveis exogenas
 log da variavel de saída 
 pacotes de ajuste de distriuição automatica
 cluster regional
-Modelos ARIMA, SARIMA, RF, SVM
-
-
-
+Modelos ARIMA, SARIMA, RF, SVM, catboost
+aumentar número de épocas para treinamento
+comparar datasets de treino e teste para ver se eles seguem mesma distribuição
+Try to replicate double descentent in my data (ELM(increase p and plot), MLP) increase size and epochs
+plot nsamples by neigh and lags
 
 LOGISTICA:
-truncate x traps in 100 
-spline(with different degrees)
+spline(with different degrees) remove semepi2, sinsemepi and mesepid
+Analisar quantos ovos em média tem as armadilhas que erramos
+Verificar na literatura referenciuas para erros de classificação
+Naive para classificador booleano
+add number of samples as a criteria
+analise de coeficientes dos dias
+Usar p-valor no lugar de stepwise
+Plot y vs naive
+
 
 version:
 1: lags, days, lat long
@@ -94,7 +103,7 @@ version:
 ScoreG in half of the dataset and use the other half for training and test
 truncatey y traps in 100 and create linear regression 
 
-ELM
+ELM (train error vs numebr of hidden layers close to number of training samples)
 outras variaveis
 seleção de entradas via correlation
 
