@@ -5,14 +5,16 @@ project_root = os.path.abspath(os.path.join(current_dir, '.'))
 sys.path.append(project_root)
 
 import utils.NN_building as NN_building
-import utils.NN_arquitectures as NN_arquitectures
 import utils.generic as generic
+import utils.NN_arquitectures as NN_arquitecures
 import torch
 from torch.utils.data import DataLoader
 import pdb
 import tqdm
 import itertools
 import statsmodels.api as sm
+from sklearn.neural_network import MLPClassifier
+
 
 def NN_pipeline(parameters:dict, data_path:str= None)->None:
     """
@@ -33,7 +35,6 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
     """
 
     model_type = parameters['model_type']
-    use_trap_info = parameters['use_trap_info']
     ntraps = parameters['ntraps']
     lags = parameters['lags']
     random_split = parameters['random_split']
@@ -59,7 +60,7 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
     xtrain, xtest, ytrain, ytest = NN_building.transform_data_to_tensor(x_train, x_test, y_train, y_test, model_type, device)
 
     # Network structure
-    model_input, model_output = NN_building.input_output_sizes(lags, ntraps, use_trap_info,model_type,input_3d)
+    model_input, model_output = NN_building.input_output_sizes(xtrain, model_type)
 
     # Loss functions
     loss_func_class, loss_func_reg = NN_building.define_loss_functions(model_type)
@@ -69,7 +70,7 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
     train_history = NN_building.create_history_dict()
     test_history = NN_building.create_history_dict()
 
-    if model_type == 'logistic' or model_type == 'GAM':
+    if model_type == 'logistic' or model_type == 'GAM' :
             #model, features = NN_building.select_model_stepwise(x_train, y_train,parameters)
             model, features = NN_building.select_model_stepwise(x_train, y_train,parameters)
             yhat_train = (model.predict(x_train[features]) >= 0.5).astype(int)
@@ -79,6 +80,47 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
             results_test = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y_test) # depend on model type
             NN_building.append_history_dict(train_history, results_train)
             NN_building.append_history_dict(test_history, results_test)
+
+    elif model_type == 'Naive': 
+        yhat_train = x_train['trap0_lag1'] 
+        yhat = x_test['trap0_lag1'] 
+        results_train = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat_train, y_train)
+        results_test = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y_test)
+        NN_building.append_history_dict(train_history, results_train)
+        NN_building.append_history_dict(test_history, results_test)
+        model = None
+        features = None
+
+    elif model_type == 'mlp1':
+        model = MLPClassifier(hidden_layer_sizes= (50,25,25,5), #(),# (10,10,5),
+                                max_iter= parameters['epochs'],
+                                activation= 'relu', #'relu',
+                                solver= 'adam', #'sgd'
+                                learning_rate='constant',
+                                n_iter_no_change=1000,
+                                shuffle=True,
+                                verbose=True,
+                                early_stopping=False,
+                                tol=parameters['learning_rate'], 
+                                #alpha= 0.1, 
+                                learning_rate_init=parameters['learning_rate']
+                                
+
+
+                               )
+
+        model.fit(xtrain, ytrain)
+        yhat = model.predict(xtest)
+        yhat_train = model.predict(xtrain)
+        results_train = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat_train, ytrain)
+        results_test = NN_building.evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, ytest)
+        NN_building.append_history_dict(train_history, results_train)
+        NN_building.append_history_dict(test_history, results_test)
+        if model.solver !='lbfgs':
+            train_history['loss_class'] = model.loss_curve_
+        features = None
+        parameters2 = parameters.copy()
+        parameters2['epochs'] =  model.n_iter_
 
     
     else: #Pytorch models
@@ -97,7 +139,6 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
             print(f"Epoch {t+1}\n-------------------------------")
             
             results_train = NN_building.train_loop(train_dataloader, model, loss_func_class, loss_func_reg, optimizer)        
-            
             results_test = NN_building.test_loop(test_dataloader,model, loss_func_class, loss_func_reg)
 
             # Append Metrics
@@ -105,15 +146,19 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
             NN_building.append_history_dict(test_history, results_test)
             
             torch.save(model.state_dict(), f'./results/NN/save_parameters/model{model_type}_lags{lags}_ntraps{ntraps}_epoch{t}.pth')
-
+            print(NN_building.calc_model_output(model, xtest,loss_func_reg).sum()/xtest.shape[0])
         
         print("Done!")
         
-
         yhat = NN_building.calc_model_output(model, xtest,loss_func_reg)
         
         torch.save(model.state_dict(), f'./results/NN/save_parameters/model{model_type}_lags{lags}_ntraps{ntraps}_final.pth')
-    NN_building.save_model_mlflow(parameters, model, yhat, ytest, test_history, train_history,features,experiment_name = 'Spline')
+    
+    if model_type == 'mlp1':
+        NN_building.save_model_mlflow(parameters2, model, yhat, ytest, test_history, train_history,features,experiment_name = 'MLP_2')
+    else:
+        NN_building.save_model_mlflow(parameters, model, yhat, ytest, test_history, train_history,features,experiment_name = 'MLP_2')
+    
 
 
 
@@ -123,23 +168,25 @@ if __name__ == '__main__':
     '''
     # Parameters
 
-    repeat = 1 # Number of times the model will be trained and tested
+    repeat = 10 # Number of times the model will be trained and tested
     play_song = False
     stop_time = 2
 
-    models = ['GAM']  # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'logistic' or 'GAM'
-    neigh_num = [1,2,3,5,8,10,13,15,17,20]
-    lags = [1,3,5,8,10,13]  # max 13
+    models = ['mlp1']  # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'logistic' or 'GAM' or 'Naive' or 'mlp1'
+    lags = [5]
+    neigh_num = [11]
+    
     test_size = 0.2
-    learning_rate =1e-3
+    learning_rate =1e-5
     batch_size = 64
-    epochs = 10
+    epochs = 10000
     use_trap_info = True
     scale = False
     random_split = False
     input_3d = False
     bool_input = False
     truncate_100 = True
+    cylindrical_input = False
 
     parameters = {
         'model_type': [],
@@ -154,7 +201,8 @@ if __name__ == '__main__':
         'epochs': epochs,
         'input_3d': input_3d,
         'bool_input': bool_input,
-        'truncate_100': truncate_100
+        'truncate_100': truncate_100,
+        'cylindrical_input': cylindrical_input
 
         }
 
@@ -170,8 +218,8 @@ if __name__ == '__main__':
         """
     for i in range(repeat):
         for model in models:
-            parameters['model_type'] = model
             for lag, ntraps in tqdm.tqdm(itertools.product(lags, neigh_num),total=len(lags)*len(neigh_num)):
+                parameters['model_type'] = model
                 parameters['lags'] = lag
                 parameters['ntraps'] = ntraps
                 print(f'Iteration {i} - Model {model} - Lags {lag} - Neigh {ntraps}')
