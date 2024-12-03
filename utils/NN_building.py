@@ -4,7 +4,6 @@ from torch.utils.data import Dataset
 from torch import nn
 import pandas as pd
 from typing import Tuple
-import utils.NN_building as NN_building
 import utils.NN_arquitectures as NN_arquitectures
 from torch.utils.data import DataLoader
 import os
@@ -33,11 +32,18 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
     input_3d = parameters['input_3d']
     bool_input = parameters['bool_input']
     truncate_100 = parameters['truncate_100']
+    cylindrical_input = parameters['cylindrical_input']
 
+# check if the input is valid
     if use_trap_info == False:
         assert input_3d == False , '3D input is only available if trap information is used'
     if data_path is None:
         data_path = f'./results/final_dfs/final_df_lag{lags}_ntraps{ntraps}.parquet'
+    if cylindrical_input:
+        assert (ntraps >= 10 and lags >= 5), 'Cylindrical input is only available for ntraps > 10 and lags > 5'
+    assert not(truncate_100 == True and bool_input == True), 'Truncate 100 and bool input cannot be true at the same time' 
+
+# create data
     if os.path.exists(data_path):
         # data import and preprocessing
         data = pd.read_parquet(data_path)
@@ -52,17 +58,22 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
     
     #data['zero_perc'] = 1 - data['zero_perc'] TODO: create flag one_perc 
 
-    # divide columns into groups
-    days_columns = [f'days{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
-    eggs_columns = [f'trap{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
+# divide columns into groups
+    if cylindrical_input == False:
+        days_columns = [f'days{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
+        eggs_columns = [f'trap{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
+    elif cylindrical_input == True:
+        days_columns = [f'days{i}_lag{j}' for i in [0] for j in range(1, 6)]
+        eggs_columns = [f'trap{i}_lag{j}' for i in [0] for j in range(1, 6)]
+        days_columns += [f'days{i}_lag{j}' for i in range(1, ntraps) for j in range(1, 3)]
+        eggs_columns += [f'trap{i}_lag{j}' for i in range(1, ntraps) for j in range(1, 3)]
+
     lat_column = ['latitude0']
     long_column = ['longitude0']
 
     info_cols = days_columns + lat_column + long_column + ['semepi'] + ['zero_perc'] +['semepi2'] + ['sin_semepi']
     
     #transform values to 0 and 1
-    assert not(truncate_100 == True and bool_input == True), 'Truncate 100 and bool input cannot be true at the same time' 
-    
     if bool_input:
         transformed_data = data[eggs_columns].map(lambda x: 1 if x > 1 else x) # TODO not bool input flag
         data[eggs_columns] = transformed_data
@@ -71,34 +82,30 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
         transformed_data = data[eggs_columns].map(lambda x: 100 if x > 100 else x) # TODO not bool input flag
         data[eggs_columns] = transformed_data
 
-    # Remove latitudes and longitudes of neighbors
-    lat_columns = [f'latitude{i}' for i in range(1,ntraps)]
-    long_columns = [f'longitude{i}' for i in range(1,ntraps)]
-    data.drop(columns=lat_columns + long_columns, inplace=True)
-
-    # add semepi^2 and half sin(semedi)
+# add semepi^2 and half sin(semedi)
     data['semepi2'] = data['semepi']**2 
     data['sin_semepi'] = np.sin(np.pi*data['semepi']/max(data['semepi']))
-    x, y = xy_definition(model_type, data, use_trap_info, ovos_flag, info_cols)
-    # train test split
+    x, y = xy_definition(model_type, data, use_trap_info, ovos_flag, info_cols, eggs_columns)
+
+# train test split
     x_train, x_test, y_train, y_test = NN_preprocessing.data_train_test_split(x, y, test_size, random_split,ovos_flag)
     # scaling
     if scale:
         x_train, x_test, y_train, y_test = NN_preprocessing.scale_dataset(x_train.copy(), 
-                                            x_test.copy(), y_train.copy(), y_test.copy(), model_type, use_trap_info, eggs_columns, lat_columns,long_columns, days_columns)
+                                            x_test.copy(), y_train.copy(), y_test.copy(), model_type, use_trap_info, eggs_columns, lat_column,long_column, days_columns)
     #convert to numpy with the correct shape
     if input_3d:
         x_train = NN_preprocessing.create_3d_input(x_train, ntraps, lags)
         x_test = NN_preprocessing.create_3d_input(x_test, ntraps, lags)
         y_train, y_test = y_train.to_numpy(), y_test.to_numpy()
     
-    if not(model_type == 'logistic' or model_type == 'GAM'):    #return a numpy array instead of a df
+    if not(model_type == 'logistic' or model_type == 'GAM' or model_type == 'Naive' or model_type == 'mlp1'):    #return a numpy array instead of a df
         x_train, x_test, y_train, y_test = x_train.to_numpy(), x_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy()
 
     return x_train, x_test, y_train, y_test, nplaca_index
 
 def xy_definition(model_type:str, data:pd.DataFrame, use_trap_info:bool, ovos_flag:pd.DataFrame,
-                  info_cols:list)->Tuple[pd.DataFrame, pd.DataFrame]:
+                  info_cols:list, eggs_cols:list)->Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Fucntion to define the x and y variables according to the model type.
 
@@ -108,6 +115,7 @@ def xy_definition(model_type:str, data:pd.DataFrame, use_trap_info:bool, ovos_fl
     use_trap_info: flag to use the traps information like days and distances
     ovos_flag: dataframe with booleans indicating the presence of eggs
     inf_col: list with the name of columns of days, latitude, longitude, mesepid and novos
+    eggs_cols: list with the name of columns of eggs
 
     Returns:
     x: dataframe with the input variables
@@ -116,9 +124,7 @@ def xy_definition(model_type:str, data:pd.DataFrame, use_trap_info:bool, ovos_fl
 
     """
 # definition of x and y
-    if model_type == 'classifier':
-        y = ovos_flag
-    elif model_type == 'logistic' or model_type == 'GAM':
+    if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM' or model_type == 'Naive'or model_type == 'mlp1':
         y = ovos_flag
     elif model_type == 'regressor' or model_type == 'linear_regressor':
         y = data['novos']
@@ -126,10 +132,10 @@ def xy_definition(model_type:str, data:pd.DataFrame, use_trap_info:bool, ovos_fl
         y = pd.concat([ovos_flag.rename('ovos_flag', inplace=True),data['novos']],axis=1)
 
     data = data.drop(columns=['novos'])
-    if use_trap_info == False:
-        x = data.drop(columns=info_cols)
+    if use_trap_info == True:
+        x = data[info_cols]
     else:
-        x = data
+        x = data[eggs_cols]
     if model_type == 'logistic' or model_type == 'GAM':
         x = sm.add_constant(data)
     return x, y
@@ -153,7 +159,7 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
     ytest: tensor with the test data    
     """
 
-    if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM':
+    if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp1':
         output_type = torch.long
     elif model_type == 'regressor' or model_type == 'exponential_renato' or 'linear_regressor' or model_type == 'pareto':
         output_type = torch.float32
@@ -177,14 +183,11 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
 class CustomDataset(Dataset):
     def __init__(self, features, targets, model_type):
         self.features  = features.clone().detach().float()
-        if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM':
+        if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp1':
             self.targets =  targets.clone().detach().long()
-        elif model_type == 'regressor' or model_type == 'linear_regressor':
-            self.targets = targets.clone().detach().float()
-        elif model_type == 'exponential_renato' or model_type == 'pareto':
-            self.targets = targets.clone().detach().float()
 
-
+        elif model_type == 'exponential_renato' or model_type == 'pareto' or model_type == 'regressor' or model_type == 'linear_regressor':
+            self.targets = targets.clone().detach().float()
 
     def __len__(self):
         return len(self.features)
@@ -192,19 +195,16 @@ class CustomDataset(Dataset):
     def __getitem__(self, idx):
         return self.features[idx], self.targets[idx]
 
-def input_output_sizes(lags, ntraps, use_trap_info,model_type,input_3d):
+def input_output_sizes(xtrain, model_type):
     # Network structure
-    if use_trap_info:
-        if input_3d:
-            model_input = lags*ntraps # dimension of traps. depth (days and distances) is fixed 
-        else:
-            model_input = lags*ntraps + ntraps*2 + ntraps*lags # sum  of eggs, lats and long, and days
+    if len(xtrain.shape) == 1:
+        model_input = 1
     else:
-        model_input = lags*ntraps
+        model_input = xtrain.shape[1]
         
-    if model_type == 'classifier' or model_type == 'exponential_renato' or model_type == 'pareto':
+    if model_type == 'classifier' or model_type == 'exponential_renato' or model_type == 'pareto':# or model_type == 'mlp1':
         model_output = 2
-    elif model_type == 'regressor' or model_type == 'linear_regressor' or model_type == 'logistic' or model_type == 'GAM':
+    elif model_type == 'regressor' or model_type == 'linear_regressor' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp1':
         model_output = 1
     return model_input, model_output
 
@@ -220,15 +220,17 @@ def define_model(model_type, model_input, model_output, input_3d,device):
         model = NN_arquitectures.NeuralNetworkPareto(model_input, model_output,model_type,input_3d).to(device)
     elif model_type == 'classifier':
         model = NN_arquitectures.NeuralNetwork(model_input, model_output,model_type,input_3d).to(device)
+    elif model_type == 'mlp1':
+        model = NN_arquitectures.mlp1(model_input, model_output,model_type,input_3d).to(device)
     else:
         raise ValueError('Model type not found')
     return model
 
 def define_loss_functions(model_type):
-    if model_type == 'classifier':
+    if model_type == 'classifier' or model_type == 'mlp1':
         loss_func_class = nn.CrossEntropyLoss()
         loss_func_reg = None
-    elif model_type == 'logistic' or model_type == 'GAM':
+    elif model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive':
         loss_func_class = None
         loss_func_reg = None
     elif model_type == 'regressor' or model_type == 'linear_regressor':
@@ -244,7 +246,7 @@ def define_loss_functions(model_type):
     return loss_func_class, loss_func_reg
 
 def torch_accuracy(yref, yhat,model_type):
-    if model_type == 'classifier': #TODO check if this is correct
+    if model_type == 'classifier' or model_type == 'mlp1': #TODO check if this is correct
         return (yhat.argmax(1) == yref).type(torch.float).sum().item()
     elif model_type == 'regressor' or model_type == 'linear_regressor':
         return ((torch.round(yhat) == yref).type(torch.float)).sum().item()
@@ -329,7 +331,7 @@ def test_loop(dataloader, model, loss_func_class, loss_func_reg):
 
 def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
 
-    if model_type == 'logistic' or model_type == 'GAM':
+    if model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp1':
 
         loss_reg =  0
         loss_class =  0
@@ -339,7 +341,7 @@ def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
         total_loss = 0
         return total_loss, loss_class, loss_reg, acc_class, acc_reg, error_reg
 
-    elif model_type == 'classifier':
+    elif model_type == 'classifier':# or model_type == 'mlp1':
         loss_class = loss_func_class(yhat.squeeze(), y) # yhat = logit
         loss_reg =  torch.tensor(0)
         acc_class = torch_accuracy(y,  yhat, model_type)
@@ -410,7 +412,7 @@ def append_history_dict(history_dict, results):
 
 def calc_model_output(model, xtest,loss_func_reg=None):
 
-    if model.model_type == 'classifier':
+    if model.model_type == 'classifier' or model.model_type == 'mlp1':
         yhat = model(xtest).argmax(1).cpu().numpy()
         return yhat
     elif model.model_type == 'regressor' or model.model_type == 'linear_regressor':
@@ -449,7 +451,8 @@ def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_hi
 
     # Construct the filter to check model versio
     filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items()])
-
+    if parameters['model_type'] == 'mlp1':  
+        filter_string = filter_string.replace(f"and params.epochs = '{parameters['epochs']}'","")
     # Search for existing runs using the constructed filter string
     existing_runs = mlflow.search_runs(filter_string=filter_string)
     version = len(existing_runs) + 1
@@ -499,8 +502,10 @@ def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_hi
         #signature = mlflow.models.ModelSignature(inputs=x_train, outputs=y_train)
         if parameters['model_type'] == 'logistic' :
             mlflow.statsmodels.log_model(model, "model")#,signature=signature)                      # Log model
-        elif parameters['model_type'] == 'GAM':
+        elif parameters['model_type'] == 'GAM'or parameters['model_type'] == 'Naive':
             pass
+        elif parameters['model_type'] == 'mlp1':
+            mlflow.sklearn.log_model(model, "model")
         else:
             mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model
             
@@ -586,7 +591,6 @@ def forward_stepwise(X, y,parameters):
             model = LogisticGAM().fit(X[selected_features], y)
             model.fit(X[selected_features], y)
     return final_model, selected_features
-
 
 def backward_stepwise(X, y,parameters):
     """
