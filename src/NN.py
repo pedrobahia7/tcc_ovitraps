@@ -31,7 +31,10 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
         batch_size: batch size of the DataLoader
         epochs: number of epochs to train the model
     
-    
+    Parameters
+
+    parameters: dict containing the parameters to create the model
+    data_path: str, path to the data file
     """
 
     model_type = parameters['model_type']
@@ -92,11 +95,12 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
         features = None
 
     elif model_type == 'mlp1':
-        model = MLPClassifier(hidden_layer_sizes= (50,25,25,5), #(),# (10,10,5),
+        model = MLPClassifier(hidden_layer_sizes= (10,10,5), #(50,25,25,5), #(),# 
                                 max_iter= parameters['epochs'],
                                 activation= 'relu', #'relu',
-                                solver= 'adam', #'sgd'
-                                learning_rate='constant',
+                                solver= 'adam', #'adam'
+                                batch_size= parameters['batch_size'],
+                                learning_rate='constant', #'adaptive', 'invscaling'
                                 n_iter_no_change=1000,
                                 shuffle=True,
                                 verbose=True,
@@ -155,9 +159,9 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
         torch.save(model.state_dict(), f'./results/NN/save_parameters/model{model_type}_lags{lags}_ntraps{ntraps}_final.pth')
     
     if model_type == 'mlp1':
-        NN_building.save_model_mlflow(parameters2, model, yhat, ytest, test_history, train_history,features,experiment_name = 'MLP_2')
+        NN_building.save_model_mlflow(parameters2, model, yhat, ytest, test_history, train_history,features,experiment_name = 'MLP_1')
     else:
-        NN_building.save_model_mlflow(parameters, model, yhat, ytest, test_history, train_history,features,experiment_name = 'MLP_2')
+        NN_building.save_model_mlflow(parameters, model, yhat, ytest, test_history, train_history,features,experiment_name = 'MLP_1')
     
 
 
@@ -177,16 +181,16 @@ if __name__ == '__main__':
     neigh_num = [11]
     
     test_size = 0.2
-    learning_rate =1e-5
-    batch_size = 64
+    learning_rate =1e-4
+    batch_size = 1000
     epochs = 10000
     use_trap_info = True
     scale = False
     random_split = False
     input_3d = False
-    bool_input = False
-    truncate_100 = True
-    cylindrical_input = False
+    bool_input = True
+    truncate_100 = False
+    cylindrical_input = True
 
     parameters = {
         'model_type': [],
@@ -207,7 +211,6 @@ if __name__ == '__main__':
         }
 
 
-    bool_list = [True, False]
 
     """    for boolean1 in bool_list:
         parameters['use_trap_info'] = boolean1
