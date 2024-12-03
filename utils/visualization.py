@@ -7,6 +7,7 @@ from pathlib import Path
 from selenium import webdriver
 import plotly.express as px
 import itertools
+import pdb
 
 
 
@@ -374,7 +375,7 @@ def NovosxRelation_plot_all(data, lags, ntraps, relation, jitter_strength=1, wrt
     data (DataFrame): The input data containing lagged traps and novos
     lags (int): The number of lags to consider
     ntraps (int): The number of traps to consider
-    relation (str): The relation to plot ('median' or 'mean'or 'sum')
+    relation (str): The relation to plot ('median' or 'mean'or 'sum' or 'naive')
     jitter_strength (float): The strength of jitter to add to the plot
 
     Returns:
@@ -391,14 +392,18 @@ def NovosxRelation_plot_all(data, lags, ntraps, relation, jitter_strength=1, wrt
         relation_data = data[lags_list].mean(axis=1)
     elif relation == 'sum':
         relation_data = data[lags_list].sum(axis=1)
+    elif relation == 'naive':
+        relation_data = data['trap0_lag1']
+        
+    
     else:
-        raise ValueError("relation must be 'median' or 'mean'")
+        raise ValueError("relation not defined")
     
 
     # Add jitter to the data
     data_plot = {}
-    jitter_strength1 = 1
-    jitter_strength2 = 0.2
+    jitter_strength1 = 0.4
+    jitter_strength2 = 0.4
 
     jitter1 = np.random.uniform(-jitter_strength1, jitter_strength1, size=data.shape[0])
     jitter2 = np.random.uniform(-jitter_strength2, jitter_strength2, size=data.shape[0])
