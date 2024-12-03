@@ -1,11 +1,47 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import pdb
 # from utils.NN_building 
 # separate NN and create function eval 
 
 
 
+
+
+class mlp1(nn.Module):
+
+    def __init__(self,model_input,model_output,model_type,input_3d):
+        super().__init__()
+        self.model_type = model_type
+        self.input_3d = input_3d    
+
+        if input_3d:
+            depth = 4  # Fixed depth as novos + latitutde + longitude + distance
+            self.conv1 = nn.Conv1d(in_channels=depth, out_channels=1, kernel_size=depth, padding=1)
+            self.flatten_size = model_input 
+            self.layer1 = nn.Linear(self.flatten_size, 20) 
+        else:
+            self.layer1 = nn.Linear(model_input, 10)
+
+        self.layer2 = nn.Linear(10, 10)
+        self.layer3 = nn.Linear(10, 5)    
+        self.layer4 = nn.Linear(5, model_output)
+        self.output_layer = nn.Sigmoid()
+
+    def forward(self, x):
+        if self.input_3d:
+            x = x.permute(0,2,1)
+            x = torch.relu(self.conv1(x))
+            x = x.view(x.size(0), -1) 
+
+        out1 = nn.functional.relu(self.layer1(x))
+        out2 = nn.functional.relu(self.layer2(out1))
+        out3 = nn.functional.relu(self.layer3(out2))
+        final_output = self.output_layer(self.layer4(out3))
+        return final_output
+    
+    
 
 class ExponentialLoss(nn.Module):
     """
