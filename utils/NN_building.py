@@ -71,7 +71,7 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
     lat_column = ['latitude0']
     long_column = ['longitude0']
 
-    info_cols = days_columns + lat_column + long_column + ['semepi'] + ['zero_perc'] +['semepi2'] + ['sin_semepi']
+    info_cols  = eggs_columns + lat_column + long_column + ['semepi'] + ['zero_perc'] +['semepi2'] + ['sin_semepi']
     
     #transform values to 0 and 1
     if bool_input:
@@ -85,14 +85,15 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
 # add semepi^2 and half sin(semedi)
     data['semepi2'] = data['semepi']**2 
     data['sin_semepi'] = np.sin(np.pi*data['semepi']/max(data['semepi']))
-    x, y = xy_definition(model_type, data, use_trap_info, ovos_flag, info_cols, eggs_columns)
+    x, y = xy_definition(model_type=model_type, data=data, use_trap_info=use_trap_info, ovos_flag=ovos_flag, info_cols=info_cols, eggs_cols=eggs_columns, add_constant=parameters['add_constant'])
 
 # train test split
     x_train, x_test, y_train, y_test = NN_preprocessing.data_train_test_split(x, y, test_size, random_split,ovos_flag)
     # scaling
     if scale:
         x_train, x_test, y_train, y_test = NN_preprocessing.scale_dataset(x_train.copy(), 
-                                            x_test.copy(), y_train.copy(), y_test.copy(), model_type, use_trap_info, eggs_columns, lat_column,long_column, days_columns)
+                                            x_test.copy(), y_train.copy(), y_test.copy(), model_type,
+                                            use_trap_info, eggs_columns, lat_column,long_column, days_columns,info_cols=info_cols)
     #convert to numpy with the correct shape
     if input_3d:
         x_train = NN_preprocessing.create_3d_input(x_train, ntraps, lags)
@@ -105,7 +106,7 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.n
     return x_train, x_test, y_train, y_test, nplaca_index
 
 def xy_definition(model_type:str, data:pd.DataFrame, use_trap_info:bool, ovos_flag:pd.DataFrame,
-                  info_cols:list, eggs_cols:list)->Tuple[pd.DataFrame, pd.DataFrame]:
+                  info_cols:list, eggs_cols:list, add_constant:bool = True)->Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Fucntion to define the x and y variables according to the model type.
 
@@ -116,6 +117,7 @@ def xy_definition(model_type:str, data:pd.DataFrame, use_trap_info:bool, ovos_fl
     ovos_flag: dataframe with booleans indicating the presence of eggs
     inf_col: list with the name of columns of days, latitude, longitude, mesepid and novos
     eggs_cols: list with the name of columns of eggs
+    add_constant: flag to add a constant to the x variables
 
     Returns:
     x: dataframe with the input variables
@@ -136,8 +138,9 @@ def xy_definition(model_type:str, data:pd.DataFrame, use_trap_info:bool, ovos_fl
         x = data[info_cols]
     else:
         x = data[eggs_cols]
-    if model_type == 'logistic' or model_type == 'GAM':
-        x = sm.add_constant(data)
+    if add_constant == True:
+        x = sm.add_constant(x)
+    
     return x, y
 
 def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.array, y_test: np.array, model_type: str, device: str)->Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -450,7 +453,7 @@ def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_hi
 
 
     # Construct the filter to check model versio
-    filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items()])
+    filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items() if key != 'mlp_params' ] )
     if parameters['model_type'] == 'mlp1':  
         filter_string = filter_string.replace(f"and params.epochs = '{parameters['epochs']}'","")
     # Search for existing runs using the constructed filter string
