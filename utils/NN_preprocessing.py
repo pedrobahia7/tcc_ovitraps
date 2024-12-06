@@ -425,9 +425,10 @@ def scale_column(x_train:pd.DataFrame, x_test:pd.DataFrame, column:list)->Tuple[
 
 
 
-def scale_dataset(x_train, x_test, y_train, y_test, model_type, use_trap_info, eggs_columns, lat_columns,long_columns, days_columns):
+def scale_dataset(x_train, x_test, y_train, y_test, model_type, use_trap_info, eggs_columns, lat_columns, long_columns, days_columns,info_cols):
 
     x_train, x_test, max_eggs = scale_column(x_train, x_test, eggs_columns)
+
     if use_trap_info:
         x_train, x_test, max_days = scale_column(x_train, x_test, days_columns)
     if model_type == 'regressor':
@@ -436,6 +437,7 @@ def scale_dataset(x_train, x_test, y_train, y_test, model_type, use_trap_info, e
     elif model_type == 'exponential_renato':
         y_train['novos'] = y_train['novos']/max_eggs
         y_test['novos'] = y_test['novos']/max_eggs
+
     return x_train, x_test, y_train, y_test
 
 
