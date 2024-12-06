@@ -69,7 +69,6 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
     loss_func_class, loss_func_reg = NN_building.define_loss_functions(model_type)
     
 
-
     train_history = NN_building.create_history_dict()
     test_history = NN_building.create_history_dict()
 
@@ -95,23 +94,7 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
         features = None
 
     elif model_type == 'mlp1':
-        model = MLPClassifier(hidden_layer_sizes= (10,10,5), #(50,25,25,5), #(),# 
-                                max_iter= parameters['epochs'],
-                                activation= 'relu', #'relu',
-                                solver= 'adam', #'adam'
-                                batch_size= parameters['batch_size'],
-                                learning_rate='constant', #'adaptive', 'invscaling'
-                                n_iter_no_change=1000,
-                                shuffle=True,
-                                verbose=True,
-                                early_stopping=False,
-                                tol=parameters['learning_rate'], 
-                                #alpha= 0.1, 
-                                learning_rate_init=parameters['learning_rate']
-                                
-
-
-                               )
+        model = MLPClassifier(**parameters['mlp_params'])
 
         model.fit(xtrain, ytrain)
         yhat = model.predict(xtest)
@@ -125,6 +108,7 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
         features = None
         parameters2 = parameters.copy()
         parameters2['epochs'] =  model.n_iter_
+
 
     
     else: #Pytorch models
@@ -159,9 +143,15 @@ def NN_pipeline(parameters:dict, data_path:str= None)->None:
         torch.save(model.state_dict(), f'./results/NN/save_parameters/model{model_type}_lags{lags}_ntraps{ntraps}_final.pth')
     
     if model_type == 'mlp1':
-        NN_building.save_model_mlflow(parameters2, model, yhat, ytest, test_history, train_history,features,experiment_name = 'MLP_1')
+        parameters['activation_function'] = parameters['mlp_params']['activation']
+        parameters['hidden_layer_sizes'] = parameters['mlp_params']['hidden_layer_sizes']
+        parameters['solver'] = parameters['mlp_params']['solver']
+        parameters['learning_rate_type'] = parameters['mlp_params']['learning_rate']
+
+
+        NN_building.save_model_mlflow(parameters2, model, yhat, ytest, test_history, train_history,features,experiment_name = 'MLP_1_wconst')
     else:
-        NN_building.save_model_mlflow(parameters, model, yhat, ytest, test_history, train_history,features,experiment_name = 'MLP_1')
+        NN_building.save_model_mlflow(parameters, model, yhat, ytest, test_history, train_history,features,experiment_name = 'MLP_1_wconst')
     
 
 
@@ -172,7 +162,7 @@ if __name__ == '__main__':
     '''
     # Parameters
 
-    repeat = 10 # Number of times the model will be trained and tested
+    repeat = 5 # Number of times the model will be trained and tested
     play_song = False
     stop_time = 2
 
@@ -181,7 +171,7 @@ if __name__ == '__main__':
     neigh_num = [11]
     
     test_size = 0.2
-    learning_rate =1e-4
+    learning_rate =[2**(-10+i)*1e-3 for i in range(10)]
     batch_size = 1000
     epochs = 10000
     use_trap_info = True
@@ -191,6 +181,12 @@ if __name__ == '__main__':
     bool_input = True
     truncate_100 = False
     cylindrical_input = True
+    add_constant = True
+
+
+    learning_rate_mlp = ['adaptive']
+    activation =  ['relu']  # Activation function
+
 
     parameters = {
         'model_type': [],
@@ -206,9 +202,25 @@ if __name__ == '__main__':
         'input_3d': input_3d,
         'bool_input': bool_input,
         'truncate_100': truncate_100,
-        'cylindrical_input': cylindrical_input
+        'cylindrical_input': cylindrical_input,
+        'add_constant': add_constant
+
 
         }
+    
+    parameters['mlp_params'] = {
+        'hidden_layer_sizes': (10,10,5),  # Example: (50, 25, 25, 5) or (10,10,5)
+        'max_iter': parameters['epochs'],  # Number of epochs
+        'activation': 'reLU',  # Activation function
+        'solver': 'adam',  # Optimization solver
+        'learning_rate': 'adaptive',  # Learning rate schedule
+        'n_iter_no_change': 20,  # Early stopping criteria
+        'shuffle': True,  # Shuffle training data
+        'verbose': True,  # Print progress
+        'early_stopping': False,  # Disable early stopping
+        'tol': 0.0001,  # Tolerance for optimization TODO
+        #'learning_rate_init': parameters['learning_rate']  # Initial learning rate
+    }
 
 
 
@@ -219,14 +231,25 @@ if __name__ == '__main__':
             for type in metatron:
                 parameters['model_type'] = type
         """
+    j = 0
     for i in range(repeat):
-        for model in models:
-            for lag, ntraps in tqdm.tqdm(itertools.product(lags, neigh_num),total=len(lags)*len(neigh_num)):
-                parameters['model_type'] = model
-                parameters['lags'] = lag
-                parameters['ntraps'] = ntraps
-                print(f'Iteration {i} - Model {model} - Lags {lag} - Neigh {ntraps}')
-                NN_pipeline(parameters)
+        for act in activation:
+            for lr in learning_rate:
+                for lr_mlp in learning_rate_mlp:
+                    for model in models:
+                        for lag, ntraps in tqdm.tqdm(itertools.product(lags, neigh_num),total=len(lags)*len(neigh_num)):
+                                while j < 22:
+                                    j += 1
+                                    pass
+                                parameters['mlp_params']['learning_rate'] = lr_mlp
+                                parameters['learning_rate'] = lr
+                                parameters['model_type'] = model
+                                parameters['lags'] = lag
+                                parameters['ntraps'] = ntraps
+                                parameters['mlp_params']['activation'] = act
+
+                                print(f'Iteration {i} - Model {model} - Lags {lag} - Neigh {ntraps}')
+                                NN_pipeline(parameters)
 
     if play_song: 
         generic.play_ending_song()
