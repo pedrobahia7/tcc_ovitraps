@@ -31,52 +31,19 @@ Introduzir informação de sazonalidade na modelagem
 
 aprendizado hebbiano para lidar com dados espaço temporais w_hebb = x_0y_0                  
 
-
-
-Ler: 
-    Artigos:
-        https://homepages.dcc.ufmg.br/~olmo/mypapers/p1319-vazdemelo.pdf (log logistic)
-        https://epubs.siam.org/doi/10.1137/070710111 (Renato)
-        https://arxiv.org/abs/2406.16232 (Renato)
+número de dias de exposição: fazer análise de correlação e adicionar como variável 
 
 
 
-PROBLEMS:
-Percentage of zeros in exponential_renato is doubled
-loss function logistic
-adapt input_3d to logistic and linear regressor
-3D dimension: lat, long, week, year consatants to original trap
-dias negativos na matrix final 
-january data is dropped in final matrix with lag 3 
-diferenças dos dias de armação e coleta -> se forem muito grandes, adicionar como variável da NN? Valores absurdos. Filtrar?
-Tratamento de NaNs na Latitude/Longitude (perguntar dilermando )
-Substituir logistic and linear regression por sklearn
-Semanas pares e ímpares número de Nans no week 2023
-retirar pareto individual do mapa
-Loss function regresion >>> Loss function classification -> terrible network (everything is 0 or 1). Create a second network only with non null values. after classification or before it? 
-substituir dia por semana epid
 
 introduzir double poisson na função de custo 
 
-Renato:
-
-Plots series temporais para introdução de variavel sazonal
-categorias como forma de predição (alto número de zeros) - mapa e tabela em treated_df_exploration
-Plots de mediana de lags x atual
-Diferença de dias por lag
-diferença dtcol 
-difernça entre samples
-dados de janeiro
-!!!rede exponencial separada!!!
-alfa < 1: truncar com relu
-double poisson: aprendendo ferramenta para incorporar 
 
 vairaveis exogenas
 log da variavel de saída 
 pacotes de ajuste de distriuição automatica
 cluster regional
 Modelos ARIMA, SARIMA, RF, SVM, catboost
-aumentar número de épocas para treinamento
 comparar datasets de treino e teste para ver se eles seguem mesma distribuição
 Try to replicate double descentent in my data (ELM(increase p and plot), MLP) increase size and epochs
 plot nsamples by neigh and lags
@@ -90,13 +57,6 @@ Usar p-valor no lugar de stepwise
 Plot y vs naive
 
 
-version:
-1: lags, days, lat long
-2: mesepid
-3: perc_zero
-4: perc_one
-5: semedpid, semepid2, sin_semepid
-6: 100 truncado
 
 ScoreG in half of the dataset and use the other half for training and test
 truncatey y traps in 100 and create linear regression 
@@ -106,3 +66,22 @@ outras variaveis
 seleção de entradas via correlation
 
 
+
+
+
+Ler: 
+    Artigos:
+        https://homepages.dcc.ufmg.br/~olmo/mypapers/p1319-vazdemelo.pdf (log logistic)
+        https://epubs.siam.org/doi/10.1137/070710111 (Renato)
+        https://arxiv.org/abs/2406.16232 (Renato)
+
+
+
+PROBLEMS:
+Percentage of zeros in exponential_renato is doubled
+adapt input_3d to logistic and linear regressor
+3D dimension: lat, long, week, year consatants to original trap
+january data is dropped in final matrix with lag 3 
+Substituir logistic and linear regression por sklearn
+retirar pareto individual do mapa
+Loss function regresion >>> Loss function classification -> terrible network (everything is 0 or 1). Create a second network only with non null values. after classification or before it? 
