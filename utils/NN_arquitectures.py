@@ -9,7 +9,7 @@ import pdb
 
 
 
-class mlp1(nn.Module):
+class mlp(nn.Module):
 
     def __init__(self,model_input,model_output,model_type,input_3d):
         super().__init__()

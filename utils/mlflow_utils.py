@@ -1,10 +1,9 @@
 import mlflow
-import matplotlib.pyplot as plt
 import pandas as pd
 import json
-import plotly.graph_objects as go
 import numpy as np
 import utils.NN_building as NN_building
+import pdb
 
 
 
@@ -22,25 +21,6 @@ def get_runs_by_tags(tags):
     runs_df = mlflow.search_runs(filter_string=filter_string)
     return runs_df
 
-def plot_results_pytorch(variable_plot, list_plot,version_list,size,epochs,mt):
-    """
-    variable_plot = ['total_loss', 'loss_class', 'loss_reg', 'acc_class', 'acc_reg', 'error_reg']
-    
-    Epochs must be used!
-    """
- 
-
-    plt.figure(figsize=(15, 6))  
-    for i in range(size):   
-        y = list(map((lambda x: x/100 if x > 1 else x),list_plot[i][variable_plot]))
-        x = range(1, epochs+1)
-        plt.plot(y, x, label='Version {}'.format(version_list[i]))
-        plt.xlabel('Epoch')
-        plt.ylabel(f'{variable_plot}')
-        plt.legend()
-        plt.title(f'Model {variable_plot} {"TODO"}: {mt}')
-
-    plt.show()
 
 def info_from_artifacts(runs_df:pd.DataFrame,artifact_path:str):
     """ 
@@ -88,40 +68,6 @@ def get_version_list(runs_list):
         version_list.append(int(run['tags.version']))
 
     return version_list
-
-def surface_plot(z,ztitle):
-    """
-    Plot a 3D surface plot using Plotly
-
-    Parameters:
-    z: Pivoted DataFrame containing the values to be plotted 
-    ztitle : Title of the z axis
-    
-    """
-    z.index = z.index.astype(int)
-    z.columns = z.columns.astype(int)
-    z = z.sort_index(ascending=True)
-    z = z.sort_index(axis =1,ascending=True)
-    z = z.interpolate(method='linear', axis=0)
-    fig = go.Figure(data=[go.Surface(z=z.values, x=z.columns, y=z.index)])
-
-    # Update layout for better readability
-    fig.update_layout(
-        title="3D Surface Plot",
-        scene=dict(
-            xaxis_title='Lags (X)', 
-            yaxis_title='Number of neighbors (Y)',
-            zaxis_title= ztitle,
-
-        ),
-        coloraxis_colorbar=dict(title="Scale"),
-        width=1000,  # Increase width
-        height=800,   # Increase height
-
-    )
-
-    # Show plot
-    fig.show()
 
 def load_model(runs_df:pd.DataFrame, model_lib:str):
     """ 
@@ -188,3 +134,81 @@ def read_parquet(parameters,data_path=None):
     x_train, x_test, y_train, y_test, nplaca_index = NN_building.create_dataset(parameters, data_path )
 
     return x_train, x_test, y_train, y_test, nplaca_index
+
+def save_model_mlflow(parameters:dict, model, yhat:pd.DataFrame,ytest:pd.DataFrame, test_history, train_history, features, index_dict):
+
+    """
+    Saves the model in the MLflow server.
+    """
+
+    # Construct the filter to check model versio
+    filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items() if key not in ['mlp_params','year_list_test','year_list_train'] ] )
+    
+    # Convert year lists to strings and add to filter string
+    year_list_test = ','.join(map(str, parameters['year_list_test']))
+    year_list_train = ','.join(map(str, parameters['year_list_train']))
+    filter_string += f" and params.year_list_train = '{year_list_train}' and params.year_list_test = '{year_list_test}'"
+
+    
+    # Search for existing runs using the constructed filter string
+    existing_runs = mlflow.search_runs(filter_string=filter_string)
+    version = len(existing_runs) + 1
+    
+
+    output = {
+    'yhat': yhat.tolist(),
+    'ytest': ytest.tolist(),
+        }
+
+    # Start an MLflow run
+    # metrics
+    zero_flag = 0 if parameters['model_type'] == 'Naive' else -1
+    metrics_dict = {
+                    'Test Classification Accuracy': test_history['acc_class'][-1],
+                    'Train Classification Accuracy': train_history['acc_class'][-1],
+                    'Test Regression Accuracy': test_history['acc_reg'][-1],
+                    'Train Regression Accuracy': train_history['acc_reg'][-1],
+                    'Test Regression Error': test_history['error_reg'][-1],
+                    'Train Regression Error': train_history['error_reg'][-1],
+                    'Percentage of Zeros in Test': (ytest == zero_flag).sum().item()/len(ytest)
+                    }
+
+    mlflow.log_metrics(metrics_dict)
+
+    # historic results
+    mlflow.log_dict( test_history,'test_history.json')
+    mlflow.log_dict( train_history,'train_history.json')
+    mlflow.log_dict(index_dict['test'].to_list(), "index_dict_test.json")                        
+    mlflow.log_dict(index_dict['train'].to_list(), "index_dict_train.json")                        
+    
+    # Log parameters
+    for key, value in parameters.items() :
+        if key not in ['mlp_params','year_list_test','year_list_train']:
+            mlflow.log_param(key, value)
+    
+    mlflow.log_param('year_list_train', year_list_train)
+    mlflow.log_param('year_list_test', year_list_test)
+
+    # Log outputs
+
+    mlflow.log_dict(output, "output.json")     
+
+    # Log features
+    mlflow.log_param('features', features)
+
+    
+    #tags
+    mlflow.set_tag('mlflow.runName', f"{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_version{version}")	
+    mlflow.log_param('version', version)                                          # Log version
+
+
+    # Log model
+    if parameters['model_type'] == 'logistic' :
+        mlflow.statsmodels.log_model(model, "model")#,signature=signature)                      # Log model
+    elif parameters['model_type'] == 'GAM'or parameters['model_type'] == 'Naive':
+        pass
+    elif parameters['model_type'] == 'mlp':
+        mlflow.sklearn.log_model(model, "model")
+    else:
+        mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model
+  
