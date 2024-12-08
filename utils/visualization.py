@@ -420,9 +420,62 @@ def NovosxRelation_plot_all(data, lags, ntraps, relation, jitter_strength=1, wrt
 
 
 
+def plot_results_pytorch(variable_plot, list_plot,version_list,size,epochs,mt): 
+    """
+    variable_plot = ['total_loss', 'loss_class', 'loss_reg', 'acc_class', 'acc_reg', 'error_reg']
+    
+    Epochs must be used!
+    """
+ 
+
+    plt.figure(figsize=(15, 6))  
+    for i in range(size):   
+        y = list(map((lambda x: x/100 if x > 1 else x),list_plot[i][variable_plot]))
+        x = range(1, epochs+1)
+        plt.plot(y, x, label='Version {}'.format(version_list[i]))
+        plt.xlabel('Epoch')
+        plt.ylabel(f'{variable_plot}')
+        plt.legend()
+        plt.title(f'Model {variable_plot} {"TODO"}: {mt}')
+
+    plt.show()
 
 
 
+
+def surface_plot(z,ztitle): 
+    """
+    Plot a 3D surface plot using Plotly
+
+    Parameters:
+    z: Pivoted DataFrame containing the values to be plotted 
+    ztitle : Title of the z axis
+    
+    """
+    z.index = z.index.astype(int)
+    z.columns = z.columns.astype(int)
+    z = z.sort_index(ascending=True)
+    z = z.sort_index(axis =1,ascending=True)
+    z = z.interpolate(method='linear', axis=0)
+    fig = go.Figure(data=[go.Surface(z=z.values, x=z.columns, y=z.index)])
+
+    # Update layout for better readability
+    fig.update_layout(
+        title="3D Surface Plot",
+        scene=dict(
+            xaxis_title='Lags (X)', 
+            yaxis_title='Number of neighbors (Y)',
+            zaxis_title= ztitle,
+
+        ),
+        coloraxis_colorbar=dict(title="Scale"),
+        width=1000,  # Increase width
+        height=800,   # Increase height
+
+    )
+
+    # Show plot
+    fig.show()
 
 
 

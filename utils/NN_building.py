@@ -5,119 +5,28 @@ from torch import nn
 import pandas as pd
 from typing import Tuple
 import utils.NN_arquitectures as NN_arquitectures
-from torch.utils.data import DataLoader
-import os
-import utils.NN_preprocessing as NN_preprocessing
-import utils.generic as generic
-import mlflow
-import mlflow.pytorch
 import numpy as np
-import pdb
 import sklearn
 import statsmodels.api as sm 
 from pygam import LogisticGAM, s, f, te, l 
+import pdb
 
 
 
-
-
-def create_dataset(parameters:dict, data_path:str= None)->Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int]:
-    ntraps = parameters['ntraps']
-    lags = parameters['lags']
-    model_type = parameters['model_type']
-    use_trap_info = parameters['use_trap_info']
-    random_split = parameters['random_split']
-    test_size = parameters['test_size']
-    scale = parameters['scale']
-    input_3d = parameters['input_3d']
-    bool_input = parameters['bool_input']
-    truncate_100 = parameters['truncate_100']
-    cylindrical_input = parameters['cylindrical_input']
-
-# check if the input is valid
-    if use_trap_info == False:
-        assert input_3d == False , '3D input is only available if trap information is used'
-    if data_path is None:
-        data_path = f'./results/final_dfs/final_df_lag{lags}_ntraps{ntraps}.parquet'
-    if cylindrical_input:
-        assert (ntraps >= 10 and lags >= 5), 'Cylindrical input is only available for ntraps > 10 and lags > 5'
-    assert not(truncate_100 == True and bool_input == True), 'Truncate 100 and bool input cannot be true at the same time' 
-
-# create data
-    if os.path.exists(data_path):
-        # data import and preprocessing
-        data = pd.read_parquet(data_path)
-        unnamed_cols = data.columns [['Unnamed' in col for col in data.columns] ] #TODO create function to load data
-        data.drop(unnamed_cols,axis=1,inplace = True)
-    else:
-        data = NN_preprocessing.create_final_matrix(lags,ntraps,save_path=data_path) # TODO add perc zero and mesepid
-
-    nplaca_index = data['nplaca']
-    data.drop(columns=['nplaca'], inplace=True)
-    ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else 0)#.rename('ovos_flag', inplace=True)
-    
-    #data['zero_perc'] = 1 - data['zero_perc'] TODO: create flag one_perc 
-
-# divide columns into groups
-    if cylindrical_input == False:
-        days_columns = [f'days{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
-        eggs_columns = [f'trap{i}_lag{j}' for i in range(ntraps) for j in range(1, lags+1)]
-    elif cylindrical_input == True:
-        days_columns = [f'days{i}_lag{j}' for i in [0] for j in range(1, 6)]
-        eggs_columns = [f'trap{i}_lag{j}' for i in [0] for j in range(1, 6)]
-        days_columns += [f'days{i}_lag{j}' for i in range(1, ntraps) for j in range(1, 3)]
-        eggs_columns += [f'trap{i}_lag{j}' for i in range(1, ntraps) for j in range(1, 3)]
-
-    lat_column = ['latitude0']
-    long_column = ['longitude0']
-
-    info_cols  = eggs_columns + lat_column + long_column + ['semepi'] + ['zero_perc'] +['semepi2'] + ['sin_semepi']
-    
-    #transform values to 0 and 1
-    if bool_input:
-        transformed_data = data[eggs_columns].map(lambda x: 1 if x > 1 else x) # TODO not bool input flag
-        data[eggs_columns] = transformed_data
-    
-    if truncate_100:
-        transformed_data = data[eggs_columns].map(lambda x: 100 if x > 100 else x) # TODO not bool input flag
-        data[eggs_columns] = transformed_data
-
-# add semepi^2 and half sin(semedi)
-    data['semepi2'] = data['semepi']**2 
-    data['sin_semepi'] = np.sin(np.pi*data['semepi']/max(data['semepi']))
-    x, y = xy_definition(model_type=model_type, data=data, use_trap_info=use_trap_info, ovos_flag=ovos_flag, info_cols=info_cols, eggs_cols=eggs_columns, add_constant=parameters['add_constant'])
-
-# train test split
-    x_train, x_test, y_train, y_test = NN_preprocessing.data_train_test_split(x, y, test_size, random_split,ovos_flag)
-    # scaling
-    if scale:
-        x_train, x_test, y_train, y_test = NN_preprocessing.scale_dataset(x_train.copy(), 
-                                            x_test.copy(), y_train.copy(), y_test.copy(), model_type,
-                                            use_trap_info, eggs_columns, lat_column,long_column, days_columns,info_cols=info_cols)
-    #convert to numpy with the correct shape
-    if input_3d:
-        x_train = NN_preprocessing.create_3d_input(x_train, ntraps, lags)
-        x_test = NN_preprocessing.create_3d_input(x_test, ntraps, lags)
-        y_train, y_test = y_train.to_numpy(), y_test.to_numpy()
-    
-    if not(model_type == 'logistic' or model_type == 'GAM' or model_type == 'Naive' or model_type == 'mlp1'):    #return a numpy array instead of a df
-        x_train, x_test, y_train, y_test = x_train.to_numpy(), x_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy()
-
-    return x_train, x_test, y_train, y_test, nplaca_index
-
-def xy_definition(model_type:str, data:pd.DataFrame, use_trap_info:bool, ovos_flag:pd.DataFrame,
-                  info_cols:list, eggs_cols:list, add_constant:bool = True)->Tuple[pd.DataFrame, pd.DataFrame]:
+def xy_definition(data:pd.DataFrame, parameters:dict, ovos_flag:pd.DataFrame,
+                  info_cols:list, eggs_cols:list)->Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Fucntion to define the x and y variables according to the model type.
 
     Parameters:
-    model_type: string with the model type: classifier, regressor, exponential_renato, linear_regressor, logistic, GAM
     data: dataframe with the data
-    use_trap_info: flag to use the traps information like days and distances
+    paremters: dictionary with the parameters of the model. It must contain
+        model_type: string with the model type: classifier, regressor, exponential_renato, linear_regressor, logistic, GAM
+        use_trap_info: flag to use the traps information like days and distances
+        add_constant: flag to add a constant to the x variables
     ovos_flag: dataframe with booleans indicating the presence of eggs
     inf_col: list with the name of columns of days, latitude, longitude, mesepid and novos
     eggs_cols: list with the name of columns of eggs
-    add_constant: flag to add a constant to the x variables
 
     Returns:
     x: dataframe with the input variables
@@ -126,19 +35,21 @@ def xy_definition(model_type:str, data:pd.DataFrame, use_trap_info:bool, ovos_fl
 
     """
 # definition of x and y
-    if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM' or model_type == 'Naive'or model_type == 'mlp1':
+    if (parameters['model_type'] == 'classifier' or parameters['model_type'] == 'logistic' or parameters['model_type'] == 'GAM' 
+        or parameters['model_type'] == 'Naive'or parameters['model_type'] == 'mlp'):
         y = ovos_flag
-    elif model_type == 'regressor' or model_type == 'linear_regressor':
+
+    elif parameters['model_type'] == 'regressor' or parameters['model_type'] == 'linear_regressor':
         y = data['novos']
-    elif model_type == 'exponential_renato' or model_type == 'pareto':
+
+    elif parameters['model_type'] == 'exponential_renato' or parameters['model_type'] == 'pareto':
         y = pd.concat([ovos_flag.rename('ovos_flag', inplace=True),data['novos']],axis=1)
 
-    data = data.drop(columns=['novos'])
-    if use_trap_info == True:
+    if parameters['use_trap_info'] == True:
         x = data[info_cols]
     else:
         x = data[eggs_cols]
-    if add_constant == True:
+    if parameters['add_constant'] == True:
         x = sm.add_constant(x)
     
     return x, y
@@ -162,7 +73,7 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
     ytest: tensor with the test data    
     """
 
-    if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp1':
+    if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp':
         output_type = torch.long
     elif model_type == 'regressor' or model_type == 'exponential_renato' or 'linear_regressor' or model_type == 'pareto':
         output_type = torch.float32
@@ -186,7 +97,7 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
 class CustomDataset(Dataset):
     def __init__(self, features, targets, model_type):
         self.features  = features.clone().detach().float()
-        if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp1':
+        if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp':
             self.targets =  targets.clone().detach().long()
 
         elif model_type == 'exponential_renato' or model_type == 'pareto' or model_type == 'regressor' or model_type == 'linear_regressor':
@@ -205,9 +116,9 @@ def input_output_sizes(xtrain, model_type):
     else:
         model_input = xtrain.shape[1]
         
-    if model_type == 'classifier' or model_type == 'exponential_renato' or model_type == 'pareto':# or model_type == 'mlp1':
+    if model_type == 'classifier' or model_type == 'exponential_renato' or model_type == 'pareto':# or model_type == 'mlp':
         model_output = 2
-    elif model_type == 'regressor' or model_type == 'linear_regressor' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp1':
+    elif model_type == 'regressor' or model_type == 'linear_regressor' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp':
         model_output = 1
     return model_input, model_output
 
@@ -223,14 +134,14 @@ def define_model(model_type, model_input, model_output, input_3d,device):
         model = NN_arquitectures.NeuralNetworkPareto(model_input, model_output,model_type,input_3d).to(device)
     elif model_type == 'classifier':
         model = NN_arquitectures.NeuralNetwork(model_input, model_output,model_type,input_3d).to(device)
-    elif model_type == 'mlp1':
-        model = NN_arquitectures.mlp1(model_input, model_output,model_type,input_3d).to(device)
+    elif model_type == 'mlp':
+        model = NN_arquitectures.mlp(model_input, model_output,model_type,input_3d).to(device)
     else:
         raise ValueError('Model type not found')
     return model
 
 def define_loss_functions(model_type):
-    if model_type == 'classifier' or model_type == 'mlp1':
+    if model_type == 'classifier' or model_type == 'mlp':
         loss_func_class = nn.CrossEntropyLoss()
         loss_func_reg = None
     elif model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive':
@@ -249,150 +160,12 @@ def define_loss_functions(model_type):
     return loss_func_class, loss_func_reg
 
 def torch_accuracy(yref, yhat,model_type):
-    if model_type == 'classifier' or model_type == 'mlp1': #TODO check if this is correct
+    if model_type == 'classifier' or model_type == 'mlp': #TODO check if this is correct
         return (yhat.argmax(1) == yref).type(torch.float).sum().item()
     elif model_type == 'regressor' or model_type == 'linear_regressor':
         return ((torch.round(yhat) == yref).type(torch.float)).sum().item()
     else:
         raise ValueError('Model type not found')
-
-# Create train and test loops
-def train_loop(dataloader, model, loss_func_class, loss_func_reg, optimizer):
-    model.train()
-    size = len(dataloader.dataset)
-    num_batches = len(dataloader)
-    total_loss_train, loss_class_train, loss_reg_train, acc_class_train, acc_reg_train, error_reg_train  = 0, 0, 0, 0, 0, 0 
-
-    for batch, (xtrain, ytrain) in enumerate(dataloader):
-        # Compute prediction and loss
-        optimizer.zero_grad()
-        # Calculate loss
-        yhat = model(xtrain)
-
-        loss_class, loss_reg, acc_class, acc_reg, error_reg = evaluate_NN(model.model_type,loss_func_class, loss_func_reg, yhat, ytrain) # depend on model type
-        
-        # save losses
-        total_loss = loss_class + loss_reg
-        total_loss_train += total_loss.item()
-        loss_class_train += loss_class.item()
-        loss_reg_train += loss_reg.item()
-        acc_class_train += acc_class
-        acc_reg_train += acc_reg
-        error_reg_train += error_reg
-
-        
-        # Backpropagation
-        total_loss.backward()
-        optimizer.step()
-    
-    loss_class_train /= num_batches
-    loss_reg_train /= num_batches
-    total_loss_train = loss_class_train + loss_reg_train
-    acc_class_train /= size
-    acc_reg_train /= size
-    error_reg_train /= size
-        
-    return total_loss_train, loss_class_train, loss_reg_train, acc_class_train, acc_reg_train, error_reg_train
-    '''
-        if batch % 100 == 0:
-            loss, current = totalLoss.item(), batch * batch_size + len(xtest)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
-'''
-
-def test_loop(dataloader, model, loss_func_class, loss_func_reg):
-    # Set the model to evaluation mode - important for batch normalization and dropout layers
-    # Unnecessary in this situation but added for best practices
-    model.eval()
-    size = len(dataloader.dataset)
-    num_batches = len(dataloader)
-    total_loss_test, loss_class_test, loss_reg_test, acc_class_test, acc_reg_test, error_reg_test  = 0, 0, 0, 0, 0, 0
-
-    # Evaluating the model with torch.no_grad() ensures that no gradients are computed during test mode
-    # also serves to reduce unnecessary gradient computations and memory usage for tensors with requires_grad=True
-    with torch.no_grad():
-        for xtest, ytest in dataloader:
-        # Calculate loss
-
-            yhat = model(xtest)
-            loss_class, loss_reg, acc_class, acc_reg, error_reg = evaluate_NN(model.model_type,loss_func_class, loss_func_reg, yhat, ytest) # depend on model type
-            # save losses
-            loss_class_test += loss_class.item()
-            loss_reg_test += loss_reg.item()
-            total_loss_test +=  loss_class.item() + loss_reg.item()
-            acc_class_test += acc_class
-            acc_reg_test += acc_reg
-            error_reg_test += error_reg
-
-    loss_class_test /= num_batches
-    loss_reg_test /= num_batches
-    total_loss_test = loss_class_test + loss_reg_test
-    acc_class_test /= size
-    acc_reg_test /= size
-    error_reg_test /= size
-
-    return total_loss_test, loss_class_test, loss_reg_test, acc_class_test, acc_reg_test, error_reg_test
-
-def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
-
-    if model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp1':
-
-        loss_reg =  0
-        loss_class =  0
-        acc_class = sklearn.metrics.accuracy_score(y, yhat)
-        acc_reg =  0 
-        error_reg =  0
-        total_loss = 0
-        return total_loss, loss_class, loss_reg, acc_class, acc_reg, error_reg
-
-    elif model_type == 'classifier':# or model_type == 'mlp1':
-        loss_class = loss_func_class(yhat.squeeze(), y) # yhat = logit
-        loss_reg =  torch.tensor(0)
-        acc_class = torch_accuracy(y,  yhat, model_type)
-        acc_reg =  0
-        error_reg =  0
-
-    elif model_type == 'regressor' or model_type == 'linear_regressor':
-        yhat = yhat.squeeze()
-        loss_class =  torch.tensor(0)
-        loss_reg = loss_func_reg(yhat, y)
-        acc_class =  0
-        acc_reg = torch_accuracy(y, yhat, model_type)
-        error_reg = ((yhat - y)**2).sum().item()
-    
-    elif model_type == 'exponential_renato':
-        logit, lamb = yhat
-        # evaluate the pdf of the distribution
-        
-        yhat = torch.round(1/(lamb + 0.00001)) # rounded mean of the distribution
-        # split NN output
-        y_class =  y[:,0].long()
-        y_reg = y[:,1]
-        # calculate metrics
-        loss_class = loss_func_class(logit, y_class)
-        loss_reg = loss_func_reg(y_reg, lamb)
-        acc_class = torch_accuracy(y_class, logit, 'classifier')
-        acc_reg = torch_accuracy(y_reg, yhat, 'regressor')
-        error_reg = ((yhat - y_reg)**2).sum().item() #mse
-
-    elif model_type == 'pareto':
-
-        logit, alpha = yhat
-        x_m = 1 # TODO: if x_m must be implemented as a parameter, it must be passed in yhat 
-        # evaluate the pdf of the distribution
-        yhat = alpha*x_m/(alpha - 1) 
-
-        y_class =  y[:,0].long()
-        y_reg = y[:,1]
-        # calculate metrics
-        loss_class = loss_func_class(logit, y_class)
-        loss_reg = loss_func_reg(y_reg, alpha)
-        acc_class = torch_accuracy(y_class, logit, 'classifier')
-        acc_reg = torch_accuracy(y_reg, yhat, 'regressor')
-        error_reg = ((yhat - y_reg)**2).sum().item() #mse
-
-
-    return loss_class, loss_reg, acc_class, acc_reg, error_reg
-
 
 def create_history_dict():
     return {
@@ -415,7 +188,7 @@ def append_history_dict(history_dict, results):
 
 def calc_model_output(model, xtest,loss_func_reg=None):
 
-    if model.model_type == 'classifier' or model.model_type == 'mlp1':
+    if model.model_type == 'classifier' or model.model_type == 'mlp':
         yhat = model(xtest).argmax(1).cpu().numpy()
         return yhat
     elif model.model_type == 'regressor' or model.model_type == 'linear_regressor':
@@ -442,76 +215,7 @@ def calc_model_output(model, xtest,loss_func_reg=None):
         return yhat
     else:
         raise ValueError('Model type not found')
-    
-def save_model_mlflow(parameters:dict, model, yhat,ytest, test_history, train_history,features, experiment_name = 'NN_ovitraps'):
-    """
-    Saves the model in the MLflow server.
-    """
-
-    mlflow.set_tracking_uri('http://localhost:5000')
-    mlflow.set_experiment(experiment_name)
-
-
-    # Construct the filter to check model versio
-    filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items() if key != 'mlp_params' ] )
-    if parameters['model_type'] == 'mlp1':  
-        filter_string = filter_string.replace(f"and params.epochs = '{parameters['epochs']}'","")
-    # Search for existing runs using the constructed filter string
-    existing_runs = mlflow.search_runs(filter_string=filter_string)
-    version = len(existing_runs) + 1
-    
-
-    output = {
-    'yhat': yhat.tolist(),
-    'ytest': ytest.cpu().numpy().tolist(),
-        }
-
-    # Start an MLflow run
-    with mlflow.start_run():
-        # metrics
-        metrics_dict = {
-                        'Test Classification Accuracy': test_history['acc_class'][-1],
-                        'Train Classification Accuracy': train_history['acc_class'][-1],
-                        'Test Regression Accuracy': test_history['acc_reg'][-1],
-                        'Train Regression Accuracy': train_history['acc_reg'][-1],
-                        'Test Regression Error': test_history['error_reg'][-1],
-                        'Train Regression Error': train_history['error_reg'][-1],
-                        'Percentage of Zeros in Test': (ytest == 0).sum().item()/len(ytest)
-                        }
-
-        mlflow.log_metrics(metrics_dict)
-
-        # historic results
-        mlflow.log_dict( test_history,'test_history.json')
-        mlflow.log_dict( train_history,'train_history.json')
-        
-        # Log parameters
-        for key, value in parameters.items():
-            mlflow.log_param(key, value)
-        
-        # Log outputs
-
-        mlflow.log_dict(output, "output.json")                             
-
-        # Log features
-        mlflow.log_param('features', features)
-
-        
-        #tags
-        mlflow.set_tag('mlflow.runName', f"{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_version{version}")	
-        mlflow.log_param('version', version)                                          # Log version
-
-
-        #signature = mlflow.models.ModelSignature(inputs=x_train, outputs=y_train)
-        if parameters['model_type'] == 'logistic' :
-            mlflow.statsmodels.log_model(model, "model")#,signature=signature)                      # Log model
-        elif parameters['model_type'] == 'GAM'or parameters['model_type'] == 'Naive':
-            pass
-        elif parameters['model_type'] == 'mlp1':
-            mlflow.sklearn.log_model(model, "model")
-        else:
-            mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model
-            
+              
 def forward_stepwise(X, y,parameters):
     """
     Perform forward stepwise selection to select the best features for a logistic regression model.
@@ -729,3 +433,76 @@ def select_model_stepwise(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:
             raise TypeError(f"Model type {parameters['model_type']} not found")
 
         return model, features
+    
+def easy_save(train_history:dict, test_history:dict, yhat_train:list, ytrain:list, yhat:list, ytest:list, model_type:str,loss_func_class:float, loss_func_reg:float):
+    """
+    Function to save the results of the model in a dictionary previously created  
+    """
+    
+    results_train = evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat_train, ytrain)
+    results_test = evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, ytest)
+    append_history_dict(train_history, results_train)
+    append_history_dict(test_history, results_test)
+    return train_history, test_history  
+
+def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
+
+    if model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp':
+
+        loss_reg =  0
+        loss_class =  0
+        acc_class = sklearn.metrics.accuracy_score(y, yhat)
+        acc_reg =  0 
+        error_reg =  0
+        total_loss = 0
+        return total_loss, loss_class, loss_reg, acc_class, acc_reg, error_reg
+
+    elif model_type == 'classifier':# or model_type == 'mlp':
+        loss_class = loss_func_class(yhat.squeeze(), y) # yhat = logit
+        loss_reg =  torch.tensor(0)
+        acc_class = torch_accuracy(y,  yhat, model_type)
+        acc_reg =  0
+        error_reg =  0
+
+    elif model_type == 'regressor' or model_type == 'linear_regressor':
+        yhat = yhat.squeeze()
+        loss_class =  torch.tensor(0)
+        loss_reg = loss_func_reg(yhat, y)
+        acc_class =  0
+        acc_reg = torch_accuracy(y, yhat, model_type)
+        error_reg = ((yhat - y)**2).sum().item()
+    
+    elif model_type == 'exponential_renato':
+        logit, lamb = yhat
+        # evaluate the pdf of the distribution
+        
+        yhat = torch.round(1/(lamb + 0.00001)) # rounded mean of the distribution
+        # split NN output
+        y_class =  y[:,0].long()
+        y_reg = y[:,1]
+        # calculate metrics
+        loss_class = loss_func_class(logit, y_class)
+        loss_reg = loss_func_reg(y_reg, lamb)
+        acc_class = torch_accuracy(y_class, logit, 'classifier')
+        acc_reg = torch_accuracy(y_reg, yhat, 'regressor')
+        error_reg = ((yhat - y_reg)**2).sum().item() #mse
+
+    elif model_type == 'pareto':
+
+        logit, alpha = yhat
+        x_m = 1 # TODO: if x_m must be implemented as a parameter, it must be passed in yhat 
+        # evaluate the pdf of the distribution
+        yhat = alpha*x_m/(alpha - 1) 
+
+        y_class =  y[:,0].long()
+        y_reg = y[:,1]
+        # calculate metrics
+        loss_class = loss_func_class(logit, y_class)
+        loss_reg = loss_func_reg(y_reg, alpha)
+        acc_class = torch_accuracy(y_class, logit, 'classifier')
+        acc_reg = torch_accuracy(y_reg, yhat, 'regressor')
+        error_reg = ((yhat - y_reg)**2).sum().item() #mse
+
+
+    return loss_class, loss_reg, acc_class, acc_reg, error_reg
+
