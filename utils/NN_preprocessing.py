@@ -3,9 +3,11 @@ import itertools
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from collections import defaultdict
 from typing import Tuple
+from sklearn.preprocessing import MaxAbsScaler
 import pdb
+from sklearn.model_selection import train_test_split
 
 
 
@@ -372,15 +374,19 @@ def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = './
     return final_df
 
 
-def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, test_size:float, random_split:bool,ovos_flag:pd.Series)->Tuple[pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame]:
+def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, parameters:dict, 
+        ovos_flag:pd.Series)->Tuple[pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame]:
     """
     Split the data into train and test sets
 
     Parameters:
     x: pandas dataframe with the features
     y: pandas dataframe with the target
-    test_size: float with the proportion of the test set
-    random_split: boolean to define if the split is random
+    parameters: dictionary with the parameters of the model. It must contain:
+        test_size: float with the proportion of the test set
+        split_type: str to define how split is done. 'random' or 'sequential' or 'year'
+        year_list_train: list with the years to be used in the train set
+        year_list_test: list with the years to be used in the test set
     ovos_flag: pandas series with the flag of the ovos
 
     Returns:
@@ -388,58 +394,146 @@ def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, test_size:float, rando
     x_test: pandas dataframe with the features of the test set
     y_train: pandas dataframe with the target of the train set
     y_test: pandas dataframe with the target of the test set
+    index_dict: dictionary with the index of the train and test set
     """
 
     n = x.shape[0]
 
-    if random_split:
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=42, stratify=ovos_flag)
-    else:
-        train_size = 1 - test_size
 
+    if parameters['split_type'] == 'random':
+        x_train, x_test, y_train, y_test = train_test_split(x, y, 
+                                test_size=parameters['test_size'], random_state=42, stratify=ovos_flag)
+        
+    elif parameters['split_type'] == 'sequential':
+        train_size = 1 - parameters['test_size']
         y_train = y.iloc[:int(n*train_size)]
         y_test = y.iloc[int(n*train_size):]
         x_train = x.iloc[:int(n*train_size)]
-        x_test = x.iloc[int(n*train_size):]    
-    return x_train, x_test, y_train, y_test
+        x_test = x.iloc[int(n*train_size):] 
+        
+    elif parameters['split_type'] == 'year':
+        y_train = y[x['anoepid'].isin(parameters['year_list_train'])]
+        y_test = y[x['anoepid'].isin(parameters['year_list_test'])]
+        x_train = x[x['anoepid'].isin(parameters['year_list_train'])]
+        x_test = x[x['anoepid'].isin(parameters['year_list_test'])]
 
-def scale_column(x_train:pd.DataFrame, x_test:pd.DataFrame, column:list)->Tuple[pd.DataFrame,pd.DataFrame,int]:
+        x_test = x_test.drop(columns='anoepid')
+        x_train = x_train.drop(columns='anoepid')
+
+
+    else :
+        raise ValueError('Invalid split type')
+
+    index_dict = {'train': x_train['nplaca'], 'test': x_test['nplaca']}
+    x_train = x_train.drop(columns='nplaca')
+    x_test = x_test.drop(columns='nplaca')
+
+
+    x_train.reset_index(drop=True, inplace=True)
+    x_test.reset_index(drop=True, inplace=True)
+    y_train.reset_index(drop=True, inplace=True)
+    y_test.reset_index(drop=True, inplace=True)
+
+    return x_train, x_test, y_train, y_test, index_dict
+
+def scale_column(train:pd.DataFrame, test:pd.DataFrame, columns:list)->Tuple[pd.DataFrame,pd.DataFrame,int]:
     """
-    Scales the same nature columns of x_train and x_test using the MinMaxScaler. The reference column is the one with the maximum value.
+    Scales the same nature columns of train and test using the MinMaxScaler. The reference column is the one with the maximum value.
 
     Parameters:
-    x_train: pandas dataframe
-    x_test: pandas dataframe
-    column: list of column names to be scaled
+    train: pandas dataframe
+    test: pandas dataframe
+    columns: list of column names to be scaled
 
     Returns:
-    x_train: pandas dataframe
-    x_test: pandas dataframe
+    train: pandas dataframe
+    test: pandas dataframe
     max_value: maximum value of the reference column
 
     """
-    max_value = x_train[column].max().max()
-    x_train.loc[:, column] = x_train.loc[:, column] / max_value
-    x_test.loc[:, column] = x_test.loc[:, column] / max_value
-    return x_train, x_test, max_value
+    # Flatten the columns column and reshape it to a 2D array
+    if isinstance(train,pd.DataFrame):
+        flattened_train = train[columns].values.flatten().reshape(-1, 1)
+        flattened_test = test[columns].values.flatten().reshape(-1, 1)
 
 
 
-def scale_dataset(x_train, x_test, y_train, y_test, model_type, use_trap_info, eggs_columns, lat_columns, long_columns, days_columns,info_cols):
+    
+    elif isinstance(train, pd.Series):
+        flattened_train = train.values.flatten().reshape(-1, 1)
+        flattened_test = test.values.flatten().reshape(-1, 1)
 
-    x_train, x_test, max_eggs = scale_column(x_train, x_test, eggs_columns)
+    # Initialize and fit the scaler
+    scaler = MaxAbsScaler()
+    flattened_train = scaler.fit_transform(flattened_train)
 
-    if use_trap_info:
-        x_train, x_test, max_days = scale_column(x_train, x_test, days_columns)
-    if model_type == 'regressor':
-        y_train = y_train/max_eggs
-        y_test = y_test/max_eggs
-    elif model_type == 'exponential_renato':
-        y_train['novos'] = y_train['novos']/max_eggs
-        y_test['novos'] = y_test['novos']/max_eggs
+    # Scale the test set
+    flattened_test = scaler.transform(flattened_test)
 
-    return x_train, x_test, y_train, y_test
+    # Reshape back into the original DataFrame shape and update the DataFrames
+    if isinstance(train,pd.DataFrame):
+        flattened_train = flattened_train.reshape(train[columns].shape)
+        flattened_test = flattened_test.reshape(test[columns].shape)
+        train[columns] = pd.DataFrame(flattened_train, columns=columns)
+        test[columns] = pd.DataFrame(flattened_test, columns=columns)
 
+    elif isinstance(train, pd.Series):
+        flattened_train = flattened_train.reshape(train.shape)
+        flattened_test = flattened_test.reshape(test.shape)
+        train = pd.Series(flattened_train.flatten(), name=train.name)
+        test = pd.Series(flattened_test.flatten(), name=test.name)
+    return train, test, scaler
+
+
+def scale_dataset(x_train, x_test, y_train, y_test, parameters):
+
+    """
+    Function to scale the dataset respecting the nature of the columns
+
+    Parameters:
+    x_train: pandas dataframe with the features of the train set
+    x_test: pandas dataframe with the features of the test set
+    y_train: pandas dataframe with the target of the train set
+    y_test: pandas dataframe with the target of the test set
+    parameters: dictionary with the parameters
+
+    Returns:
+    x_train: pandas dataframe with the features of the train set
+    x_test: pandas dataframe with the features of the test set
+    y_train: pandas dataframe with the target of the train set
+    y_test: pandas dataframe with the target of the test set
+    """
+    grouped = defaultdict(list)
+    for col in x_train.columns:
+        if col.startswith('days'):
+            grouped['days'].append(col)
+        elif col.startswith('trap'):
+            grouped['trap'].append(col)
+        elif col.startswith('latitude'):    
+            grouped['latitude'].append(col)
+        elif col.startswith('longitude'):
+            grouped['longitude'].append(col)
+        else:
+            prefix = col.split('_')[0]  # Group by the part before '_'
+            grouped[prefix].append(col)
+    
+    grouped_dict = dict(grouped)
+
+
+
+    scaler_dicts = {}
+
+    for key in grouped_dict:
+        x_train, x_test, scaler = scale_column(x_train, x_test, grouped_dict[key])
+        scaler_dicts[key] = scaler
+    
+    #TODO adapt this to the case of two output vectors 
+    y_train, y_test, scaler = scale_column(y_train, y_test, ['novos'])
+
+    scaler_dicts['output'] = scaler
+      
+
+    return x_train, x_test, y_train, y_test, scaler_dicts
 
 
 def create_3d_input(df, num_traps, num_lags):
