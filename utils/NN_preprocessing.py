@@ -8,6 +8,7 @@ from typing import Tuple
 from sklearn.preprocessing import MaxAbsScaler
 import pdb
 from sklearn.model_selection import train_test_split
+import random
 
 
 
@@ -416,6 +417,25 @@ def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, parameters:dict,
         y_test = y[x['anoepid'].isin(parameters['year_list_test'])]
         x_train = x[x['anoepid'].isin(parameters['year_list_train'])]
         x_test = x[x['anoepid'].isin(parameters['year_list_test'])]
+        
+        if parameters['month_experiment']:
+            """
+            In this experiment, 20% of xtrain months will be randomly chose for testing and the rest will be used for training
+            """
+            n_month_test = x_train[['anoepid','mesepid']].drop_duplicates().shape[0]//5
+            month_list = x_train[['anoepid','mesepid']].drop_duplicates().sample(n_month_test)
+            month_list = month_list.apply(tuple, axis=1)
+            mask = x_train[['anoepid', 'mesepid']].apply(tuple, axis=1).isin(month_list)
+
+            # Apply the mask to filter x_train and y_train
+            x_test = x_train[mask]    
+            x_train = x_train[~mask] 
+            y_test = y_train[mask]   
+            y_train = y_train[~mask] 
+
+            x_test = x_test.drop(columns='mesepid')
+            x_train = x_train.drop(columns='mesepid')
+            
 
         x_test = x_test.drop(columns='anoepid')
         x_train = x_train.drop(columns='anoepid')
@@ -532,7 +552,6 @@ def scale_dataset(x_train, x_test, y_train, y_test, parameters):
 
     scaler_dicts['output'] = scaler
       
-
     return x_train, x_test, y_train, y_test, scaler_dicts
 
 
