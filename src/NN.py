@@ -6,7 +6,7 @@ sys.path.append(project_root)
 
 import utils.generic as generic
 import pdb
-import tqdm
+from tqdm import tqdm
 import itertools
 import src.NN_pipeline as NN_pipeline
 
@@ -18,51 +18,53 @@ if __name__ == '__main__':
 # Parameters
 
     # Pipeline parameters
-    repeat = 1 # Number of times the model will be trained and tested
-    play_song = False
+    repeat = 1  # Number of times the model will be trained and tested
+    play_song = True
     stop_time = 2
-    experiment_name = 'Teste' # Name of the experiment to be saved in mlflow
+    experiment_name = 'Year_ALL' # Name of the experiment to be saved in mlflow
     iterations_ignore = 0
 
     # Model parameters
-    models = ['mlp']  # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'logistic' or 'GAM' or 'Naive' or 'mlp'
+    models = ['logistic']  # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'logistic' or 'GAM' or 'Naive' or 'mlp'
     
     # Input parameters
-    lags = [5]
-    neigh_num = [11]
+    lags = 5
+    neigh_num = 11
     use_trap_info = True
     scale = True
     input_3d = False
-    bool_input = False
-    truncate_100 = True
+    bool_input = True
+    truncate_100 = False 
     cylindrical_input = True
     add_constant = True
+    month_experiment = False # If True, ytrain will be divided by month and some random months will be selected for testing
 
 
     # Train and Test split parameters
     split_type = 'year'
     test_size = 0.2 
-    year_list_train = ["2012_13"] # ['2011_12', ..., '2024_25']
-    year_list_test = ["2013_14"]
+    all_years_list = ['2011_12', '2012_13', '2013_14', '2014_15', '2015_16', '2016_17', '2017_18', '2018_19', '2019_20', '2020_21', '2021_22', '2022_23', '2023_24', '2024_25']
+    year_list_train = [] # ['2011_12', ..., '2024_25'] be careful about the first and last year
+    year_list_test = []
+
 
     
 
     # MLP parameters
-    hidden_layers =  (25,10,10, 5) 
-    learning_rate_mlp = ['adaptive']
-    activation =  ['relu']  # Activation function
-    learning_rate = [1e-2] #[2**(-10+i)*1e-3 for i in range(10)]
+    hidden_layers =  [(50,25,10,5)] 
+    learning_rate_mlp = 'adaptive'
+    activation =  'relu'  # Activation function
+    learning_rate = 1e-2 #[2**(-10+i)*1e-3 for i in range(10)]
     batch_size = 100
     epochs = 10000
-    tolerance = 1e-4
-    n_iter_no_change = 50
-
+    tolerance = 1e-5
+    n_iter_no_change = 30
 
     parameters = {
-        'model_type': [],
+        'model_type': models,
         'use_trap_info': use_trap_info,
-        'ntraps': [],
-        'lags': [],
+        'ntraps': neigh_num,
+        'lags': lags,
         'split_type': split_type,
         'test_size': test_size,
         'scale': scale,
@@ -76,17 +78,16 @@ if __name__ == '__main__':
         'add_constant': add_constant,
         'year_list_train': year_list_train,
         'year_list_test': year_list_test,
-
-
+        'month_experiment': month_experiment
         }
     
     parameters['mlp_params'] = {
         'hidden_layer_sizes': hidden_layers,  # Example: (50, 25, 25, 5) or (10,10,5)
         'max_iter': parameters['max_epochs'],  # Number of epochs
-        'activation': 'reLU',  # Activation function
+        'activation': activation,  # Activation function
         'solver': 'adam',  # Optimization solver
-        'learning_rate': 'adaptive',  # Learning rate schedule
-        'n_iter_no_change':n_iter_no_change ,  # Early stopping criteria
+        'learning_rate': learning_rate_mlp,  # Learning rate schedule
+        'n_iter_no_change': n_iter_no_change ,  # Early stopping criteria
         'shuffle': True,  # Shuffle training data
         'verbose': True,  # Print progress
         'early_stopping': False,  # Disable early stopping
@@ -94,26 +95,26 @@ if __name__ == '__main__':
         #'learning_rate_init': parameters['learning_rate']  # Initial learning rate
     }
 
-    j = 0
-    for i in range(repeat):
-        for act in activation:
-            for lr in learning_rate:
-                for lr_mlp in learning_rate_mlp:
-                    for model in models:
-                        for lag, ntraps in tqdm.tqdm(itertools.product(lags, neigh_num),total=len(lags)*len(neigh_num)):
-                                while j < iterations_ignore-1:
-                                    j += 1
-                                    continue
-                                parameters['mlp_params']['learning_rate'] = lr_mlp
-                                parameters['learning_rate'] = lr
-                                parameters['model_type'] = model
-                                parameters['lags'] = lag
-                                parameters['ntraps'] = ntraps
-                                parameters['mlp_params']['activation'] = act
+    total_iterations = len(models) * len(hidden_layers) * len(all_years_list)**2 * repeat - iterations_ignore
+    with tqdm(total=total_iterations, desc="Combined Loops") as pbar:
+        j = 0
+        for i in range(repeat):
+            for model in models:
+                for layer in hidden_layers:
+                    for year_train in all_years_list:
+                        for year_test in [x for x in all_years_list if x!=year_train]:
+                            while j < iterations_ignore-1:
+                                j += 1
+                                continue
+                            parameters['mlp_params']['hidden_layer_sizes'] = layer
+                            parameters['year_list_train'] = [year_train]
+                            parameters['year_list_test'] = [year_test]  
+                            parameters['model_type'] = model
+                            print(f"Iteration {i} - Model {model} - Lags {parameters['lags']} - Neigh {parameters['ntraps']}")
+                            NN_pipeline.pipeline(parameters, experiment_name=experiment_name)
+                            pbar.update(1)
 
-                                print(f'Iteration {i} - Model {model} - Lags {lag} - Neigh {ntraps}')
-                                NN_pipeline.pipeline(parameters, experiment_name=experiment_name)
 
-    if play_song: 
-        generic.play_ending_song()
-        generic.stop_ending_song(stop_time)
+        if play_song: 
+            generic.play_ending_song('./data/Sinfonia To Cantata # 29.mp3')
+            generic.stop_ending_song(stop_time)
