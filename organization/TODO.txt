@@ -1,74 +1,4 @@
-New:
-
-
-Treinar NN e ver porcentagem de armadilhas maiores que "600"
-
-Comparar com Naïve e modelar erro do naive
-
-Music Informatics - método para identificar reta e ponto onde ela começa/
-
-Informação Mútua e correlação de Spearman para definir correlações
-
-Granger causality to add new traps and external variables
-
-Classificador para definir qual das distribuilções seguir
-
-Comparar análise bayesiana com inteiramente computacional
-
-Rede baseada em grafosd
-
-pacotes de ajuste de distriuição automatica
-
-log da variavel de saída -> histograma para verificar se cauda pesada está ausente (mesma análise para boxcox)
-
-cluster espacial como variável (análise espacia!) -> talvez introdução de variáveis exógenas tirem a dependcência geográfica (modelar e analisar resíduos)
-
-Modelos ARIMA, SARIMA, RF, SVM(com kernels diferentes)
-
-Modelagem de baixa frgequência para verificar tendência e comparar com armadilhas vizinhas. Talvez elas tenham curvas parecidas, apenas multiplicadas por um fator de escala
-    
-Introduzir informação de sazonalidade na modelagem
-
-aprendizado hebbiano para lidar com dados espaço temporais w_hebb = x_0y_0                  
-
-número de dias de exposição: fazer análise de correlação e adicionar como variável 
-
-
-
-
-introduzir double poisson na função de custo 
-
-
-vairaveis exogenas
-log da variavel de saída 
-pacotes de ajuste de distriuição automatica
-cluster regional
-Modelos ARIMA, SARIMA, RF, SVM, catboost
-comparar datasets de treino e teste para ver se eles seguem mesma distribuição
-Try to replicate double descentent in my data (ELM(increase p and plot), MLP) increase size and epochs
-plot nsamples by neigh and lags
-
-LOGISTICA:
-Analisar quantos ovos em média tem as armadilhas que erramos
-Verificar na literatura referenciuas para erros de classificação
-add number of samples as a criteria
-analise de coeficientes dos dias
-Usar p-valor no lugar de stepwise
-Plot y vs naive
-
-
-
-ScoreG in half of the dataset and use the other half for training and test
-truncatey y traps in 100 and create linear regression 
-
-ELM (train error vs numebr of hidden layers close to number of training samples)
-outras variaveis
-seleção de entradas via correlation
-
-
-
-
-Reuniões:
+REUNIÕES:
 30/35 armadilhas ruins
 mais comum entre 10 e 150
 quais anos eu estava analisando antes?
@@ -76,11 +6,88 @@ encontrar regionais com taxa amostral semanal
 calcular número de armadilhas que deveriam ser colocadas
 
 
-Ler: 
+
+
+LER: 
     Artigos:
         https://homepages.dcc.ufmg.br/~olmo/mypapers/p1319-vazdemelo.pdf (log logistic)
         https://epubs.siam.org/doi/10.1137/070710111 (Renato)
         https://arxiv.org/abs/2406.16232 (Renato)
+
+
+
+
+
+MAPEAMENTO:
+Spline ou mapa e kernel para relacionar lat,long,mesepid(categorico) -> novos
+MLP tbm
+verificar mudança de mapas ao longo dos anos
+cluster regional
+
+
+
+
+
+
+ANÁLISE DOS DADOS:
+Plot sin over serie
+Mensurar concept drift
+Análise de Fourier (verificar alguma frequência importante)
+Mudança na média de ovos ao longo do tempo por armadilha
+pacotes de ajuste de distriuição automatica
+plot nsamples by neigh and lags
+comparar datasets de treino e teste para ver se eles seguem mesma distribuição
+número de dias de exposição: fazer análise de correlação e adicionar como variável 
+cluster espacial como variável (análise espacia!) -> talvez introdução de variáveis exógenas tirem a dependcência geográfica (modelar e analisar resíduos)
+log da variavel de saída -> histograma para verificar se cauda pesada está ausente (mesma análise para boxcox)
+Music Informatics - método para identificar reta e ponto onde ela começa/
+
+
+
+
+FEATURE SELECTION:
+vairaveis exogenas
+Granger causality to add new traps and external variables
+Informação Mútua e correlação de Spearman para definir correlações
+
+
+
+
+CLASSIFICAÇÂO PRESENÇA:
+AUC!!!
+Especificidade x Sensibilidade
+Analisar quantos ovos em média tem as armadilhas que erramos
+Verificar na literatura referenciuas para erros de classificação
+Usar p-valor junto a stepwise
+ScoreG in half of the dataset and use the other half for training and test
+seleção de entradas via correlation
+
+
+
+
+RESULTADOS:
+Mosaic plot: regression vs novos
+Análise dos erros
+    Procurar amostras semelhantes
+    armadilhas constantemente erradas
+    mapa com tamanho da armadilha equivalente ao erro 
+
+    
+
+
+REDES NEURAIS:
+Poisson
+Linear
+introduzir double poisson na função de custo 
+log da variavel de saída 
+Modelos ARIMA, SARIMA, catboost, RF, SVM(com kernels diferentes)
+aprendizado hebbiano para lidar com dados espaço temporais w_hebb = x_0y_0                  
+Modelagem de baixa frgequência para verificar tendência e comparar com armadilhas vizinhas. Talvez elas tenham curvas parecidas, apenas multiplicadas por um fator de escala
+Rede baseada em grafosd
+Comparar análise bayesiana com inteiramente computacional
+Classificador para definir qual das distribuilções seguir
+
+
 
 
 
@@ -92,3 +99,11 @@ january data is dropped in final matrix with lag 3
 Substituir logistic and linear regression por sklearn
 retirar pareto individual do mapa
 Loss function regresion >>> Loss function classification -> terrible network (everything is 0 or 1). Create a second network only with non null values. after classification or before it? 
+
+
+
+
+
+NÃO ENTENDI ANOTAÇÕES:
+Dispersão novos x lags
+Nearest neighbors to estimate neigh
