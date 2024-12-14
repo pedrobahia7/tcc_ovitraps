@@ -148,8 +148,9 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
             
             torch.save(model.state_dict(), f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_final.pth")
         
-
-        mlflow_utils.save_model_mlflow(parameters, model, yhat, y_test, test_history, train_history, features, index_dict)
+        mlflow_utils.save_model_mlflow(parameters=parameters, model=model, ytrain=y_train,
+                        yhat = yhat, ytest = y_test, test_history = test_history, 
+                        train_history = train_history, features = features, index_dict = index_dict)
         
 def check_parameters(parameters:dict):
     """

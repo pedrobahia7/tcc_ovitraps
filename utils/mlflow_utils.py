@@ -69,19 +69,19 @@ def get_version_list(runs_list):
 
     return version_list
 
-def load_model(runs_df:pd.DataFrame, model_lib:str):
+def load_model(runs_df:pd.Series, model_lib:str):
     """ 
     Load the model from the run id
 
     Parameters:
-    runs_df: DataFrame of runs containing the run_id for each analysed model
+    runs_df:  run containing the run_id for each analysed model
     model_lib: library used to create model ['sklearn', 'pytorch']
 
     Returns:
     model: loaded model
 
     """
-    model_uri = mlflow.artifacts.download_artifacts(run_id=runs_df['run_id'][0], artifact_path='model')
+    model_uri = mlflow.artifacts.download_artifacts(run_id=runs_df['run_id'], artifact_path='model')
     if model_lib == 'sklearn':
         return mlflow.statsmodels.load_model(model_uri)
     elif model_lib == 'pytorch':
@@ -135,7 +135,7 @@ def read_parquet(parameters,data_path=None):
 
     return x_train, x_test, y_train, y_test, nplaca_index
 
-def save_model_mlflow(parameters:dict, model, yhat:pd.DataFrame,ytest:pd.DataFrame, test_history, train_history, features, index_dict):
+def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataFrame,ytest:pd.DataFrame, test_history, train_history, features, index_dict):
 
     """
     Saves the model in the MLflow server.
@@ -162,7 +162,6 @@ def save_model_mlflow(parameters:dict, model, yhat:pd.DataFrame,ytest:pd.DataFra
 
     # Start an MLflow run
     # metrics
-    zero_flag = 0 if parameters['model_type'] == 'Naive' else -1
     metrics_dict = {
                     'Test Classification Accuracy': test_history['acc_class'][-1],
                     'Train Classification Accuracy': train_history['acc_class'][-1],
@@ -170,7 +169,9 @@ def save_model_mlflow(parameters:dict, model, yhat:pd.DataFrame,ytest:pd.DataFra
                     'Train Regression Accuracy': train_history['acc_reg'][-1],
                     'Test Regression Error': test_history['error_reg'][-1],
                     'Train Regression Error': train_history['error_reg'][-1],
-                    'Percentage of Zeros in Test': (ytest == zero_flag).sum().item()/len(ytest)
+                    'Percentage of Zeros in Test': 1 -(ytest == 1).sum().item()/len(ytest),
+                    'Test Size': len(ytest),
+                    'Train Size': len(ytrain)
                     }
 
     mlflow.log_metrics(metrics_dict)
