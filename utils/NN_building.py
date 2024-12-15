@@ -13,7 +13,7 @@ import pdb
 
 
 
-def xy_definition(data:pd.DataFrame, parameters:dict, ovos_flag:pd.DataFrame,
+def xy_definition(data:pd.DataFrame, parameters:dict,
                   info_cols:list, eggs_cols:list)->Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Fucntion to define the x and y variables according to the model type.
@@ -24,7 +24,6 @@ def xy_definition(data:pd.DataFrame, parameters:dict, ovos_flag:pd.DataFrame,
         model_type: string with the model type: classifier, regressor, exponential_renato, linear_regressor, logistic, GAM
         use_trap_info: flag to use the traps information like days and distances
         add_constant: flag to add a constant to the x variables
-    ovos_flag: dataframe with booleans indicating the presence of eggs
     inf_col: list with the name of columns of days, latitude, longitude, mesepid and novos
     eggs_cols: list with the name of columns of eggs
 
@@ -34,7 +33,12 @@ def xy_definition(data:pd.DataFrame, parameters:dict, ovos_flag:pd.DataFrame,
 
 
     """
-# definition of x and y
+    # Define the output variable according to the model type
+    if parameters['model_type'] == 'logistic' or parameters['model_type'] == 'Naive':      
+        ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else 0)#.rename('ovos_flag', inplace=True)
+    else:
+        ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else -1)
+
     if (parameters['model_type'] == 'classifier' or parameters['model_type'] == 'logistic' or parameters['model_type'] == 'GAM' 
         or parameters['model_type'] == 'Naive'or parameters['model_type'] == 'mlp'):
         y = ovos_flag
@@ -51,7 +55,14 @@ def xy_definition(data:pd.DataFrame, parameters:dict, ovos_flag:pd.DataFrame,
         x = data[eggs_cols]
     if parameters['add_constant'] == True:
         x = sm.add_constant(x)
-    
+
+    """
+    if 'mesepid' in x.columns:
+        month_cat = pd.get_dummies(x, columns=['mesepid'], drop_first=True)
+        x = pd.concat([x, month_cat], axis=1)
+        x.drop(columns=['mesepid'], inplace=True) 
+        pdb.set_trace()
+    """
     return x, y
 
 def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.array, y_test: np.array, model_type: str, device: str)->Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -216,7 +227,7 @@ def calc_model_output(model, xtest,loss_func_reg=None):
     else:
         raise ValueError('Model type not found')
               
-def forward_stepwise(X, y,parameters):
+def forward_stepwise(X, y,current_features ,parameters):
     """
     Perform forward stepwise selection to select the best features for a logistic regression model.
     The function starts with an empty set of features and adds the feature that minimizes the AIC at each step.
@@ -225,24 +236,24 @@ def forward_stepwise(X, y,parameters):
     Parameters:
     X: pd.DataFrame with the input features
     y: pd.Series with the target variable
+    current_features: list with the current features used in the model
+    parameters: dictionary with the parameters of the model
 
     Returns:
     final_model: the final logistic regression model
-    selected_features: list with the selected features
+    current_features: list with the selected features
     """
-
-    best_aic = np.inf
-    remaining_features = list(X.columns)
-    selected_features = []
+    if parameters['model_type'] == 'logistic':
+        best_aic = sm.Logit(y, X[current_features]).fit().aic
+    remaining_features = list(set(X.columns) - set(current_features))
 
     while remaining_features:
         aic_values = []
         for feature in remaining_features:
-            combined_features = selected_features + [feature]
+            combined_features = current_features + [feature]
 
             if parameters['model_type'] == 'logistic':
                 model = sm.Logit(y, X[combined_features]).fit()
-
             elif parameters['model_type'] == 'GAM':
                 spline_terms = []
 
@@ -261,7 +272,6 @@ def forward_stepwise(X, y,parameters):
                 else:
                     model = LogisticGAM().fit(X[combined_features], y)
                     model.fit(X[combined_features], y)        
-
             else:
                 raise TypeError(f"Model type {parameters['model_type']} not found")
             
@@ -272,34 +282,34 @@ def forward_stepwise(X, y,parameters):
         
         if best_model_aic < best_aic:
             best_aic = best_model_aic
-            selected_features.append(best_feature)
+            current_features.append(best_feature)
             remaining_features.remove(best_feature)
         else:
             break
     
     # Fit the final model with selected features
     if parameters['model_type'] == 'logistic':
-        final_model = sm.Logit(y, X[selected_features]).fit()
+        final_model = sm.Logit(y, X[current_features]).fit()
     elif parameters['model_type'] == 'GAM':
         spline_terms = []
-        if 'semepi' in selected_features:
+        if 'semepi' in current_features:
             spline_terms.append(s('semepi'))
-        if 'latitude0' in selected_features and 'longitude0' in selected_features:
+        if 'latitude0' in current_features and 'longitude0' in current_features:
             spline_terms.append(te('latitude0', 'longitude0'))
         else:
-            if 'latitude0' in selected_features:
+            if 'latitude0' in current_features:
                 spline_terms.append(s('latitude0'))
-            if 'longitude0' in selected_features:
+            if 'longitude0' in current_features:
                 spline_terms.append(s('longitude0'))
         if spline_terms:
-            model = LogisticGAM(spline_terms + [f for f in selected_features if f not in ['latitude0','longitude0','semepi']])
-            model.gridsearch(X[selected_features], y)
+            model = LogisticGAM(spline_terms + [f for f in current_features if f not in ['latitude0','longitude0','semepi']])
+            model.gridsearch(X[current_features], y)
         else:
-            model = LogisticGAM().fit(X[selected_features], y)
-            model.fit(X[selected_features], y)
-    return final_model, selected_features
+            model = LogisticGAM().fit(X[current_features], y)
+            model.fit(X[current_features], y)
+    return final_model, current_features
 
-def backward_stepwise(X, y,parameters):
+def backward_stepwise(X, y,current_features, parameters):
     """
     Perform backward stepwise selection to select the best features for a logistic regression model.
     The function fits a logistic regression model with all features, then removes the feature with the highest AIC.
@@ -308,19 +318,22 @@ def backward_stepwise(X, y,parameters):
     Parameters:
     X: pd.DataFrame with the input features
     y: pd.Series with the target variable
+    current_features: list with the current features used in the model
+    parameters: dictionary with the parameters of the model
 
     Returns:
     final_model: the final logistic regression model
-    selected_features: list with the selected features
+    current_features: list with the selected features
     """
 
-    selected_features = list(X.columns)
-    best_aic = np.inf
+    if parameters['model_type'] == 'logistic':
+        best_aic = sm.Logit(y, X[current_features]).fit().aic
+    remaining_features = list(set(X.columns) - set(current_features))
 
-    while len(selected_features) > 0:
+    while len(current_features) > 0:
         aic_values = []
-        for feature in selected_features:
-            remaining_features = selected_features.copy()
+        for feature in current_features:
+            remaining_features = current_features.copy()
             remaining_features.remove(feature)
             if parameters['model_type'] == 'logistic':
                 model = sm.Logit(y, X[remaining_features]).fit()
@@ -353,32 +366,32 @@ def backward_stepwise(X, y,parameters):
         
         if worst_model_aic < best_aic:
             best_aic = worst_model_aic
-            selected_features.remove(worst_feature)
+            current_features.remove(worst_feature)
         else:
             break
     
     # Fit the final model with selected features
     if parameters['model_type'] == 'logistic':
-        final_model = sm.Logit(y, X[selected_features]).fit()
+        final_model = sm.Logit(y, X[current_features]).fit()
     elif parameters['model_type'] == 'GAM': 
         spline_terms = []
-        if 'semepi' in selected_features:
+        if 'semepi' in current_features:
             spline_terms.append(s('semepi'))
-        if 'latitude0' in selected_features and 'longitude0' in selected_features:
+        if 'latitude0' in current_features and 'longitude0' in current_features:
             spline_terms.append(te('latitude0', 'longitude0'))
         else:
-            if 'latitude0' in selected_features:
+            if 'latitude0' in current_features:
                 spline_terms.append(s('latitude0'))
-            if 'longitude0' in selected_features:
+            if 'longitude0' in current_features:
                 spline_terms.append(s('longitude0'))
         if spline_terms:
-            model = LogisticGAM(spline_terms + [f for f in selected_features if f not in ['latitude0','longitude0','semepi']])
-            model.gridsearch(X[selected_features], y)
+            model = LogisticGAM(spline_terms + [f for f in current_features if f not in ['latitude0','longitude0','semepi']])
+            model.gridsearch(X[current_features], y)
         else:
-            model = LogisticGAM().fit(X[selected_features], y)
-            model.fit(X[selected_features], y) 
+            model = LogisticGAM().fit(X[current_features], y)
+            model.fit(X[current_features], y) 
 
-    return final_model, selected_features
+    return final_model, current_features
 
 def select_model_stepwise(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:dict, stepwise = False)->Tuple[sm.Logit, list]:
     """
@@ -395,13 +408,21 @@ def select_model_stepwise(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:
     model: the selected logistic regression model
     selected_features: list with the selected features
     """
-    if stepwise:
-        model_backward, features_backward = backward_stepwise(x_train, y_train,parameters)
-        model_forward, features_forward = forward_stepwise(x_train, y_train,parameters)
-        if model_backward.aic < model_forward.aic:
-            return model_backward, features_backward
-        else:
-            return model_forward, features_forward
+    if stepwise:        
+        current_features = ['const']
+        old_features = []   
+
+        while current_features != old_features:
+            old_features = current_features
+            pdb.set_trace()
+            _, current_features = forward_stepwise(x_train, y_train,current_features,parameters)
+            pdb.set_trace()
+
+            model_backward, current_features = backward_stepwise(x_train, y_train,current_features,parameters)
+
+
+        return model_backward, current_features
+
     else:
         features = list(x_train.columns)
         if parameters['model_type'] == 'logistic':

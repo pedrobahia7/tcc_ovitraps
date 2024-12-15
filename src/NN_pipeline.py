@@ -16,6 +16,7 @@ import mlflow
 import pandas as pd
 import numpy as np
 from typing import Tuple
+import statsmodels.api as sm
 
 
 def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None)->None:
@@ -73,9 +74,12 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
     # begin model training
     with mlflow.start_run():
 
-        if parameters['model_type'] == 'logistic' or parameters['model_type'] == 'GAM' :
-                #model, features = NN_building.select_model_stepwise(x_train, y_train,parameters)
-                model, features = NN_building.select_model_stepwise(x_train, y_train,parameters)
+        if parameters['model_type'] == 'logistic' or parameters['model_type'] == 'GAM' :                
+                if 'select_features' in parameters.keys() and parameters['select_features'] == True:
+                    model, features = NN_building.select_model_stepwise(x_train, y_train,parameters, stepwise=True)
+                else:
+                    model =  sm.Logit(y_train, x_train).fit()
+                    features = x_train.columns
                 yhat_train = (model.predict(x_train[features]) >= 0.5).astype(int)
                 yhat = (model.predict(x_test[features]) >= 0.5).astype(int)
                 NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
@@ -209,14 +213,10 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
     else:
         data = NN_preprocessing.create_final_matrix(parameters['lags'],parameters['ntraps'],save_path=data_path) # TODO add perc zero and mesepid
 
-    if parameters['model_type'] == 'logistic' or parameters['model_type'] == 'Naive':      
-        ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else 0)#.rename('ovos_flag', inplace=True)
-    else:
-        ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else -1)
     #data['zero_perc'] = 1 - data['zero_perc'] TODO: create flag one_perc 
+    features_to_add = ['semepi', 'zero_perc', 'semepi2', 'sin_semepi', 'sin_mesepi', 'mesepid']
 
 # divide columns into groups
-
     if parameters['cylindrical_input'] == False:
         days_columns = [f'days{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
         eggs_columns = [f'trap{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
@@ -228,7 +228,7 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
 
     lat_column = ['latitude0']
     long_column = ['longitude0']
-    features_to_add = ['semepi', 'zero_perc', 'semepi2', 'sin_semepi']
+
     info_cols  = eggs_columns + lat_column + long_column + features_to_add + ['nplaca']
 
     if parameters['split_type'] == 'year':
@@ -241,15 +241,15 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
     if parameters['truncate_100']:
         transformed_data = data[eggs_columns].map(lambda x: 100 if x > 100 else x) # TODO not bool input flag
         data[eggs_columns] = transformed_data
-
-# add semepi^2 and half sin(semedi)
-    data['semepi2'] = data['semepi']**2 
-    data['sin_semepi'] = np.sin(np.pi*data['semepi']/max(data['semepi']))
-    x, y = NN_building.xy_definition( data=data, parameters = parameters, ovos_flag=ovos_flag,
+    
+    if 'info_cols' in parameters.keys():
+        info_cols = parameters['info_cols']
+    # columns to be added as input
+    x, y = NN_building.xy_definition( data=data, parameters = parameters,
                           info_cols=info_cols, eggs_cols=eggs_columns)
     
 # train test split
-    x_train, x_test, y_train, y_test, index_dict = NN_preprocessing.data_train_test_split(x, y, parameters ,ovos_flag)
+    x_train, x_test, y_train, y_test, index_dict = NN_preprocessing.data_train_test_split(x, y, parameters)
     
     # scaling
     if parameters['scale']:
