@@ -30,12 +30,10 @@ cluster regional
 
 
 ANÁLISE DOS DADOS:
-Plot sin over serie
 Mensurar concept drift
 Análise de Fourier (verificar alguma frequência importante)
 Mudança na média de ovos ao longo do tempo por armadilha
 pacotes de ajuste de distriuição automatica
-plot nsamples by neigh and lags
 comparar datasets de treino e teste para ver se eles seguem mesma distribuição
 número de dias de exposição: fazer análise de correlação e adicionar como variável 
 cluster espacial como variável (análise espacia!) -> talvez introdução de variáveis exógenas tirem a dependcência geográfica (modelar e analisar resíduos)
@@ -48,7 +46,7 @@ Music Informatics - método para identificar reta e ponto onde ela começa/
 FEATURE SELECTION:
 vairaveis exogenas
 Granger causality to add new traps and external variables
-Informação Mútua e correlação de Spearman para definir correlações
+correlação de Spearman para definir correlações
 
 
 
