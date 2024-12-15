@@ -88,7 +88,7 @@ def plot_time_series_yearly(df:pd.DataFrame, column:str, xaxis:str ,title:str, x
     """
     if xaxis == 'week':
         xaxis = 'semepi'
-        offset = 100
+        offset = 0
     elif xaxis == 'month':
         xaxis = 'mesepid'
         offset = 0
@@ -132,14 +132,16 @@ def plot_time_series_yearly(df:pd.DataFrame, column:str, xaxis:str ,title:str, x
         legend=dict(
             title=dict(font=dict(size=12)),
             x=1,  # Position legend outside of the plot area
-            y=1,
+            y=0,
+            font=dict(size=10),
+
             traceorder='normal'
         ),
         template='plotly_white'  # Optional: use a white background
     )
 
     # Show the plot
-    fig.show()
+    return fig
 
 def plot_time_series_cat(df:pd.DataFrame, column:str, xaxis:str ,title:str, xaxis_title:str, yaxis_title:str,):
     """
@@ -443,13 +445,14 @@ def plot_results_pytorch(variable_plot, list_plot,version_list,size,epochs,mt):
 
 
 
-def surface_plot(z,ztitle): 
+def surface_plot(z, ztitle, plot_title = '3D Surface Plot'): 
     """
     Plot a 3D surface plot using Plotly
 
     Parameters:
     z: Pivoted DataFrame containing the values to be plotted 
     ztitle : Title of the z axis
+    plot_title: Title of the plot
     
     """
     z.index = z.index.astype(int)
@@ -461,7 +464,7 @@ def surface_plot(z,ztitle):
 
     # Update layout for better readability
     fig.update_layout(
-        title="3D Surface Plot",
+        title=plot_title,
         scene=dict(
             xaxis_title='Lags (X)', 
             yaxis_title='Number of neighbors (Y)',
