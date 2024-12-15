@@ -375,8 +375,7 @@ def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = './
     return final_df
 
 
-def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, parameters:dict, 
-        ovos_flag:pd.Series)->Tuple[pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame]:
+def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, parameters:dict)->Tuple[pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame]:
     """
     Split the data into train and test sets
 
@@ -388,7 +387,6 @@ def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, parameters:dict,
         split_type: str to define how split is done. 'random' or 'sequential' or 'year'
         year_list_train: list with the years to be used in the train set
         year_list_test: list with the years to be used in the test set
-    ovos_flag: pandas series with the flag of the ovos
 
     Returns:
     x_train: pandas dataframe with the features of the train set
@@ -403,7 +401,7 @@ def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, parameters:dict,
 
     if parameters['split_type'] == 'random':
         x_train, x_test, y_train, y_test = train_test_split(x, y, 
-                                test_size=parameters['test_size'], random_state=42, stratify=ovos_flag)
+                                test_size=parameters['test_size'], random_state=42, stratify=y)
         
     elif parameters['split_type'] == 'sequential':
         train_size = 1 - parameters['test_size']
