@@ -37,8 +37,12 @@ if __name__ == '__main__':
     truncate_100 = False 
     cylindrical_input = False
     add_constant = True
-    month_experiment = False # If True, ytrain will be divided by month and some random months will be selected for testing
-    select_features = True
+    select_features = True # If True, feature selection will be performed 
+    type_of_selection = 'backward' # 'forward', 'backward' or 'stepwise
+    
+    all_cols = True # If True, all columns will be used, if False, only selected features will be used
+    # Features to be used in the model
+    #info_cols = ['latitude0', 'longitude0', 'mesepid', 'semepi', 'semepi2', 'sin_mesepi', 'sin_semepi', 'trap0_lag1', 'trap0_lag10', 'trap0_lag11', 'trap0_lag13', 'trap0_lag14', 'trap0_lag2', 'trap0_lag3', 'trap0_lag4', 'trap0_lag5', 'trap0_lag6', 'trap0_lag9', 'trap10_lag1', 'trap10_lag14', 'trap11_lag1', 'trap12_lag1', 'trap12_lag13', 'trap12_lag2', 'trap13_lag1', 'trap14_lag1', 'trap14_lag2', 'trap14_lag3', 'trap15_lag1', 'trap16_lag1', 'trap16_lag14', 'trap18_lag1', 'trap19_lag1', 'trap19_lag2', 'trap1_lag1', 'trap1_lag2', 'trap2_lag1', 'trap2_lag2', 'trap2_lag3', 'trap3_lag1', 'trap3_lag2', 'trap4_lag1', 'trap4_lag13', 'trap4_lag2', 'trap5_lag1', 'trap6_lag1', 'trap6_lag2', 'trap7_lag1', 'trap8_lag1', 'trap9_lag1', 'zero_perc']
 
 
     # Train and Test split parameters
@@ -47,7 +51,7 @@ if __name__ == '__main__':
     all_years_list = ['2011_12', '2012_13', '2013_14', '2014_15', '2015_16', '2016_17', '2017_18', '2018_19', '2019_20', '2020_21', '2021_22', '2022_23', '2023_24', '2024_25']
     year_list_train = ['2011_12', '2012_13', '2013_14', '2014_15', '2015_16', '2016_17', '2017_18', '2018_19', '2019_20', '2020_21', '2021_22'] # ['2011_12', ..., '2024_25'] be careful about the first and last year
     year_list_test = ['2022_23', '2023_24', '2024_25']
-
+    month_experiment = False # If True, ytrain will be divided by month and some random months will be selected for testing
 
     
 
@@ -61,6 +65,7 @@ if __name__ == '__main__':
     tolerance = 1e-5
     n_iter_no_change = 30
 
+# Run pipeline
     parameters = {
         'model_type': models,
         'use_trap_info': use_trap_info,
@@ -81,6 +86,12 @@ if __name__ == '__main__':
         'year_list_test': year_list_test,
         'month_experiment': month_experiment,
         'select_features': select_features,
+        'type_of_selection': type_of_selection,
+        'all_cols': all_cols,
+        #'info_cols': info_cols  
+
+
+        
 
         }
     

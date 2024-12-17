@@ -393,7 +393,7 @@ def backward_stepwise(X, y,current_features, parameters):
 
     return final_model, current_features
 
-def select_model_stepwise(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:dict, stepwise = False)->Tuple[sm.Logit, list]:
+def select_model_stepwise(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:dict, type = 'bidirectional')->Tuple[sm.Logit, list]:
     """
     Select the best model using forward and backward stepwise selection.
     The function compares the AIC of the models obtained with forward and backward stepwise selection
@@ -403,58 +403,72 @@ def select_model_stepwise(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:
     x_train: pd.DataFrame with the input features
     y_train: pd.Series with the target variable
     parameters: dictionary with the parameters of the model
+    type: string with the type of stepwise selection: forward, backward or bidirectional
 
     Returns:
     model: the selected logistic regression model
     selected_features: list with the selected features
     """
-    if stepwise:        
+    if type == 'forward':
+        model_forward, selected_features = forward_stepwise(x_train, y_train, ['const'], parameters)
+        return model_forward, selected_features
+    elif type == 'backward':
+        model_backward, selected_features = backward_stepwise(x_train, y_train, x_train.columns.to_list() ,parameters)
+        return model_backward, selected_features
+    elif type == 'bidirectional':
         current_features = ['const']
         old_features = []   
-
         while current_features != old_features:
             old_features = current_features
-            pdb.set_trace()
             _, current_features = forward_stepwise(x_train, y_train,current_features,parameters)
-            pdb.set_trace()
-
             model_backward, current_features = backward_stepwise(x_train, y_train,current_features,parameters)
-
-
+        if 'const' not in current_features:
+            current_features = ['const'] + current_features 
         return model_backward, current_features
 
-    else:
-        features = list(x_train.columns)
-        if parameters['model_type'] == 'logistic':
-            model = sm.Logit(y_train,x_train[features]).fit()
-
-        elif parameters['model_type'] == 'GAM':
-            spline_terms = []
-
-            if 'semepi' in  features:
-                spline_terms.append(s(x_train.columns.get_loc('semepi')))
-            if 'latitude0' in   features and 'longitude0' in  features:
-                spline_terms.append(te(x_train.columns.get_loc('latitude0'), x_train.columns.get_loc('longitude0')))
-            else:
-                if 'latitude0' in features:
-                    spline_terms.append(s(x_train.columns.get_loc('latitude0')))
-                if 'longitude0' in  features:
-                    spline_terms.append(s(x_train.columns.get_loc('longitude0')))
-            if spline_terms:
-                spline_terms = spline_terms + [l(x_train.columns.get_loc(f)) for f in features if f not in ['latitude0','longitude0','semepi']]
-                terms = spline_terms[0]
-                for i in spline_terms[1:]:
-                    terms += i
-                model = LogisticGAM(terms).fit(x_train[features], y_train)
-            else:
-                model = LogisticGAM().fit(x_train[features], y_train)
-                model.fit(x_train[features], y_train)        
-
-        else:
-            raise TypeError(f"Model type {parameters['model_type']} not found")
-
-        return model, features
     
+
+
+def GAM_model(x_train:pd.DataFrame, y_train:pd.DataFrame)->LogisticGAM:
+    """
+    Fit a Generalized Additive Model (GAM) to the data. The function fits a GAM model with splines for the semepi, latitude and longitude variables.
+
+    Parameters:
+    x_train: pd.DataFrame with the input features
+    y_train: pd.Series with the target variable
+    parameters: dictionary with the parameters of the model
+
+    Returns:
+    model: the fitted GAM model
+    features: list with the selected features
+    """
+
+    features = x_train.columns.tolist()
+    spline_terms = []
+    if 'semepi' in  features:
+        spline_terms.append(s(x_train.columns.get_loc('semepi')))
+    if 'latitude0' in   features and 'longitude0' in  features:
+        spline_terms.append(te(x_train.columns.get_loc('latitude0'), x_train.columns.get_loc('longitude0')))
+    else:
+        if 'latitude0' in features:
+            spline_terms.append(s(x_train.columns.get_loc('latitude0')))
+        if 'longitude0' in  features:
+            spline_terms.append(s(x_train.columns.get_loc('longitude0')))
+    if spline_terms:
+        spline_terms = spline_terms + [l(x_train.columns.get_loc(f)) for f in features if f not in ['latitude0','longitude0','semepi']]
+        terms = spline_terms[0]
+        for i in spline_terms[1:]:
+            terms += i
+        model = LogisticGAM(terms).fit(x_train[features], y_train)
+    else:
+        model = LogisticGAM().fit(x_train[features], y_train)
+        model.fit(x_train[features], y_train)        
+    return model, features
+ 
+
+
+
+
 def easy_save(train_history:dict, test_history:dict, yhat_train:list, ytrain:list, yhat:list, ytest:list, model_type:str,loss_func_class:float, loss_func_reg:float):
     """
     Function to save the results of the model in a dictionary previously created  

@@ -76,10 +76,14 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
 
         if parameters['model_type'] == 'logistic' or parameters['model_type'] == 'GAM' :                
                 if 'select_features' in parameters.keys() and parameters['select_features'] == True:
-                    model, features = NN_building.select_model_stepwise(x_train, y_train,parameters, stepwise=True)
+                    model, features = NN_building.select_model_stepwise(x_train, y_train,parameters, type= parameters['type_of_selection'])
                 else:
-                    model =  sm.Logit(y_train, x_train).fit()
-                    features = x_train.columns
+                    if parameters['model_type'] == 'logistic':
+                        features = list(x_train.columns)
+                        model = sm.Logit(y_train,x_train[features]).fit()
+                    elif parameters['model_type'] == 'GAM':
+                        model, features = NN_building.GAM_model(x_train, y_train, parameters)
+
                 yhat_train = (model.predict(x_train[features]) >= 0.5).astype(int)
                 yhat = (model.predict(x_test[features]) >= 0.5).astype(int)
                 NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
@@ -150,7 +154,6 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
             
             yhat = NN_building.calc_model_output(model, xtest,loss_func_reg)
             
-            torch.save(model.state_dict(), f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_final.pth")
         
         mlflow_utils.save_model_mlflow(parameters=parameters, model=model, ytrain=y_train,
                         yhat = yhat, ytest = y_test, test_history = test_history, 
@@ -181,6 +184,9 @@ def check_parameters(parameters:dict):
     if parameters['split_type'] == 'year':
         assert len(parameters['year_list_train']) > 0, 'Year list train must be defined for year split'
         assert len(parameters['year_list_test']) > 0, 'Year list test must be defined for year split'
+
+    if 'info_cols' in parameters.keys():
+         parameters['all_cols']==False, 'all_cols cant be used if info_cols is set manually'
 
 def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, int]:
     """
@@ -213,37 +219,49 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
     else:
         data = NN_preprocessing.create_final_matrix(parameters['lags'],parameters['ntraps'],save_path=data_path) # TODO add perc zero and mesepid
 
-    #data['zero_perc'] = 1 - data['zero_perc'] TODO: create flag one_perc 
-    features_to_add = ['semepi', 'zero_perc', 'semepi2', 'sin_semepi', 'sin_mesepi', 'mesepid']
-
-# divide columns into groups
-    if parameters['cylindrical_input'] == False:
-        days_columns = [f'days{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
+  
+    if 'info_cols' in parameters.keys():
+        info_cols = parameters['info_cols'] + ['anoepid','nplaca']
         eggs_columns = [f'trap{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
-    elif parameters['cylindrical_input'] == True:
-        days_columns = [f'days{i}_lag{j}' for i in [0] for j in range(1, 6)]
-        eggs_columns = [f'trap{i}_lag{j}' for i in [0] for j in range(1, 6)]
-        days_columns += [f'days{i}_lag{j}' for i in range(1, parameters['ntraps']) for j in range(1, 3)]
-        eggs_columns += [f'trap{i}_lag{j}' for i in range(1, parameters['ntraps']) for j in range(1, 3)]
 
-    lat_column = ['latitude0']
-    long_column = ['longitude0']
+    else:
 
-    info_cols  = eggs_columns + lat_column + long_column + features_to_add + ['nplaca']
+        if parameters['all_cols'] == True:
+            info_cols = [col for col in data.columns if col not in ['novos']]
+            eggs_columns = [f'trap{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
 
-    if parameters['split_type'] == 'year':
-        info_cols += ['anoepid']
+            
+        else:
+            #data['zero_perc'] = 1 - data['zero_perc'] TODO: create flag one_perc 
+            features_to_add = ['semepi', 'zero_perc', 'semepi2', 'sin_semepi', 'sin_mesepi', 'mesepid']
+
+        # divide columns into groups
+            if parameters['cylindrical_input'] == False:
+                days_columns = [f'days{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
+                eggs_columns = [f'trap{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
+            elif parameters['cylindrical_input'] == True:
+                days_columns = [f'days{i}_lag{j}' for i in [0] for j in range(1, 6)]
+                eggs_columns = [f'trap{i}_lag{j}' for i in [0] for j in range(1, 6)]
+                days_columns += [f'days{i}_lag{j}' for i in range(1, parameters['ntraps']) for j in range(1, 3)]
+                eggs_columns += [f'trap{i}_lag{j}' for i in range(1, parameters['ntraps']) for j in range(1, 3)]
+
+            lat_column = ['latitude0']
+            long_column = ['longitude0']
+
+            info_cols  = eggs_columns + lat_column + long_column + features_to_add + ['nplaca']
+
+            if parameters['split_type'] == 'year':
+                info_cols += ['anoepid']
+
     #transform values to 0 and 1
     if parameters['bool_input']:
-        transformed_data = data[eggs_columns].map(lambda x: 1 if x > 1 else x) # TODO not bool input flag
+        transformed_data = data[eggs_columns].map(lambda x: 1 if x > 1 else x) 
         data[eggs_columns] = transformed_data
     
     if parameters['truncate_100']:
-        transformed_data = data[eggs_columns].map(lambda x: 100 if x > 100 else x) # TODO not bool input flag
+        transformed_data = data[eggs_columns].map(lambda x: 100 if x > 100 else x) 
         data[eggs_columns] = transformed_data
     
-    if 'info_cols' in parameters.keys():
-        info_cols = parameters['info_cols']
     # columns to be added as input
     x, y = NN_building.xy_definition( data=data, parameters = parameters,
                           info_cols=info_cols, eggs_cols=eggs_columns)
