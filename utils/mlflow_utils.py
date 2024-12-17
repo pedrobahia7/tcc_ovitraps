@@ -4,10 +4,22 @@ import json
 import numpy as np
 import utils.NN_building as NN_building
 import pdb
+import datetime
+import pickle
+import torch
 
 
 
-def get_runs_by_parameters(parameters):
+def get_runs_by_parameters(parameters:dict)->pd.DataFrame:
+    """
+    Get df with runs and theirs informations filtered by parameters
+
+    Parameters:
+    parameters: dictionary containing the parameters used to filter the runs
+
+    Returns:
+    runs_df: DataFrame containing the runs and their informations
+    """
     # Construct the filter to check model version
     filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items()])
     # Search for existing runs using the constructed filter string
@@ -28,7 +40,7 @@ def info_from_artifacts(runs_df:pd.DataFrame,artifact_path:str):
     
     Parameters:
     runs_df: DataFrame of runs containing the run_id for each analysed model
-    artifact_path: path to the artifact to be retrieved ['test_history.json', 'train_history.json', 'output.json']
+    artifact_path: path to the artifact to be retrieved ['test_history.json', 'train_history.json', 'output.json', 'index_dict_test.json', 'index_dict_train.json']
 
     Returns:
     test_history_list: list of dictionaries containing the test history of each model
@@ -92,6 +104,16 @@ def load_model(runs_df:pd.Series, model_lib:str):
         raise ValueError('Model library not supported')
     
 def compare_predictions(yhat, ytest):
+    """
+    Compare the predictions with the test labels and return a boolean array with the results
+
+    Parameters:
+    yhat: predicted labels
+    ytest: test labels
+
+    Returns:
+    bool_index: boolean array with the results of the comparison
+    """
     # Initialize an empty boolean array
     bool_index = np.empty(0, dtype=bool)
     # Loop through yhat and ytest to compare elements
@@ -140,9 +162,21 @@ def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataF
     """
     Saves the model in the MLflow server.
     """
+    #  model
+
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").replace(" ", "_").replace(":", "_")
+
+    if parameters['model_type'] == 'logistic' or  parameters['model_type'] == 'mlp':
+        pickle.dump(model, open(f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pkl", 'wb'))
+    elif parameters['model_type'] == 'Naive':
+        pass
+    elif  parameters['model_type'] == 'GAM':
+        model.save(f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pgam")
+    else:
+        torch.save(model.state_dict(), f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pth")
 
     # Construct the filter to check model versio
-    filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items() if key not in ['mlp_params','year_list_test','year_list_train'] ] )
+    filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items() if key not in ['mlp_params','year_list_test','year_list_train','info_cols'] ] )
     
     # Convert year lists to strings and add to filter string
     year_list_test = ','.join(map(str, parameters['year_list_test']))

@@ -259,8 +259,19 @@ def convert_html_to_image(html_path):
     # Open the HTML file using the file URL
     driver.get(html_file_url)
 
+    # Zoom
+    driver.execute_script("document.body.style.zoom='80%'")
+
+    # Dynamically adjust the window size to capture the full page
+    width = driver.execute_script("return document.body.scrollWidth")
+    height = driver.execute_script("return document.body.scrollHeight")
+    driver.set_window_size(width, height)
+
+
     # Take a screenshot and save it as an image
     image_path = html_path.replace('.html', '.png')
+    import time
+    time.sleep(2)
     driver.save_screenshot(image_path)
 
     # Close the driver
