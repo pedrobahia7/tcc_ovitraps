@@ -37,6 +37,10 @@ pacotes de ajuste de distriuição automatica
 comparar datasets de treino e teste para ver se eles seguem mesma distribuição
 número de dias de exposição: fazer análise de correlação e adicionar como variável 
 cluster espacial como variável (análise espacia!) -> talvez introdução de variáveis exógenas tirem a dependcência geográfica (modelar e analisar resíduos)
+    Local join counts (https://pysal.org/esda/notebooks/localjoincounts.html and https://en.wikipedia.org/wiki/Join_count_statistic)
+    SKATER (https://pysal.org/spopt/notebooks/skater.html)
+
+
 log da variavel de saída -> histograma para verificar se cauda pesada está ausente (mesma análise para boxcox)
 Music Informatics - método para identificar reta e ponto onde ela começa/
 
