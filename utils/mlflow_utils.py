@@ -166,7 +166,7 @@ def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataF
 
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").replace(" ", "_").replace(":", "_")
 
-    if parameters['model_type'] == 'logistic' or  parameters['model_type'] == 'mlp':
+    if parameters['model_type'] == 'logistic' or  parameters['model_type'] == 'mlp' or parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'svm':
         pickle.dump(model, open(f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pkl", 'wb'))
     elif parameters['model_type'] == 'Naive':
         pass
@@ -242,7 +242,7 @@ def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataF
         mlflow.statsmodels.log_model(model, "model")#,signature=signature)                      # Log model
     elif parameters['model_type'] == 'GAM'or parameters['model_type'] == 'Naive':
         pass
-    elif parameters['model_type'] == 'mlp':
+    elif parameters['model_type'] == 'mlp' or parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'svm':
         mlflow.sklearn.log_model(model, "model")
     else:
         mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model

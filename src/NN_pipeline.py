@@ -23,7 +23,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
     """
     Creates a neural network according to the parameters passed in the dictionary. 
     The dictionary must contain:
-        model_type: classifier, regressor, exponential_renato, linear_regressor, logistic
+        model_type: classifier, regressor, exponential_renato, linear_regressor, logistic, mlp, random_forest, Naive, GAM
         use_trap_info: flag to use the traps information like days and distances
         ntraps: number of traps to be considered
         lags: number of lags to be considered
@@ -52,7 +52,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
     data_path: str, path to the data file
     """
     # Check if the parameters are valid
-    check_parameters(parameters)
+    parameters = check_parameters(parameters)
 
 
     # create dataset
@@ -89,6 +89,22 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
                 NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
                     parameters['model_type'],loss_func_class, loss_func_reg)
 
+        elif parameters['model_type'] == 'random_forest':
+            model = NN_building.random_forest_model(x_train, y_train, parameters)
+            yhat_train = model.predict(x_train)
+            yhat = model.predict(x_test)
+            NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test,   
+                        parameters['model_type'],loss_func_class, loss_func_reg)
+            features = list(x_train.columns)
+
+        elif parameters['model_type'] == 'svm':
+            model = NN_building.svm_model(x_train, y_train, parameters)
+            yhat_train = model.predict(x_train)
+            yhat = model.predict(x_test)
+            NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
+                    parameters['model_type'],loss_func_class, loss_func_reg)
+            features = list(x_train.columns)
+
         elif parameters['model_type'] == 'Naive': 
             yhat_train = x_train['trap0_lag1'] 
             yhat = x_test['trap0_lag1'] 
@@ -115,8 +131,6 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
             parameters['hidden_layer_sizes'] = parameters['mlp_params']['hidden_layer_sizes']
             parameters['solver'] = parameters['mlp_params']['solver']
             parameters['learning_rate_type'] = parameters['mlp_params']['learning_rate']
-
-
 
         else: #Pytorch models   
 
@@ -159,7 +173,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
                         yhat = yhat, ytest = y_test, test_history = test_history, 
                         train_history = train_history, features = features, index_dict = index_dict)
         
-def check_parameters(parameters:dict):
+def check_parameters(parameters:dict)->dict:
     """
     Function to check if the parameters are valid.
 
@@ -167,7 +181,7 @@ def check_parameters(parameters:dict):
     parameters: dictionary with the parameters of the model
 
     Returns:
-    None
+    parameters: dictionary with modified  parameters of the model
     """
 
 
@@ -175,11 +189,13 @@ def check_parameters(parameters:dict):
         assert parameters['input_3d'] == False , '3D input is only available if trap information is used'
     
     if parameters['cylindrical_input']:
-        assert (parameters['ntraps'] >= 10 and parameters['lags'] >= 5), 'Cylindrical input is only available for ntraps > 10 and lags > 5'
+        assert (parameters['lags'] >= 5), 'Cylindrical input is only available for lags >= 5'
     assert not(parameters['truncate_100'] == True and parameters['bool_input'] == True), 'Truncate 100 and bool input cannot be true at the same time' 
 
     if parameters['model_type']=='Naive':
-        assert parameters['bool_input'] == True, 'Naive model currently only accepts bool input'
+        parameters['bool_input'] =True
+        parameters['truncate_100'] = False
+        #, 'Naive model currently only accepts bool input'
 
     if parameters['split_type'] == 'year':
         assert len(parameters['year_list_train']) > 0, 'Year list train must be defined for year split'
@@ -187,6 +203,7 @@ def check_parameters(parameters:dict):
 
     if 'info_cols' in parameters.keys():
          parameters['all_cols']==False, 'all_cols cant be used if info_cols is set manually'
+    return parameters
 
 def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, int]:
     """
@@ -233,17 +250,19 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
             
         else:
             #data['zero_perc'] = 1 - data['zero_perc'] TODO: create flag one_perc 
-            features_to_add = ['semepi', 'zero_perc', 'semepi2', 'sin_semepi', 'sin_mesepi', 'mesepid']
+            features_to_add = [ 'zero_perc','mesepid']
 
         # divide columns into groups
             if parameters['cylindrical_input'] == False:
-                days_columns = [f'days{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
+                #days_columns = [f'days{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
+                days_columns = []
                 eggs_columns = [f'trap{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
             elif parameters['cylindrical_input'] == True:
-                days_columns = [f'days{i}_lag{j}' for i in [0] for j in range(1, 6)]
-                eggs_columns = [f'trap{i}_lag{j}' for i in [0] for j in range(1, 6)]
-                days_columns += [f'days{i}_lag{j}' for i in range(1, parameters['ntraps']) for j in range(1, 3)]
+                #days_columns = [f'days{i}_lag{j}' for i in [0] for j in range(1, 6)]
+                eggs_columns = [f'trap{i}_lag{j}' for i in [0] for j in range(1, max(11,parameters['lags']+1))]
+                #days_columns += [f'days{i}_lag{j}' for i in range(1, parameters['ntraps']) for j in range(1, )]
                 eggs_columns += [f'trap{i}_lag{j}' for i in range(1, parameters['ntraps']) for j in range(1, 3)]
+                days_columns = []
 
             lat_column = ['latitude0']
             long_column = ['longitude0']
@@ -266,7 +285,7 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
     x, y = NN_building.xy_definition( data=data, parameters = parameters,
                           info_cols=info_cols, eggs_cols=eggs_columns)
     
-# train test split
+    # train test split
     x_train, x_test, y_train, y_test, index_dict = NN_preprocessing.data_train_test_split(x, y, parameters)
     
     # scaling
@@ -280,8 +299,8 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
         x_test = NN_preprocessing.create_3d_input(x_test, parameters['ntraps'], parameters['lags'])
         y_train, y_test = y_train.to_numpy(), y_test.to_numpy()
 
-    if not(parameters['model_type'] == 'logistic' or parameters['model_type'] == 'GAM' 
-           or parameters['model_type'] == 'Naive' or parameters['model_type'] == 'mlp'):    #return a numpy array instead of a df
+    if not(parameters['model_type'] == 'logistic' or parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'GAM' 
+           or parameters['model_type'] == 'Naive' or parameters['model_type'] == 'mlp' or parameters['model_type']=='svm'):    #return a numpy array instead of a df
         x_train, x_test, y_train, y_test = x_train.to_numpy(), x_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy()
 
     return x_train, x_test, y_train, y_test, index_dict
