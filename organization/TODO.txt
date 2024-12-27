@@ -1,7 +1,6 @@
 REUNIÕES:
 30/35 armadilhas ruins
 mais comum entre 10 e 150
-quais anos eu estava analisando antes?
 encontrar regionais com taxa amostral semanal 
 calcular número de armadilhas que deveriam ser colocadas
 
@@ -35,7 +34,6 @@ Análise de Fourier (verificar alguma frequência importante)
 Mudança na média de ovos ao longo do tempo por armadilha
 pacotes de ajuste de distriuição automatica
 comparar datasets de treino e teste para ver se eles seguem mesma distribuição
-número de dias de exposição: fazer análise de correlação e adicionar como variável 
 cluster espacial como variável (análise espacia!) -> talvez introdução de variáveis exógenas tirem a dependcência geográfica (modelar e analisar resíduos)
     Local join counts (https://pysal.org/esda/notebooks/localjoincounts.html and https://en.wikipedia.org/wiki/Join_count_statistic)
     SKATER (https://pysal.org/spopt/notebooks/skater.html)
@@ -48,7 +46,6 @@ Music Informatics - método para identificar reta e ponto onde ela começa/
 
 
 FEATURE SELECTION:
-vairaveis exogenas
 Granger causality to add new traps and external variables
 correlação de Spearman para definir correlações
 
@@ -72,7 +69,6 @@ Mosaic plot: regression vs novos
 Análise dos erros
     Procurar amostras semelhantes
     armadilhas constantemente erradas
-    mapa com tamanho da armadilha equivalente ao erro 
 
     
 
@@ -82,13 +78,13 @@ Poisson
 Linear
 introduzir double poisson na função de custo 
 log da variavel de saída 
-Modelos ARIMA, SARIMA, catboost, RF, SVM(com kernels diferentes)
+Modelos ARIMA, SARIMA, catboost, SVM(com kernels diferentes)
 aprendizado hebbiano para lidar com dados espaço temporais w_hebb = x_0y_0                  
 Modelagem de baixa frgequência para verificar tendência e comparar com armadilhas vizinhas. Talvez elas tenham curvas parecidas, apenas multiplicadas por um fator de escala
-Rede baseada em grafosd
+Rede baseada em grafos
 Comparar análise bayesiana com inteiramente computacional
 Classificador para definir qual das distribuilções seguir
-
+Introduce Ray Tunning
 
 
 
@@ -98,11 +94,8 @@ Percentage of zeros in exponential_renato is doubled
 adapt input_3d to logistic and linear regressor
 3D dimension: lat, long, week, year consatants to original trap
 january data is dropped in final matrix with lag 3 
-Substituir logistic and linear regression por sklearn
 retirar pareto individual do mapa
 Loss function regresion >>> Loss function classification -> terrible network (everything is 0 or 1). Create a second network only with non null values. after classification or before it? 
-
-
 
 
 

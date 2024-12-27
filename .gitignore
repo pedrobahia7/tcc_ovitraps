@@ -4,3 +4,4 @@ __pycache__/
 results/
 mlruns/
 mlartifacts/
+catboost_info
