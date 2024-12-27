@@ -166,9 +166,11 @@ def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataF
 
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").replace(" ", "_").replace(":", "_")
 
-    if parameters['model_type'] == 'logistic' or  parameters['model_type'] == 'mlp' or parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'svm':
+    if (parameters['model_type'] == 'logistic' or  parameters['model_type'] == 'mlp' or parameters['model_type'] == 'random_forest' or 
+        parameters['model_type'] == 'catboost' or parameters['model_type']=='logistic_3c' or parameters['model_type'] == 'random_forest_3c'):
         pickle.dump(model, open(f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pkl", 'wb'))
-    elif parameters['model_type'] == 'Naive':
+    elif (parameters['model_type'] == 'Naive' or parameters['model_type'] == 'svm' or 
+          parameters['model_type'] == 'Naive_3c'):
         pass
     elif  parameters['model_type'] == 'GAM':
         model.save(f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pgam")
@@ -176,7 +178,8 @@ def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataF
         torch.save(model.state_dict(), f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pth")
 
     # Construct the filter to check model versio
-    filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items() if key not in ['mlp_params','year_list_test','year_list_train','info_cols'] ] )
+    filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items() if key not in
+                                   ['catboost_params','mlp_params','rf_params','svm_params','year_list_test','year_list_train','info_cols'] ] )
     
     # Convert year lists to strings and add to filter string
     year_list_test = ','.join(map(str, parameters['year_list_test']))
@@ -203,7 +206,7 @@ def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataF
                     'Train Regression Accuracy': train_history['acc_reg'][-1],
                     'Test Regression Error': test_history['error_reg'][-1],
                     'Train Regression Error': train_history['error_reg'][-1],
-                    'Percentage of Zeros in Test': 1 -(ytest == 1).sum().item()/len(ytest),
+                    'Percentage of Zeros in Test': (ytest == 0).sum().item()/len(ytest),
                     'Test Size': len(ytest),
                     'Train Size': len(ytrain)
                     }
@@ -218,12 +221,26 @@ def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataF
     
     # Log parameters
     for key, value in parameters.items() :
-        if key not in ['mlp_params','year_list_test','year_list_train']:
+        if key not in ['mlp_params','rf_params','year_list_test','year_list_train']:
             mlflow.log_param(key, value)
     
     mlflow.log_param('year_list_train', year_list_train)
     mlflow.log_param('year_list_test', year_list_test)
 
+    if parameters['model_type'] == 'mlp':
+        mlflow.log_params(parameters['mlp_params'],'mlp_params')
+    
+    if parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'random_forest_3c':
+        mlflow.log_params(parameters['rf_params'],'rf_params')
+
+    if parameters['model_type'] == 'svm':
+        mlflow.log_params(parameters['svm_params'],'svm_params')
+
+    if parameters['model_type'] == 'catboost':
+        
+        flattened_params = {f"catboost_{key}": str(value) for key, value in parameters['catboost_params'].items()}
+        mlflow.log_params(flattened_params)
+        
     # Log outputs
 
     mlflow.log_dict(output, "output.json")     
@@ -238,11 +255,12 @@ def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataF
 
 
     # Log model
-    if parameters['model_type'] == 'logistic' :
+    if parameters['model_type'] == 'logistic'  or parameters['model_type']=='logistic_3c':
         mlflow.statsmodels.log_model(model, "model")#,signature=signature)                      # Log model
-    elif parameters['model_type'] == 'GAM'or parameters['model_type'] == 'Naive':
+    elif (parameters['model_type'] == 'GAM'or parameters['model_type'] == 'Naive' or 
+          parameters['model_type'] == 'catboost' or parameters['model_type']=='Naive_3c'):
         pass
-    elif parameters['model_type'] == 'mlp' or parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'svm':
+    elif parameters['model_type'] == 'mlp' or parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'svm' or parameters['model_type'] == 'random_forest_3c':
         mlflow.sklearn.log_model(model, "model")
     else:
         mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model

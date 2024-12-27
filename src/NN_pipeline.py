@@ -23,7 +23,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
     """
     Creates a neural network according to the parameters passed in the dictionary. 
     The dictionary must contain:
-        model_type: classifier, regressor, exponential_renato, linear_regressor, logistic, mlp, random_forest, Naive, GAM
+        model_type: classifier, regressor, exponential_renato, linear_regressor, logistic, mlp, random_forest, Naive, GAM, svm, catboost, Naive_3c, logistic_3c, random_forest_3c, svm_3c, catboost_3c
         use_trap_info: flag to use the traps information like days and distances
         ntraps: number of traps to be considered
         lags: number of lags to be considered
@@ -89,25 +89,54 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
                 NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
                     parameters['model_type'],loss_func_class, loss_func_reg)
 
-        elif parameters['model_type'] == 'random_forest':
-            model = NN_building.random_forest_model(x_train, y_train, parameters)
+        elif parameters['model_type']=='logistic_3c':
+            features = list(x_train.columns)
+            model = sm.MNLogit(y_train, x_train[features]).fit()
+            yhat_train = (model.predict(x_train[features])).idxmax(axis=1)
+            yhat = (model.predict(x_test[features])).idxmax(axis=1)
+            NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
+                parameters['model_type'],loss_func_class, loss_func_reg)
+
+        elif parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'random_forest_3c':
+
+            model, parameters = NN_building.random_forest_model(x_train, y_train, parameters)            
             yhat_train = model.predict(x_train)
             yhat = model.predict(x_test)
             NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test,   
                         parameters['model_type'],loss_func_class, loss_func_reg)
             features = list(x_train.columns)
-
+                            
         elif parameters['model_type'] == 'svm':
-            model = NN_building.svm_model(x_train, y_train, parameters)
+            model, parameters = NN_building.svm_model(x_train, y_train, x_test, y_test, parameters)
             yhat_train = model.predict(x_train)
             yhat = model.predict(x_test)
             NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
                     parameters['model_type'],loss_func_class, loss_func_reg)
             features = list(x_train.columns)
 
+        elif parameters['model_type'] == 'catboost':
+            if 'mesepid' in x_train.columns:
+                x_test['mesepid'] = x_test['mesepid'].astype(str)
+                x_train['mesepid'] = x_train['mesepid'].astype(str)
+            model, parameters = NN_building.catboost_model(x_train, y_train, parameters)
+            yhat_train = model.predict(x_train)
+            yhat = model.predict(x_test)
+            NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test,
+                    parameters['model_type'],loss_func_class, loss_func_reg)
+            features = list(x_train.columns)
+
         elif parameters['model_type'] == 'Naive': 
             yhat_train = x_train['trap0_lag1'] 
             yhat = x_test['trap0_lag1'] 
+            NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
+                    parameters['model_type'],loss_func_class, loss_func_reg)
+            model = None
+            features = None
+        
+        elif parameters['model_type'] == 'Naive_3c': #TODO improvement needed. Number of days in exposure is fixed
+            yhat_train = x_train['trap0_lag1']
+            yhat = x_test['trap0_lag1']
+            
             NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
                     parameters['model_type'],loss_func_class, loss_func_reg)
             model = None
@@ -196,6 +225,12 @@ def check_parameters(parameters:dict)->dict:
         parameters['bool_input'] =True
         parameters['truncate_100'] = False
         #, 'Naive model currently only accepts bool input'
+    
+    if parameters['model_type']=='Naive_3c':
+        parameters['bool_input'] = False
+        parameters['truncate_100'] = False
+        parameters['scale'] = False
+        parameters['input_3_class'] = True  
 
     if parameters['split_type'] == 'year':
         assert len(parameters['year_list_train']) > 0, 'Year list train must be defined for year split'
@@ -237,7 +272,7 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
         data = NN_preprocessing.create_final_matrix(parameters['lags'],parameters['ntraps'],save_path=data_path) # TODO add perc zero and mesepid
 
   
-    if 'info_cols' in parameters.keys():
+    if len(parameters['info_cols']) > 0 :
         info_cols = parameters['info_cols'] + ['anoepid','nplaca']
         eggs_columns = [f'trap{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
 
@@ -259,7 +294,7 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
                 eggs_columns = [f'trap{i}_lag{j}' for i in range(parameters['ntraps']) for j in range(1, parameters['lags']+1)]
             elif parameters['cylindrical_input'] == True:
                 #days_columns = [f'days{i}_lag{j}' for i in [0] for j in range(1, 6)]
-                eggs_columns = [f'trap{i}_lag{j}' for i in [0] for j in range(1, max(11,parameters['lags']+1))]
+                eggs_columns = [f'trap{i}_lag{j}' for i in [0] for j in range(1, min(11,parameters['lags']+1))]
                 #days_columns += [f'days{i}_lag{j}' for i in range(1, parameters['ntraps']) for j in range(1, )]
                 eggs_columns += [f'trap{i}_lag{j}' for i in range(1, parameters['ntraps']) for j in range(1, 3)]
                 days_columns = []
@@ -267,8 +302,8 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
             lat_column = ['latitude0']
             long_column = ['longitude0']
 
-            info_cols  = eggs_columns + lat_column + long_column + features_to_add + ['nplaca']
-
+            info_cols  = eggs_columns + lat_column + long_column + features_to_add + ['nplaca', 'Temperatura_week_bfr_mean','Precipitacao_week_bfr_mean','Umidade_week_bfr_mean']
+            # Temperatura_previsao	Precipitacao_previsao	Umidade_previsao	Temperatura_week_bfr_mean	Precipitacao_week_bfr_mean	Umidade_week_bfr_mean
             if parameters['split_type'] == 'year':
                 info_cols += ['anoepid']
 
@@ -280,11 +315,17 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
     if parameters['truncate_100']:
         transformed_data = data[eggs_columns].map(lambda x: 100 if x > 100 else x) 
         data[eggs_columns] = transformed_data
+
+    if parameters['input_3_class']:
+        transformed_data = data[eggs_columns].apply(lambda x: pd.cut(x/7, bins=[-float('inf'), 2.65, 5, float('inf')], labels=[0, 1, 2]))
+        data[eggs_columns] = transformed_data
+
+
+
     
     # columns to be added as input
     x, y = NN_building.xy_definition( data=data, parameters = parameters,
                           info_cols=info_cols, eggs_cols=eggs_columns)
-    
     # train test split
     x_train, x_test, y_train, y_test, index_dict = NN_preprocessing.data_train_test_split(x, y, parameters)
     
@@ -300,7 +341,8 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
         y_train, y_test = y_train.to_numpy(), y_test.to_numpy()
 
     if not(parameters['model_type'] == 'logistic' or parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'GAM' 
-           or parameters['model_type'] == 'Naive' or parameters['model_type'] == 'mlp' or parameters['model_type']=='svm'):    #return a numpy array instead of a df
+           or parameters['model_type'] == 'Naive' or parameters['model_type'] == 'mlp' or parameters['model_type']=='svm' or parameters['model_type']=='catboost'
+           or parameters['model_type']=='logistic_3c' or parameters['model_type']=='Naive_3c' or parameters['model_type'] == 'random_forest_3c'):    #return a numpy array instead of a df
         x_train, x_test, y_train, y_test = x_train.to_numpy(), x_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy()
 
     return x_train, x_test, y_train, y_test, index_dict

@@ -11,19 +11,20 @@ import statsmodels.api as sm
 from pygam import LogisticGAM, s, f, te, l 
 import pdb
 from sklearn.ensemble import RandomForestClassifier
-from sklearn import svm
-
-
+from sklearn.svm import SVC, SVR
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from scipy.stats import randint, loguniform
+from catboost import CatBoostClassifier
 
 def xy_definition(data:pd.DataFrame, parameters:dict,
                   info_cols:list, eggs_cols:list)->Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Fucntion to define the x and y variables according to the model type.
+    Function to define the x and y variables according to the model type.
 
     Parameters:
     data: dataframe with the data
-    paremters: dictionary with the parameters of the model. It must contain
-        model_type: string with the model type: classifier, regressor, exponential_renato, linear_regressor, logistic, GAM
+    paramters: dictionary with the parameters of the model. It must contain
+        model_type: string with the model type: classifier, regressor, exponential_renato, linear_regressor, logistic, GAM, 
         use_trap_info: flag to use the traps information like days and distances
         add_constant: flag to add a constant to the x variables
     inf_col: list with the name of columns of days, latitude, longitude, mesepid and novos
@@ -36,15 +37,20 @@ def xy_definition(data:pd.DataFrame, parameters:dict,
 
     """
     # Define the output variable according to the model type
+    # change ovos flag to 0 and 1 instead of -1 and 1
     if parameters['model_type'] == 'logistic' or parameters['model_type'] == 'Naive':      
         ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else 0)#.rename('ovos_flag', inplace=True)
     else:
         ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else -1)
 
+    # output variable
     if (parameters['model_type'] == 'classifier' or parameters['model_type'] == 'logistic' or parameters['model_type'] == 'GAM' 
         or parameters['model_type'] == 'Naive'or parameters['model_type'] == 'mlp' or parameters['model_type'] == 'random_forest'
-        or parameters['model_type'] == 'svm'):
+        or parameters['model_type'] == 'svm' or parameters['model_type']=='catboost'):
         y = ovos_flag
+
+    elif parameters['model_type'] == 'logistic_3c' or parameters['model_type'] == 'Naive_3c' or parameters['model_type'] == 'random_forest_3c':
+        y = data['3_class']
 
     elif parameters['model_type'] == 'regressor' or parameters['model_type'] == 'linear_regressor':
         y = data['novos']
@@ -52,15 +58,19 @@ def xy_definition(data:pd.DataFrame, parameters:dict,
     elif parameters['model_type'] == 'exponential_renato' or parameters['model_type'] == 'pareto':
         y = pd.concat([ovos_flag.rename('ovos_flag', inplace=True),data['novos']],axis=1)
 
+    # input variables
     if parameters['use_trap_info'] == True:
         x = data[info_cols]
     else:
         x = data[eggs_cols]
+
+    # add constant to input variables
     if parameters['add_constant'] == True:
         x = sm.add_constant(x)
     
-    if 'mesepid' in x.columns:
+    if 'mesepid' in x.columns and parameters['model_type'] != 'catboost':
         x = pd.get_dummies(x, columns=['mesepid'], drop_first=True)
+        x = x.astype({col: 'float' for col in x.columns if 'mesepid_' in col})
     return x, y
 
 def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.array, y_test: np.array, model_type: str, device: str)->Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -72,7 +82,7 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
     x_test: numpy array with the test data
     y_train: numpy array with the training data
     y_test: numpy array with the test data
-    model_type: classifier, regressor, exponential_renato, linear_regressor, logistic, GAM, Naive, mlp, random_forest, svm
+    model_type: classifier, regressor, exponential_renato, linear_regressor, logistic, GAM, Naive, mlp, random_forest, svm, catboost
     device: device to send the tensors
 
     Returns:
@@ -82,7 +92,9 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
     ytest: tensor with the test data    
     """
 
-    if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp' or model_type == 'random_forest' or model_type == 'svm':
+    if (model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive'
+         or model_type == 'mlp' or model_type == 'random_forest' or model_type == 'svm' or model_type =='catboost' 
+         or model_type == 'logistic_3c' or model_type =='Naive_3c' or model_type == 'random_forest_3c') :
         output_type = torch.long
     elif model_type == 'regressor' or model_type == 'exponential_renato' or 'linear_regressor' or model_type == 'pareto':
         output_type = torch.float32
@@ -106,7 +118,9 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
 class CustomDataset(Dataset):
     def __init__(self, features, targets, model_type):
         self.features  = features.clone().detach().float()
-        if model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp' or model_type == 'random_forest' or model_type == 'svm':
+        if (model_type =='logistic_3c' or model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'
+            or model_type == 'Naive' or model_type == 'mlp' or model_type == 'random_forest' or 
+            model_type == 'svm' or model_type == 'catboost' or model_type == 'Naive_3c' or model_type == 'random_forest_3c'):
             self.targets =  targets.clone().detach().long()
 
         elif model_type == 'exponential_renato' or model_type == 'pareto' or model_type == 'regressor' or model_type == 'linear_regressor':
@@ -128,7 +142,8 @@ def input_output_sizes(xtrain, model_type):
     if model_type == 'classifier' or model_type == 'exponential_renato' or model_type == 'pareto':# or model_type == 'mlp':
         model_output = 2
     elif (model_type == 'regressor' or model_type == 'linear_regressor' or model_type == 'logistic' or model_type == 'GAM'or 
-          model_type == 'Naive' or model_type == 'mlp' or model_type == 'random_forest' or model_type == 'svm'):
+          model_type == 'Naive' or model_type == 'mlp' or model_type == 'random_forest' or model_type == 'svm' or model_type == 'catboost'
+          or model_type =='logistic_3c' or model_type =='Naive_3c' or model_type == 'random_forest_3c'):
         model_output = 1
     return model_input, model_output
 
@@ -154,7 +169,8 @@ def define_loss_functions(model_type):
     if model_type == 'classifier' or model_type == 'mlp':
         loss_func_class = nn.CrossEntropyLoss()
         loss_func_reg = None
-    elif model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'random_forest' or model_type == 'svm':
+    elif (model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'random_forest' or
+           model_type == 'svm' or model_type == 'catboost' or model_type=='logistic_3c' or model_type =='Naive_3c' or model_type == 'random_forest_3c'):
         loss_func_class = None
         loss_func_reg = None
     elif model_type == 'regressor' or model_type == 'linear_regressor':
@@ -465,9 +481,9 @@ def GAM_model(x_train:pd.DataFrame, y_train:pd.DataFrame)->LogisticGAM:
     return model, features
  
 
-def random_forest_model(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:dict)->RandomForestClassifier:
+def random_forest_model(x_train:pd.DataFrame, y_train:pd.DataFrame, parameters:dict)->RandomForestClassifier:
     """
-    Fit a Random Forest model to the data.
+    Fit a Random Forest model to the data 
 
     Parameters:
     x_train: pd.DataFrame with the input features
@@ -478,11 +494,44 @@ def random_forest_model(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:di
     model: the fitted Random Forest model
     """
 
-    model = RandomForestClassifier()
-    model.fit(x_train, y_train)
-    return model
 
-def svm_model(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:dict)->RandomForestClassifier:
+    if parameters['rf_params']['grid_search'] == True:
+            # Initialize the Random Forest model
+        rf = RandomForestClassifier()
+
+        # Define the parameter grid
+        param_dist = {
+            'n_estimators': randint(10, 200),  # Random integer between 50 and 200
+            'max_depth': [None, 10, 20, 30, 40],  # Fixed choices
+            'min_samples_split': randint(2, 100),  # Random integer between 2 and 10
+            'min_samples_leaf': randint(1, 50),  # Random integer between 1 and 5
+            'bootstrap': [True, False]  # Binary choice
+        }
+
+        grid_search = RandomizedSearchCV(estimator=rf, param_distributions=param_dist,
+                                        n_iter=20, cv=3, verbose=2, n_jobs=-1)
+
+
+        # Fit the model to the training data
+        grid_search.fit(x_train, y_train)
+        model = grid_search.best_estimator_
+        parameters['rf_params'] = grid_search.best_params_  
+        parameters['rf_params']['grid_search'] = True
+
+
+    else:
+        model = RandomForestClassifier(
+                                        n_estimators=int(parameters['rf_params']["n_estimators"]),
+                                        max_depth=int(parameters['rf_params']["max_depth"]),
+                                        min_samples_split=int(parameters['rf_params']["min_samples_split"]),
+                                        min_samples_leaf=int(parameters['rf_params']["min_samples_leaf"]),
+                                        bootstrap=parameters['rf_params']["bootstrap"]
+                                    )
+        model.fit(x_train, y_train)
+    return model, parameters
+
+
+def svm_model(x_train:pd.DataFrame, y_train:pd.DataFrame, x_test:pd.DataFrame, y_test:pd.DataFrame, parameters:dict)->RandomForestClassifier:
     """
     Fit a Support Vector Machine (SVM) model to the data.
 
@@ -495,9 +544,171 @@ def svm_model(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:dict)->Rando
     model: the fitted SVM model
     """
 
-    model = svm.SVC()
-    model.fit(x_train, y_train)
-    return model
+    if parameters['svm_params']['grid_search'] == True:
+        
+        from sklearn.pipeline import Pipeline
+        from sklearn.kernel_approximation import RBFSampler
+        from sklearn.preprocessing import PolynomialFeatures
+        from sklearn.linear_model import SGDClassifier
+        from sklearn.model_selection import ParameterSampler
+        from sklearn.base import BaseEstimator, TransformerMixin
+        from sklearn.metrics import accuracy_score
+        
+
+
+        # Define the custom TransformerSelector class
+        class TransformerSelector(BaseEstimator, TransformerMixin):
+            """Custom transformer to select between RBF, Polynomial, or None."""
+            def __init__(self, transformer=None):
+                self.transformer = transformer
+
+            def fit(self, X, y=None):
+                if self.transformer is not None:
+                    self.transformer.fit(X, y)
+                return self
+
+            def transform(self, X):
+                if self.transformer is not None:
+                    return self.transformer.transform(X)
+                return X
+
+            def fit_transform(self, X, y=None):
+                self.fit(X, y)
+                return self.transform(X)
+
+        # Define the pipeline
+        pipeline = Pipeline([
+            ('transformer', TransformerSelector()),  # Placeholder for transformations
+            ('sgd', SGDClassifier(max_iter=1000, tol=1e-3))
+        ])
+
+        # Define the parameter grid
+        param_dist = {
+            # Transformation selection
+            'transformer': [
+                None,  # No transformation
+                RBFSampler(),  # RBF Kernel approximation
+                #PolynomialFeatures()  # Polynomial projection
+            ],
+            # Parameters for RBF Kernel
+            'transformer__gamma': [0.1, 0.5, 1.0, 2.0],
+            # Parameters for PolynomialFeatures
+            #'transformer__degree': [2, 3, 4, 5],
+            #'transformer__interaction_only': [False],
+            # SGDClassifier parameters
+            'sgd__alpha': np.logspace(-5, -1, 10),
+            'sgd__penalty': ['l2', 'l1', 'elasticnet'],
+            'sgd__l1_ratio': np.linspace(0.1, 1, 5)
+        }
+
+        # Custom evaluation function
+        def evaluate_model(pipeline, params, x_train, y_train, x_test, y_test, n_runs=1):
+            scores = []
+            best_model = None
+            best_score = 0 
+            for _ in range(n_runs):
+                pipeline.set_params(**params)  # Update pipeline with current parameters
+                pipeline.fit(x_train, y_train)  # Fit the model
+                y_pred = pipeline.predict(x_test)  # Predict
+                scores.append(accuracy_score(y_test, y_pred))  # Compute accuracy
+                if scores[-1] > best_score:
+                    best_score = scores[-1]
+                    best_model = pipeline
+            return np.mean(scores), best_model
+
+        # Generate parameter combinations
+        n_iter = 10
+        param_list = list(ParameterSampler(param_dist, n_iter=n_iter))
+
+        # Run the search
+        results = []
+        models= []
+        for i, params in enumerate(param_list):
+            print(f"Evaluating parameter set {i + 1}/{len(param_list)}...")
+            print(params)
+            # Filter invalid combinations (e.g., gamma for non-RBF transformers)
+            if params['transformer'] is None:
+                params = {k: v for k, v in params.items() if not k.startswith('transformer')}
+            else:
+                if isinstance(params['transformer'], PolynomialFeatures):
+                    # Remove `gamma` for PolynomialFeatures
+                    params = {k: v for k, v in params.items() if k not in ['transformer__gamma']}
+                # Filter invalid combinations (e.g., degree for non-Polynomial transformers)
+                if isinstance(params['transformer'], RBFSampler):
+                    # Remove `degree` for RBF Sampler
+                    params = {k: v for k, v in params.items() if k not in ['transformer__degree', 'transformer__interaction_only']}
+
+            mean_score, model = evaluate_model(pipeline, params, x_train, y_train, x_test, y_test, n_runs=10)
+            results.append({'params': params, 'mean_score': mean_score})
+            models.append(model)    
+
+        # Select the best model
+        results_df = pd.DataFrame(results)
+        best_result = results_df.loc[results_df['mean_score'].idxmax()]
+        model = models[results_df['mean_score'].idxmax()]
+
+        # Save best model parameters 
+        if 'transformer' in best_result['params'].keys():
+            parameters['svm_params']['gamma'] = best_result['params']['transformer__gamma']
+            parameters['svm_params']['kernel'] = 'rbf'
+        else:
+            parameters['svm_params']['gamma'] = 'None'
+            parameters['svm_params']['kernel'] = 'linear'
+        
+        
+        parameters['svm_params']['alpha'] = best_result['params']['sgd__alpha']
+        parameters['svm_params']['penalty'] = best_result['params']['sgd__penalty']
+        parameters['svm_params']['l1_ratio'] = best_result['params']['sgd__l1_ratio']
+
+    else:
+        model = SVC( C=1/parameters['svm_params']['alpha'],
+                        gamma=parameters['svm_params']['gamma'],
+                        kernel=parameters['svm_params']['kernel'],
+                        degree=parameters['svm_params']['degree'],
+                        
+                        )
+        model.fit(x_train, y_train)
+    return model,parameters
+
+def catboost_model(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:dict)->CatBoostClassifier:
+    """
+    Fit a CatBoost model to the data.
+
+    Parameters:
+    x_train: pd.DataFrame with the input features
+    y_train: pd.Series with the target variable
+    parameters: dictionary with the parameters of the model
+
+    Returns:
+    model: the fitted CatBoost model
+    """
+    if parameters['catboost_params']['grid_search'] == True:
+        # Define the parameter grid
+        param_dist = {
+            'iterations': randint(100, 500),  # Random integer between 100 and 500
+            'learning_rate': np.linspace(0.001, 0.2, 100),  # 0.01 to 0.2
+            'depth': randint(1,20),
+            'l2_leaf_reg':  randint(1,10),
+            'random_strength':  randint(1,10),
+
+        }
+
+        grid_search = RandomizedSearchCV(estimator=CatBoostClassifier(), param_distributions=param_dist,
+                                        n_iter=20, cv=3, verbose=2, n_jobs=-1)
+
+
+        # Fit the model to the training data
+        grid_search.fit(x_train, y_train)
+        model = grid_search.best_estimator_
+        parameters['catboost_params'] = grid_search.best_params_  
+        parameters['catboost_params']['grid_search'] = True
+    else:
+        # Train a CatBoost model
+        model = CatBoostClassifier(iterations=100, learning_rate=0.1, depth=6, verbose=0)
+        model.fit(x_train, y_train,cat_features=['mesepid'])
+
+    return model,parameters
+
 
 def easy_save(train_history:dict, test_history:dict, yhat_train:list, ytrain:list, yhat:list, ytest:list, model_type:str,loss_func_class:float, loss_func_reg:float):
     """
@@ -512,7 +723,9 @@ def easy_save(train_history:dict, test_history:dict, yhat_train:list, ytrain:lis
 
 def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
 
-    if model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp' or model_type == 'random_forest' or model_type == 'svm':
+    if (model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp' or 
+        model_type == 'random_forest' or model_type == 'svm' or model_type == 'catboost' or model_type == 'logistic_3c'
+        or model_type =='Naive_3c' or model_type == 'random_forest_3c'):
 
         loss_reg =  0
         loss_class =  0
