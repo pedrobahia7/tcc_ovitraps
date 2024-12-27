@@ -1,12 +1,18 @@
 #Importing libraries
 import sys
 import os
+import pdb; 
 import pandas as pd
 current_dir = os.getcwd()
 project_root = os.path.abspath(os.path.join(current_dir, '..'))
 sys.path.append(project_root)
 
 from utils import df_operations
+
+# TODO: Refactor this code to unite all the data treatment proccess, from the raw PBH data until 
+# the final_df to be used to create NN data, including add_feature_to_df.ipynb, dtcol_dtinstal_treatment.ipydb,
+# external_data_incorporation and some functions of treate_df_initial_exploration.ipynb and 
+# df_initial_visualization.ipynb. Also, change the name of the file to something more meaningfu.
 
 # Importing the dataset and getting informations about it
 masterdata = pd.read_stata('../data/MasterDataExtendStata12.dta')
@@ -50,6 +56,5 @@ new_active_traps = active_traps[['OVITRAMPA','LATITUDE','LONGITUDE','X','Y']].re
     columns={'OVITRAMPA':'narmad', 'LATITUDE':'latitude','LONGITUDE':'longitude','X':'coordx2','Y':'coordy2'})
 
 final_df = pd.merge(masterdata, new_active_traps, on='narmad', how='left')
-import pdb; pdb.set_trace()
 # Save treated dataframe
-final_df.to_csv('../data/final_data_2compare.csv', sep=',',decimal='.',index=False)
+final_df.to_csv('../data/final_data.csv', sep=',',decimal='.',index=False)
