@@ -166,13 +166,11 @@ def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataF
 
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").replace(" ", "_").replace(":", "_")
 
-    if (parameters['model_type'] == 'logistic' or  parameters['model_type'] == 'mlp' or parameters['model_type'] == 'random_forest' or 
-        parameters['model_type'] == 'catboost' or parameters['model_type']=='logistic_3c' or parameters['model_type'] == 'random_forest_3c'):
+    if parameters['model_type'] in ['logistic' ,'mlp' ,'random_forest', 'catboost' ,'logistic_3c' ,'random_forest_3c' ,'catboost_3c']:
         pickle.dump(model, open(f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pkl", 'wb'))
-    elif (parameters['model_type'] == 'Naive' or parameters['model_type'] == 'svm' or 
-          parameters['model_type'] == 'Naive_3c'):
+    elif parameters['model_type'] in ['Naive' ,'svm' ,'svm_3c' ,'Naive_3c']:
         pass
-    elif  parameters['model_type'] == 'GAM':
+    elif  parameters['model_type'] in ['GAM']:
         model.save(f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pgam")
     else:
         torch.save(model.state_dict(), f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pth")
@@ -227,16 +225,16 @@ def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataF
     mlflow.log_param('year_list_train', year_list_train)
     mlflow.log_param('year_list_test', year_list_test)
 
-    if parameters['model_type'] == 'mlp':
+    if parameters['model_type'] in ['mlp']:
         mlflow.log_params(parameters['mlp_params'],'mlp_params')
     
-    if parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'random_forest_3c':
+    if parameters['model_type'] in ['random_forest' ,'random_forest_3c']:
         mlflow.log_params(parameters['rf_params'],'rf_params')
 
-    if parameters['model_type'] == 'svm':
+    if parameters['model_type'] in ['svm' ,'svm_3c']:
         mlflow.log_params(parameters['svm_params'],'svm_params')
 
-    if parameters['model_type'] == 'catboost':
+    if parameters['model_type'] in ['catboost','catboost_3c']:
         
         flattened_params = {f"catboost_{key}": str(value) for key, value in parameters['catboost_params'].items()}
         mlflow.log_params(flattened_params)
@@ -255,13 +253,14 @@ def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataF
 
 
     # Log model
-    if parameters['model_type'] == 'logistic'  or parameters['model_type']=='logistic_3c':
+    if parameters['model_type'] in ['logistic'  ,'logistic_3c']:
         mlflow.statsmodels.log_model(model, "model")#,signature=signature)                      # Log model
-    elif (parameters['model_type'] == 'GAM'or parameters['model_type'] == 'Naive' or 
-          parameters['model_type'] == 'catboost' or parameters['model_type']=='Naive_3c'):
+    elif parameters['model_type'] in ['GAM','Naive', 'catboost' ,'Naive_3c' ,'catboost_3c']:
         pass
-    elif parameters['model_type'] == 'mlp' or parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'svm' or parameters['model_type'] == 'random_forest_3c':
+    elif parameters['model_type'] in ['mlp','random_forest','svm','svm_3c','random_forest_3c']:
         mlflow.sklearn.log_model(model, "model")
-    else:
+    elif parameters['model_type'] in ['exponential_renato','classifier','regressor','pareto','linear_regressor']:
         mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model
+    else:
+        raise ValueError("Model type not supported")
   

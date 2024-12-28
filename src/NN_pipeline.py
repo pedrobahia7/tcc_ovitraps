@@ -57,7 +57,6 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
 
     # create dataset
     x_train, x_test, y_train, y_test, index_dict = create_dataset(parameters, data_path)
-
     # Network structure
     model_input, model_output = NN_building.input_output_sizes(x_train, parameters['model_type'])
 
@@ -74,14 +73,14 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
     # begin model training
     with mlflow.start_run():
 
-        if parameters['model_type'] == 'logistic' or parameters['model_type'] == 'GAM' :                
+        if parameters['model_type'] in ['logistic', 'GAM'] :                
                 if 'select_features' in parameters.keys() and parameters['select_features'] == True:
                     model, features = NN_building.select_model_stepwise(x_train, y_train,parameters, type= parameters['type_of_selection'])
                 else:
-                    if parameters['model_type'] == 'logistic':
+                    if parameters['model_type'] in ['logistic']:
                         features = list(x_train.columns)
                         model = sm.Logit(y_train,x_train[features]).fit()
-                    elif parameters['model_type'] == 'GAM':
+                    elif parameters['model_type'] in ['GAM']:
                         model, features = NN_building.GAM_model(x_train, y_train, parameters)
 
                 yhat_train = (model.predict(x_train[features]) >= 0.5).astype(int)
@@ -89,7 +88,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
                 NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
                     parameters['model_type'],loss_func_class, loss_func_reg)
 
-        elif parameters['model_type']=='logistic_3c':
+        elif parameters['model_type'] in ['logistic_3c']:
             features = list(x_train.columns)
             model = sm.MNLogit(y_train, x_train[features]).fit()
             yhat_train = (model.predict(x_train[features])).idxmax(axis=1)
@@ -97,7 +96,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
             NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
                 parameters['model_type'],loss_func_class, loss_func_reg)
 
-        elif parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'random_forest_3c':
+        elif parameters['model_type'] in ['random_forest', 'random_forest_3c']:
 
             model, parameters = NN_building.random_forest_model(x_train, y_train, parameters)            
             yhat_train = model.predict(x_train)
@@ -106,7 +105,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
                         parameters['model_type'],loss_func_class, loss_func_reg)
             features = list(x_train.columns)
                             
-        elif parameters['model_type'] == 'svm':
+        elif parameters['model_type'] in ['svm', 'svm_3c']:
             model, parameters = NN_building.svm_model(x_train, y_train, x_test, y_test, parameters)
             yhat_train = model.predict(x_train)
             yhat = model.predict(x_test)
@@ -114,7 +113,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
                     parameters['model_type'],loss_func_class, loss_func_reg)
             features = list(x_train.columns)
 
-        elif parameters['model_type'] == 'catboost':
+        elif parameters['model_type'] in ['catboost', 'catboost_3c']:
             if 'mesepid' in x_train.columns:
                 x_test['mesepid'] = x_test['mesepid'].astype(str)
                 x_train['mesepid'] = x_train['mesepid'].astype(str)
@@ -125,7 +124,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
                     parameters['model_type'],loss_func_class, loss_func_reg)
             features = list(x_train.columns)
 
-        elif parameters['model_type'] == 'Naive': 
+        elif parameters['model_type']in ['Naive']: 
             yhat_train = x_train['trap0_lag1'] 
             yhat = x_test['trap0_lag1'] 
             NN_building.easy_save(train_history, test_history, yhat_train, y_train, yhat, y_test, 
@@ -133,7 +132,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
             model = None
             features = None
         
-        elif parameters['model_type'] == 'Naive_3c': #TODO improvement needed. Number of days in exposure is fixed
+        elif parameters['model_type'] in ['Naive_3c']: #TODO improvement needed. Number of days in exposure is fixed
             yhat_train = x_train['trap0_lag1']
             yhat = x_test['trap0_lag1']
             
@@ -142,7 +141,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
             model = None
             features = None
 
-        elif parameters['model_type'] == 'mlp':
+        elif parameters['model_type'] in ['mlp']:
             model = MLPClassifier(**parameters['mlp_params'])
 
             model.fit(x_train, y_train)
@@ -161,8 +160,7 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
             parameters['solver'] = parameters['mlp_params']['solver']
             parameters['learning_rate_type'] = parameters['mlp_params']['learning_rate']
 
-        else: #Pytorch models   
-
+        elif parameters['model_type'] in ['exponential_renato','classifier','regressor','pareto','linear_regressor'] : #Pytorch models
 
             device = (
                 "cuda"
@@ -196,7 +194,9 @@ def pipeline(parameters:dict, experiment_name:str = 'Teste', data_path:str= None
             print("Done!")
             
             yhat = NN_building.calc_model_output(model, xtest,loss_func_reg)
-            
+        
+        else:
+            raise ValueError('Model type not recognized')
         
         mlflow_utils.save_model_mlflow(parameters=parameters, model=model, ytrain=y_train,
                         yhat = yhat, ytest = y_test, test_history = test_history, 
@@ -221,12 +221,12 @@ def check_parameters(parameters:dict)->dict:
         assert (parameters['lags'] >= 5), 'Cylindrical input is only available for lags >= 5'
     assert not(parameters['truncate_100'] == True and parameters['bool_input'] == True), 'Truncate 100 and bool input cannot be true at the same time' 
 
-    if parameters['model_type']=='Naive':
+    if parameters['model_type'] in ['Naive']:
         parameters['bool_input'] =True
         parameters['truncate_100'] = False
         #, 'Naive model currently only accepts bool input'
     
-    if parameters['model_type']=='Naive_3c':
+    if parameters['model_type'] in ['Naive_3c']:
         parameters['bool_input'] = False
         parameters['truncate_100'] = False
         parameters['scale'] = False
@@ -340,9 +340,8 @@ def create_dataset(parameters:dict, data_path:str= None)->Tuple[pd.DataFrame, pd
         x_test = NN_preprocessing.create_3d_input(x_test, parameters['ntraps'], parameters['lags'])
         y_train, y_test = y_train.to_numpy(), y_test.to_numpy()
 
-    if not(parameters['model_type'] == 'logistic' or parameters['model_type'] == 'random_forest' or parameters['model_type'] == 'GAM' 
-           or parameters['model_type'] == 'Naive' or parameters['model_type'] == 'mlp' or parameters['model_type']=='svm' or parameters['model_type']=='catboost'
-           or parameters['model_type']=='logistic_3c' or parameters['model_type']=='Naive_3c' or parameters['model_type'] == 'random_forest_3c'):    #return a numpy array instead of a df
+    if parameters['model_type'] not in ['logistic', 'random_forest', 'GAM', 'Naive', 'mlp', 'svm', 'catboost', 'logistic_3c', 'Naive_3c', 
+                                        'random_forest_3c', 'svm_3c','catboost_3c']:    #return a numpy array instead of a df
         x_train, x_test, y_train, y_test = x_train.to_numpy(), x_test.to_numpy(), y_train.to_numpy(), y_test.to_numpy()
 
     return x_train, x_test, y_train, y_test, index_dict

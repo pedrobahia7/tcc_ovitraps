@@ -38,25 +38,25 @@ def xy_definition(data:pd.DataFrame, parameters:dict,
     """
     # Define the output variable according to the model type
     # change ovos flag to 0 and 1 instead of -1 and 1
-    if parameters['model_type'] == 'logistic' or parameters['model_type'] == 'Naive':      
+    if parameters['model_type'] in ['logistic', 'Naive']:      
         ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else 0)#.rename('ovos_flag', inplace=True)
-    else:
+    elif parameters['model_type'] in ['classifier', 'regressor', 'exponential_renato', 'linear_regressor', 'pareto','mlp', 'random_forest', 'svm', 
+                                      'catboost', 'GAM','logistic_3c', 'Naive_3c',  'random_forest_3c', 'svm_3c', 'catboost_3c']:
         ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else -1)
+    else:
+        raise ValueError('Model type not found')   
 
     # output variable
-    if (parameters['model_type'] == 'classifier' or parameters['model_type'] == 'logistic' or parameters['model_type'] == 'GAM' 
-        or parameters['model_type'] == 'Naive'or parameters['model_type'] == 'mlp' or parameters['model_type'] == 'random_forest'
-        or parameters['model_type'] == 'svm' or parameters['model_type']=='catboost'):
+    if parameters['model_type'] in ['classifier', 'logistic', 'GAM', 'Naive', 'mlp', 'random_forest', 'svm', 'catboost']:
         y = ovos_flag
-
-    elif parameters['model_type'] == 'logistic_3c' or parameters['model_type'] == 'Naive_3c' or parameters['model_type'] == 'random_forest_3c':
+    elif parameters['model_type'] in ['logistic_3c', 'Naive_3c','random_forest_3c','svm_3c', 'catboost_3c']:
         y = data['3_class']
-
-    elif parameters['model_type'] == 'regressor' or parameters['model_type'] == 'linear_regressor':
+    elif parameters['model_type'] in ['regressor',  'linear_regressor']:
         y = data['novos']
-
-    elif parameters['model_type'] == 'exponential_renato' or parameters['model_type'] == 'pareto':
+    elif parameters['model_type'] in ['exponential_renato', 'pareto']:
         y = pd.concat([ovos_flag.rename('ovos_flag', inplace=True),data['novos']],axis=1)
+    else:
+        raise ValueError('Model type not found')
 
     # input variables
     if parameters['use_trap_info'] == True:
@@ -68,7 +68,7 @@ def xy_definition(data:pd.DataFrame, parameters:dict,
     if parameters['add_constant'] == True:
         x = sm.add_constant(x)
     
-    if 'mesepid' in x.columns and parameters['model_type'] != 'catboost':
+    if 'mesepid' in x.columns and parameters['model_type'] not in ['catboost','catboost_3c']:
         x = pd.get_dummies(x, columns=['mesepid'], drop_first=True)
         x = x.astype({col: 'float' for col in x.columns if 'mesepid_' in col})
     return x, y
@@ -92,11 +92,9 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
     ytest: tensor with the test data    
     """
 
-    if (model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive'
-         or model_type == 'mlp' or model_type == 'random_forest' or model_type == 'svm' or model_type =='catboost' 
-         or model_type == 'logistic_3c' or model_type =='Naive_3c' or model_type == 'random_forest_3c') :
+    if model_type in ['classifier','logistic','GAM','Naive','mlp','random_forest','svm','catboost','logistic_3c','Naive_3c','random_forest_3c','svm_3c','catboost_3c']:
         output_type = torch.long
-    elif model_type == 'regressor' or model_type == 'exponential_renato' or 'linear_regressor' or model_type == 'pareto':
+    elif model_type  in ['regressor' , 'exponential_renato' , 'linear_regressor' , 'pareto']:
         output_type = torch.float32
 
     if isinstance(x_train, pd.DataFrame):
@@ -118,12 +116,11 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
 class CustomDataset(Dataset):
     def __init__(self, features, targets, model_type):
         self.features  = features.clone().detach().float()
-        if (model_type =='logistic_3c' or model_type == 'classifier' or model_type == 'logistic' or model_type == 'GAM'
-            or model_type == 'Naive' or model_type == 'mlp' or model_type == 'random_forest' or 
-            model_type == 'svm' or model_type == 'catboost' or model_type == 'Naive_3c' or model_type == 'random_forest_3c'):
+        if model_type in ['logistic_3c', 'classifier', 'logistic', 'GAM', 'Naive', 'mlp', 'random_forest', 'svm', 'catboost', 'Naive_3c', 'random_forest_3c', 
+                          'svm_3c', 'catboost_3c']:
             self.targets =  targets.clone().detach().long()
 
-        elif model_type == 'exponential_renato' or model_type == 'pareto' or model_type == 'regressor' or model_type == 'linear_regressor':
+        elif model_type in ['exponential_renato', 'pareto', 'regressor', 'linear_regressor']:
             self.targets = targets.clone().detach().float()
 
     def __len__(self):
@@ -139,11 +136,10 @@ def input_output_sizes(xtrain, model_type):
     else:
         model_input = xtrain.shape[1]
         
-    if model_type == 'classifier' or model_type == 'exponential_renato' or model_type == 'pareto':# or model_type == 'mlp':
+    if model_type  in ['classifier' , 'exponential_renato' , 'pareto']:# , 'mlp':
         model_output = 2
-    elif (model_type == 'regressor' or model_type == 'linear_regressor' or model_type == 'logistic' or model_type == 'GAM'or 
-          model_type == 'Naive' or model_type == 'mlp' or model_type == 'random_forest' or model_type == 'svm' or model_type == 'catboost'
-          or model_type =='logistic_3c' or model_type =='Naive_3c' or model_type == 'random_forest_3c'):
+    elif model_type  in ['regressor', 'linear_regressor', 'logistic', 'GAM', 'Naive', 'mlp', 'random_forest', 'svm', 'catboost', 
+                         'logistic_3c', 'Naive_3c', 'random_forest_3c', 'svm_3c', 'catboost_3c']:
         model_output = 1
     return model_input, model_output
 
@@ -151,44 +147,43 @@ def define_model(model_type, model_input, model_output, input_3d,device):
     """
     Function to define pytorch models
     """
-    if model_type == 'linear_regressor':
+    if model_type  in ['linear_regressor']:
         model = NN_arquitectures.LogisticRegression(model_input,input_3d, model_type).to(device)
-    elif model_type == 'exponential_renato':
+    elif model_type  in ['exponential_renato']:
         model = NN_arquitectures.NeuralNetworkExponential(model_input, model_output,model_type,input_3d).to(device)
-    elif model_type == 'pareto':
+    elif model_type  in ['pareto']:
         model = NN_arquitectures.NeuralNetworkPareto(model_input, model_output,model_type,input_3d).to(device)
-    elif model_type == 'classifier':
+    elif model_type  in ['classifier']:
         model = NN_arquitectures.NeuralNetwork(model_input, model_output,model_type,input_3d).to(device)
-    elif model_type == 'mlp':
+    elif model_type  in ['mlp']:
         model = NN_arquitectures.mlp(model_input, model_output,model_type,input_3d).to(device)
     else:
         raise ValueError('Model type not found')
     return model
 
 def define_loss_functions(model_type):
-    if model_type == 'classifier' or model_type == 'mlp':
+    if model_type  in ['classifier' , 'mlp']:
         loss_func_class = nn.CrossEntropyLoss()
         loss_func_reg = None
-    elif (model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'random_forest' or
-           model_type == 'svm' or model_type == 'catboost' or model_type=='logistic_3c' or model_type =='Naive_3c' or model_type == 'random_forest_3c'):
+    elif model_type in ['logistic','GAM','Naive','random_forest', 'svm','catboost','logistic_3c','Naive_3c','random_f,est_3c', 'svm_3c','catboost_3c']:
         loss_func_class = None
         loss_func_reg = None
-    elif model_type == 'regressor' or model_type == 'linear_regressor':
+    elif model_type  in ['regressor' , 'linear_regressor']:
         loss_func_class = None
         loss_func_reg = nn.MSELoss()
-    elif model_type == 'exponential_renato':
+    elif model_type  in ['exponential_renato']:
         loss_func_class = nn.CrossEntropyLoss()
         loss_func_reg = NN_arquitectures.ExponentialLoss()
-    elif model_type =='pareto':
+    elif model_type  in ['pareto']:
         loss_func_class = nn.CrossEntropyLoss()
         loss_func_reg = NN_arquitectures.ParetoLoss()
 
     return loss_func_class, loss_func_reg
 
 def torch_accuracy(yref, yhat,model_type):
-    if model_type == 'classifier' or model_type == 'mlp': #TODO check if this is correct
+    if model_type  in ['classifier' , 'mlp']: #TODO check if this is correct
         return (yhat.argmax(1) == yref).type(torch.float).sum().item()
-    elif model_type == 'regressor' or model_type == 'linear_regressor':
+    elif model_type  in ['regressor' , 'linear_regressor']:
         return ((torch.round(yhat) == yref).type(torch.float)).sum().item()
     else:
         raise ValueError('Model type not found')
@@ -214,19 +209,19 @@ def append_history_dict(history_dict, results):
 
 def calc_model_output(model, xtest,loss_func_reg=None):
 
-    if model.model_type == 'classifier' or model.model_type == 'mlp':
+    if model.model_type  in ['classifier' ,'mlp']:
         yhat = model(xtest).argmax(1).cpu().numpy()
         return yhat
-    elif model.model_type == 'regressor' or model.model_type == 'linear_regressor':
+    elif model.model_type  in ['regressor' ,'linear_regressor']:
         yhat = model(xtest).round().cpu().detach().numpy() 
         return yhat.squeeze()
-    elif model.model_type == 'exponential_renato':
+    elif model.model_type  in ['exponential_renato']:
         logit, lamb = model(xtest)
         yhat_reg = 1/lamb
         yhat_class = logit.argmax(1)
         yhat = torch.stack((yhat_class.unsqueeze(1), yhat_reg) ,dim=1)
         return yhat
-    elif model.model_type == 'pareto':
+    elif model.model_type  in ['pareto']:
         logit, alpha = model(xtest)
         x_m = 1 # TODO x_m must be passed as a parameter
         
@@ -258,7 +253,7 @@ def forward_stepwise(X, y,current_features ,parameters):
     final_model: the final logistic regression model
     current_features: list with the selected features
     """
-    if parameters['model_type'] == 'logistic':
+    if parameters['model_type'] in ['logistic']:
         best_aic = sm.Logit(y, X[current_features]).fit().aic
     remaining_features = list(set(X.columns) - set(current_features))
 
@@ -267,9 +262,9 @@ def forward_stepwise(X, y,current_features ,parameters):
         for feature in remaining_features:
             combined_features = current_features + [feature]
 
-            if parameters['model_type'] == 'logistic':
+            if parameters['model_type'] in ['logistic']:
                 model = sm.Logit(y, X[combined_features]).fit()
-            elif parameters['model_type'] == 'GAM':
+            elif parameters['model_type'] in ['GAM']:
                 spline_terms = []
 
                 if 'semepi' in combined_features:
@@ -303,9 +298,9 @@ def forward_stepwise(X, y,current_features ,parameters):
             break
     
     # Fit the final model with selected features
-    if parameters['model_type'] == 'logistic':
+    if parameters['model_type'] in ['logistic']:
         final_model = sm.Logit(y, X[current_features]).fit()
-    elif parameters['model_type'] == 'GAM':
+    elif parameters['model_type'] in ['GAM']:
         spline_terms = []
         if 'semepi' in current_features:
             spline_terms.append(s('semepi'))
@@ -341,7 +336,7 @@ def backward_stepwise(X, y,current_features, parameters):
     current_features: list with the selected features
     """
 
-    if parameters['model_type'] == 'logistic':
+    if parameters['model_type'] in ['logistic']:
         best_aic = sm.Logit(y, X[current_features]).fit().aic
     remaining_features = list(set(X.columns) - set(current_features))
 
@@ -350,10 +345,10 @@ def backward_stepwise(X, y,current_features, parameters):
         for feature in current_features:
             remaining_features = current_features.copy()
             remaining_features.remove(feature)
-            if parameters['model_type'] == 'logistic':
+            if parameters['model_type'] in ['logistic']:
                 model = sm.Logit(y, X[remaining_features]).fit()
 
-            elif parameters['model_type'] == 'GAM':
+            elif parameters['model_type'] in ['GAM']:
                 spline_terms = []
 
                 if 'semepi' in remaining_features:
@@ -386,9 +381,9 @@ def backward_stepwise(X, y,current_features, parameters):
             break
     
     # Fit the final model with selected features
-    if parameters['model_type'] == 'logistic':
+    if parameters['model_type'] in ['logistic']:
         final_model = sm.Logit(y, X[current_features]).fit()
-    elif parameters['model_type'] == 'GAM': 
+    elif parameters['model_type'] in ['GAM']: 
         spline_terms = []
         if 'semepi' in current_features:
             spline_terms.append(s('semepi'))
@@ -665,6 +660,7 @@ def svm_model(x_train:pd.DataFrame, y_train:pd.DataFrame, x_test:pd.DataFrame, y
                         gamma=parameters['svm_params']['gamma'],
                         kernel=parameters['svm_params']['kernel'],
                         degree=parameters['svm_params']['degree'],
+                        class_weight='balanced'
                         
                         )
         model.fit(x_train, y_train)
@@ -723,9 +719,7 @@ def easy_save(train_history:dict, test_history:dict, yhat_train:list, ytrain:lis
 
 def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
 
-    if (model_type == 'logistic' or model_type == 'GAM'or model_type == 'Naive' or model_type == 'mlp' or 
-        model_type == 'random_forest' or model_type == 'svm' or model_type == 'catboost' or model_type == 'logistic_3c'
-        or model_type =='Naive_3c' or model_type == 'random_forest_3c'):
+    if model_type in['logistic', 'GAM', 'Naive', 'mlp', 'random_forest', 'svm', 'catboost', 'logistic_3c', 'Naive_3c', 'random_forest_3c', 'svm_3c', 'catboost_3c']:
 
         loss_reg =  0
         loss_class =  0
@@ -735,14 +729,14 @@ def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
         total_loss = 0
         return total_loss, loss_class, loss_reg, acc_class, acc_reg, error_reg
 
-    elif model_type == 'classifier':# or model_type == 'mlp':
+    elif model_type in ['classifier']:# or 'mlp':
         loss_class = loss_func_class(yhat.squeeze(), y) # yhat = logit
         loss_reg =  torch.tensor(0)
         acc_class = torch_accuracy(y,  yhat, model_type)
         acc_reg =  0
         error_reg =  0
 
-    elif model_type == 'regressor' or model_type == 'linear_regressor':
+    elif model_type in ['regressor' , 'linear_regressor']:
         yhat = yhat.squeeze()
         loss_class =  torch.tensor(0)
         loss_reg = loss_func_reg(yhat, y)
@@ -750,7 +744,7 @@ def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
         acc_reg = torch_accuracy(y, yhat, model_type)
         error_reg = ((yhat - y)**2).sum().item()
     
-    elif model_type == 'exponential_renato':
+    elif model_type in ['exponential_renato']:
         logit, lamb = yhat
         # evaluate the pdf of the distribution
         
@@ -765,7 +759,7 @@ def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
         acc_reg = torch_accuracy(y_reg, yhat, 'regressor')
         error_reg = ((yhat - y_reg)**2).sum().item() #mse
 
-    elif model_type == 'pareto':
+    elif model_type in ['pareto']:
 
         logit, alpha = yhat
         x_m = 1 # TODO: if x_m must be implemented as a parameter, it must be passed in yhat 
@@ -780,6 +774,8 @@ def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
         acc_class = torch_accuracy(y_class, logit, 'classifier')
         acc_reg = torch_accuracy(y_reg, yhat, 'regressor')
         error_reg = ((yhat - y_reg)**2).sum().item() #mse
+    else:   
+        raise ValueError('Model type not found')
 
 
     return loss_class, loss_reg, acc_class, acc_reg, error_reg

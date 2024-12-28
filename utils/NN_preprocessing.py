@@ -546,7 +546,7 @@ def scale_dataset(x_train, x_test, y_train, y_test, parameters):
         scaler_dicts[key] = scaler
     
     #TODO adapt this to the case of two output vectors 
-    if parameters['model_type']!='logistic_3c' and parameters['model_type']!='Naive_3c':
+    if parameters['model_type'] not in ['logistic_3c', 'Naive_3c', 'random_forest_3c', 'svm_3c', 'catboost_3c']:
         y_train, y_test, scaler = scale_column(y_train, y_test, ['novos'])
 
     scaler_dicts['output'] = scaler

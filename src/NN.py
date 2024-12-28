@@ -18,24 +18,24 @@ if __name__ == '__main__':
 # Parameters
 
     # Pipeline parameters
-    repeat = 5 # Number of times the model will be trained and tested
+    repeat = 1 # Number of times the model will be trained and tested
     play_song = True
     stop_time = 2
-    experiment_name = 'random_forest_3c' # Name of the experiment to be saved in mlflow
+    experiment_name = 'catboost_3c' # Name of the experiment to be saved in mlflow
     iterations_ignore = 0
 
     # Model parameters
-    # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'GAM' or 
-    # 'Naive' or 'logistic'  or 'mlp' or 'random_forest' or 'svm' or 'catboost' or 
-    # 'logistic_3c' or 'Naive_3c' or  'random_forest_3c' or 'svm_3c' or 'catboost_3c'
+    # 'classifier' or 'regressor' or 'exponential_renato' or 'linear_regressor' or 'pareto' (pytorch)
+    # 'Naive' or 'logistic'  or 'mlp' or 'random_forest' or 'svm' or 'catboost' or 'GAM'    (0 or 1 classification)
+    # 'logistic_3c' or 'Naive_3c' or  'random_forest_3c' or 'svm_3c' or 'catboost_3c'       (3 class classification)
     
-    models = ['random_forest_3c'] 
+    models = [experiment_name] 
     
     # Input parameters
     lags = 5
     neigh_num = 10
     use_trap_info = True
-    scale = False
+    scale = True
     input_3d = False
     bool_input = False
     input_3_class = False
