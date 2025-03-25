@@ -101,4 +101,4 @@ Loss function regresion >>> Loss function classification -> terrible network (ev
 
 NÃO ENTENDI ANOTAÇÕES:
 Dispersão novos x lags
-Nearest neighbors to estimate neigh
+Nearest neighbors to estimate number of neigh
