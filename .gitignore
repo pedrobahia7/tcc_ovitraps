@@ -5,3 +5,4 @@ results/
 mlruns/
 mlartifacts/
 catboost_info
+.vscode/
