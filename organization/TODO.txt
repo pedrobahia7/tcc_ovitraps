@@ -69,7 +69,7 @@ Mosaic plot: regression vs novos
 Análise dos erros
     Procurar amostras semelhantes
     armadilhas constantemente erradas
-
+heatmap com nossos dados e das médias
     
 
 
@@ -85,7 +85,7 @@ Rede baseada em grafos
 Comparar análise bayesiana com inteiramente computacional
 Classificador para definir qual das distribuilções seguir
 Introduce Ray Tunning
-
+Create three models for low, medium and high density traps
 
 
 
@@ -102,3 +102,9 @@ Loss function regresion >>> Loss function classification -> terrible network (ev
 NÃO ENTENDI ANOTAÇÕES:
 Dispersão novos x lags
 Nearest neighbors to estimate number of neigh
+
+
+
+PROCESSAMENTO: 
+número de armadilhas com méida menor que 1
+séries das agragações espaciais dos n vizinhos
