@@ -40,11 +40,11 @@ def pareto_plot(data:pd.Series,plt_title:str,ax=plt ):
     df = data.value_counts().sort_index().reset_index()     #count values
     df.drop(df[df[name] == 0].index, inplace=True)          #drop index 0
     df = df.apply(lambda x: np.log(x))                      # apply log to values
-    ax.scatter(df[name], df['count'],s=1)
+    ax.scatter(df[name], df['count'],s=1,color='black')     #plot scatter
     if ax == plt:
         ax.title(plt_title)
-        ax.ylabel(f'Log of frequency')
-        ax.xlabel(f'Log of value')
+        ax.ylabel(f'Log da frequência')
+        ax.xlabel(f'Log do valor')
 
     else:
         ax.set_title(plt_title)    
@@ -105,9 +105,9 @@ def plot_time_series_yearly(df:pd.DataFrame, column:str, xaxis:str ,title:str, x
     else:
         global_title = ''
         global_offset = 0
-
-
-
+    # Define a color map for each year, extracting the numerical part of the year (e.g., '2011' from '2011_12')
+    color_map = {year: f'rgba({int(255 * (int(year.split("_")[0]) % 5) / 5)}, {int(255 * (int(year.split("_")[0]) % 4) / 4)}, {int(255 * (int(year.split("_")[0]) % 3) / 3)}, 1)' for year in df['anoepid'].unique()}
+                
     # Create a new figure
     fig = go.Figure()
     j = 0
@@ -119,7 +119,11 @@ def plot_time_series_yearly(df:pd.DataFrame, column:str, xaxis:str ,title:str, x
             x=df_year[xaxis] - offset + j * global_offset,
             y=df_year[column],
             mode='lines',
-            name=str(year)  # Convert year to string for the legend
+            name=str(year),  # Convert year to string for the legend
+            line=dict(color=color_map[year]),  # Use the predefined color for each year
+            marker=dict(color=color_map[year]),
+
+
         ))
         j += 1
 
@@ -137,15 +141,17 @@ def plot_time_series_yearly(df:pd.DataFrame, column:str, xaxis:str ,title:str, x
 
             traceorder='normal'
         ),
-        template='plotly_white'  # Optional: use a white background
+        template='plotly_white',  # Optional: use a white background
+        width=1200,  # Set the width of the figure
+        height=500
     )
 
     # Show the plot
     return fig
 
-def plot_time_series_cat(df:pd.DataFrame, column:str, xaxis:str ,title:str, xaxis_title:str, yaxis_title:str,):
+def plot_time_series_cat(df: pd.DataFrame, column: str, xaxis: str, title: str, xaxis_title: str, yaxis_title: str):
     """
-    Subplot time series from column in a year by year basis using plotly dividingby category
+    Subplot time series from column in a year by year basis using plotly dividing by category.
 
     Parameters:
     df: dataframe containing the data
@@ -157,10 +163,7 @@ def plot_time_series_cat(df:pd.DataFrame, column:str, xaxis:str ,title:str, xaxi
 
     Returns:
     None
-    
-    
     """
-
     if xaxis == 'week':
         xaxis = 'semepi'
         offset = 100
@@ -169,17 +172,16 @@ def plot_time_series_cat(df:pd.DataFrame, column:str, xaxis:str ,title:str, xaxi
         offset = 0
     else:
         raise ValueError('xaxis must be either "week" or "month"')
-    
-
-
-
 
     # Get unique categories and years
-    categories = ['A2','A1','M ','B ']
+    categories = [ 'A1','A2', 'M ', 'B ']
     years = df['anoepid'].unique()
 
+    # Define a color map for each year, extracting the numerical part of the year (e.g., '2011' from '2011_12')
+    color_map = {year: f'rgba({int(255 * (int(year.split("_")[0]) % 5) / 5)}, {int(255 * (int(year.split("_")[0]) % 4) / 4)}, {int(255 * (int(year.split("_")[0]) % 3) / 3)}, 1)' for year in years}
+
     # Create a 2x2 subplot figure
-    fig = make_subplots(rows=2, cols=2, subplot_titles=[f'Média de ovos para {cat}' for cat in categories])
+    fig = make_subplots(rows=2, cols=2, subplot_titles=[f'Categoria {cat}' for cat in categories])
 
     # Loop through each category and year, adding each plot to the correct subplot position
     row, col = 1, 1
@@ -192,6 +194,8 @@ def plot_time_series_cat(df:pd.DataFrame, column:str, xaxis:str ,title:str, xaxi
                 y=data_year_cat[column],
                 mode='lines+markers',
                 name=str(year),
+                line=dict(color=color_map[year]),  # Use the predefined color for each year
+                marker=dict(color=color_map[year]),
                 showlegend=(i == 0)  # Show legend only in the first subplot
             ), row=row, col=col)
 
@@ -201,14 +205,18 @@ def plot_time_series_cat(df:pd.DataFrame, column:str, xaxis:str ,title:str, xaxi
             col = 1
             row += 1
 
-    # Update layout with titles and axis labels
+    # Update layout with titles and axis label        
+    for i in range(1, 3):
+        for j in range(1, 3):
+            fig.update_xaxes(title_text=xaxis_title, row=i, col=j,dtick=1,)
+            fig.update_yaxes(title_text=yaxis_title, row=i, col=j, range=[0, 280])
+
     fig.update_layout(
-        title= title,
-        xaxis_title=xaxis_title,
-        yaxis_title=yaxis_title,
         height=800,
-        showlegend=True  # Show the legend once for clarity
+        showlegend=True,  # Show the legend once for clarity
     )
+
+
 
     # Show the figure
     fig.show()
@@ -327,8 +335,6 @@ def NovosxRelation_plot_traps(data, lags, ntraps, relation, jitter_strength=1, w
         fig.update_layout(yaxis_title=f"{relation} of traps", xaxis_title="Novos", xaxis=dict(range=[0, 250]),yaxis=dict(range=[0, 250]))
         fig.show()
 
-
-
 def NovosxRelation_plot_lags(data, lags, ntraps, relation, jitter_strength=1, wrt='lags'):
     """
     Function to plot scatter plots of a relation of lagged traps vs novos for each trap and lag
@@ -374,10 +380,6 @@ def NovosxRelation_plot_lags(data, lags, ntraps, relation, jitter_strength=1, wr
         fig.update_traces(marker=dict(size=1,color='black'))  # 'size=1' as a close equivalent to 's=0.01'
         fig.update_layout(yaxis_title=f"{relation} of traps", xaxis_title="Novos", xaxis=dict(range=[0, 250]),yaxis=dict(range=[0, 250]))
         fig.show()
-
-
-
-
 
 def NovosxRelation_plot_all(data, lags, ntraps, relation, jitter_strength=1, wrt='lags', plot_title = None):
     """
@@ -452,9 +454,6 @@ def plot_results_pytorch(variable_plot, list_plot,version_list,size,epochs,mt):
         plt.title(f'Model {variable_plot} {"TODO"}: {mt}')
 
     plt.show()
-
-
-
 
 def surface_plot(z, ztitle, plot_title = '3D Surface Plot'): 
     """
