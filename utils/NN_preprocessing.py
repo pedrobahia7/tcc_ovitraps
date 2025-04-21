@@ -6,13 +6,11 @@ import numpy as np
 from collections import defaultdict
 from typing import Tuple
 from sklearn.preprocessing import MaxAbsScaler
-import pdb
+import pdb  # noqa: F401
 from sklearn.model_selection import train_test_split
-import random
 
 
-
-def get_valid_samples(df:pd.DataFrame)->pd.DataFrame:
+def get_valid_samples(df: pd.DataFrame) -> pd.DataFrame:
     """
     Function to get the samples that have the coordinates in the dataframe.
 
@@ -21,12 +19,30 @@ def get_valid_samples(df:pd.DataFrame)->pd.DataFrame:
 
     Returns:
     pandas dataframe
-    
+
     """
-    return df[['nplaca','novos','latitude','longitude','narmad','ano','anoepid','semepi','dtcol','GerCat']].drop_duplicates().dropna().reset_index(drop=True)
+    return (
+        df[
+            [
+                "nplaca",
+                "novos",
+                "latitude",
+                "longitude",
+                "narmad",
+                "ano",
+                "anoepid",
+                "semepi",
+                "dtcol",
+                "GerCat",
+            ]
+        ]
+        .drop_duplicates()
+        .dropna()
+        .reset_index(drop=True)
+    )
 
 
-def same_coord_samples(df:pd.DataFrame)->pd.DataFrame:
+def same_coord_samples(df: pd.DataFrame) -> pd.DataFrame:
     """
     Get the samples that have the coordinates in the dataframe.
 
@@ -36,13 +52,17 @@ def same_coord_samples(df:pd.DataFrame)->pd.DataFrame:
     Returns:
     pandas dataframe
     """
-    
-    groups = df.groupby(['latitude','longitude'])
+
+    groups = df.groupby(["latitude", "longitude"])
     rows_to_update = []
 
     for _, group in groups:
-        if group['narmad'].nunique() > 1:  # More than one unique value in C
-            rows_to_update.extend(group.index.tolist())  # Add row indices to the list
+        if (
+            group["narmad"].nunique() > 1
+        ):  # More than one unique value in C
+            rows_to_update.extend(
+                group.index.tolist()
+            )  # Add row indices to the list
     return df.loc[rows_to_update]
 
 
@@ -58,11 +78,15 @@ def create_distance_matrix(position_matrix: pd.DataFrame) -> pd.DataFrame:
     nbg  Trap numbers are used as index and columns
     """
 
-    coordinates = position_matrix[['latitude', 'longitude']].to_numpy()
+    coordinates = position_matrix[["latitude", "longitude"]].to_numpy()
 
     distance_list = []
-    for idx1,idx2 in tqdm(itertools.combinations(range(len(coordinates)), 2)):
-        distance_list.append(geodesic(coordinates[idx1], coordinates[idx2]).meters)
+    for idx1, idx2 in tqdm(
+        itertools.combinations(range(len(coordinates)), 2)
+    ):
+        distance_list.append(
+            geodesic(coordinates[idx1], coordinates[idx2]).meters
+        )
 
     # Size of the matrix
     n = len(coordinates)
@@ -77,15 +101,21 @@ def create_distance_matrix(position_matrix: pd.DataFrame) -> pd.DataFrame:
     symmetric_matrix += symmetric_matrix.T
 
     # Convert the NumPy array to a DataFrame
-    distance_matrix = pd.DataFrame(symmetric_matrix, index=position_matrix.index, columns=position_matrix.index)
+    distance_matrix = pd.DataFrame(
+        symmetric_matrix,
+        index=position_matrix.index,
+        columns=position_matrix.index,
+    )
 
     # Set index and columns to 'narmad' values
-    distance_matrix.columns = position_matrix['narmad'].values
+    distance_matrix.columns = position_matrix["narmad"].values
 
     return distance_matrix
 
 
-def get_distance_matrix(df:str,address:str = '../results/distance_matrix.csv')->pd.DataFrame:
+def get_distance_matrix(
+    df: str, address: str = "../results/distance_matrix.csv"
+) -> pd.DataFrame:
     """
     Function to laod the distance matrix. If it doesn't exist calculate if
     from the coordinates of the traps
@@ -98,15 +128,18 @@ def get_distance_matrix(df:str,address:str = '../results/distance_matrix.csv')->
     distance_matrix (pd.DataFrame): DataFrame with the distances between each trap.
     """
 
-
     valid_samples = get_valid_samples(df)
-    position_matrix = valid_samples[['latitude','longitude','narmad']].drop_duplicates().dropna().reset_index(drop=True)
+    position_matrix = (
+        valid_samples[["latitude", "longitude", "narmad"]]
+        .drop_duplicates()
+        .dropna()
+        .reset_index(drop=True)
+    )
 
-    try: 
-        distance_matrix = pd.read_csv(address,index_col=0)
+    try:
+        distance_matrix = pd.read_csv(address, index_col=0)
         distance_matrix.columns = distance_matrix.columns.astype(float)
-        distance_matrix.set_index(distance_matrix.columns,inplace=True)
-
+        distance_matrix.set_index(distance_matrix.columns, inplace=True)
 
     except:
         distance_matrix = create_distance_matrix(position_matrix)
@@ -114,7 +147,7 @@ def get_distance_matrix(df:str,address:str = '../results/distance_matrix.csv')->
     return distance_matrix
 
 
-def create_week_trap_df(df:pd.DataFrame)->pd.DataFrame:
+def create_week_trap_df(df: pd.DataFrame) -> pd.DataFrame:
     """
     Create a dataframe of the number of eggs(value), in each week(rows) in each trap(columns)
 
@@ -123,17 +156,25 @@ def create_week_trap_df(df:pd.DataFrame)->pd.DataFrame:
 
     Returns:
     week_trap_df: pandas dataframe with the number of eggs in each week in each trap
-    
+
     """
 
     valid_samples = get_valid_samples(df)
-    week_trap_df = valid_samples.pivot(index=['ano','semepi'],columns='narmad',values='novos')
-    new_index = pd.MultiIndex.from_product([week_trap_df.index.levels[0], range(101,153)]) # introduce weeks 51 and 52
-    new_index = new_index[(new_index <= week_trap_df.iloc[-1].name) & (new_index >= week_trap_df.iloc[0].name)] #remove indexes that are greater than the last sample or smaller than the first one
-    week_trap_df = week_trap_df.reindex(new_index) # [week,trap] - > novos
+    week_trap_df = valid_samples.pivot(
+        index=["ano", "semepi"], columns="narmad", values="novos"
+    )
+    new_index = pd.MultiIndex.from_product(
+        [week_trap_df.index.levels[0], range(101, 153)]
+    )  # introduce weeks 51 and 52
+    new_index = new_index[
+        (new_index <= week_trap_df.iloc[-1].name)
+        & (new_index >= week_trap_df.iloc[0].name)
+    ]  # remove indexes that are greater than the last sample or smaller than the first one
+    week_trap_df = week_trap_df.reindex(new_index)  # [week,trap] - > novos
     return week_trap_df
 
-def create_week_trap_df_anoepid(df:pd.DataFrame)->pd.DataFrame:
+
+def create_week_trap_df_anoepid(df: pd.DataFrame) -> pd.DataFrame:
     """
     Create a dataframe of the number of eggs(value), in each week(rows) in each trap(columns)
 
@@ -142,23 +183,30 @@ def create_week_trap_df_anoepid(df:pd.DataFrame)->pd.DataFrame:
 
     Returns:
     week_trap_df: pandas dataframe with the number of eggs in each week in each trap
-    
+
     """
 
     valid_samples = get_valid_samples(df)
-    week_trap_df = valid_samples.pivot(index=['anoepid','semepi'],columns='narmad',values='novos')
-    new_index = pd.MultiIndex.from_product([week_trap_df.index.levels[0], range(101,153)]) # introduce weeks 51 and 52
-    new_index = new_index[(new_index <= week_trap_df.iloc[-1].name) & (new_index >= week_trap_df.iloc[0].name)] #remove indexes that are greater than the last sample or smaller than the first one
-    week_trap_df = week_trap_df.reindex(new_index) # [week,trap] - > novos
+    week_trap_df = valid_samples.pivot(
+        index=["anoepid", "semepi"], columns="narmad", values="novos"
+    )
+    new_index = pd.MultiIndex.from_product(
+        [week_trap_df.index.levels[0], range(101, 153)]
+    )  # introduce weeks 51 and 52
+    new_index = new_index[
+        (new_index <= week_trap_df.iloc[-1].name)
+        & (new_index >= week_trap_df.iloc[0].name)
+    ]  # remove indexes that are greater than the last sample or smaller than the first one
+    week_trap_df = week_trap_df.reindex(new_index)  # [week,trap] - > novos
     return week_trap_df
 
 
-def create_lagged_eggs(df:pd.DataFrame,lags:int)->np.ndarray:
+def create_lagged_eggs(df: pd.DataFrame, lags: int) -> np.ndarray:
     """
     Create a  numpy array from a dataframe with the number lags defined as a paramenters
-    [lag x week x trap] -> df[value]. 
+    [lag x week x trap] -> df[value].
     Obs.: considers 2*lags due to the biweekly sampling rate
-    
+
     Parameters:
     df: pandas dataframe with the number of eggs in each week in each trap
     lags: number of lags to be created
@@ -167,17 +215,17 @@ def create_lagged_eggs(df:pd.DataFrame,lags:int)->np.ndarray:
     lagged_eggs: numpy array with the lagged matrix
     """
     list_lagged_df = []
-    for i in range(1,2*lags+1):
+    for i in range(1, 2 * lags + 1):
         list_lagged_df.append(df.shift(i).values)
-    lagged_eggs = np.stack(list_lagged_df, axis=0) 
+    lagged_eggs = np.stack(list_lagged_df, axis=0)
     return lagged_eggs
 
 
-def convert_dates_to_ordinal(df:pd.DataFrame)->pd.DataFrame:
+def convert_dates_to_ordinal(df: pd.DataFrame) -> pd.DataFrame:
     """
     Create numpy array of an ordinal number representing each day, maintaining the difference property
     [lag x week x trap] -> ordinal days.
-    Obs.: consider 2*lags as the dimension due to the biweekly sampling rate 
+    Obs.: consider 2*lags as the dimension due to the biweekly sampling rate
 
     Parameters:
     df: pandas dataframe with the data in Dilermando format containing valid samples
@@ -185,21 +233,43 @@ def convert_dates_to_ordinal(df:pd.DataFrame)->pd.DataFrame:
 
     Returns:
     week_trap_df: pandas dataframe with ordinal numbers representing days
-    
+
     """
 
-    day_df = df.pivot(index=['ano','semepi'],columns='narmad',values='dtcol')
-    new_index = pd.MultiIndex.from_product([day_df.index.levels[0], range(101,153)]) # introduce weeks 51 and 52
-    new_index = new_index[(new_index <= day_df.iloc[-1].name) & (new_index >= day_df.iloc[0].name)] #remove indexes that are greater than the last sample or smaller than the first one
-    day_df = day_df.reindex(new_index) # [week,trap] - > dtcol
-    day_df = day_df.map(lambda x: x.toordinal() if pd.notnull(x) else np.nan) # convert to ordinal so we can calculate the difference between two dates
-        
+    day_df = df.pivot(
+        index=["ano", "semepi"], columns="narmad", values="dtcol"
+    )
+    new_index = pd.MultiIndex.from_product(
+        [day_df.index.levels[0], range(101, 153)]
+    )  # introduce weeks 51 and 52
+    new_index = new_index[
+        (new_index <= day_df.iloc[-1].name)
+        & (new_index >= day_df.iloc[0].name)
+    ]  # remove indexes that are greater than the last sample or smaller than the first one
+    day_df = day_df.reindex(new_index)  # [week,trap] - > dtcol
+    day_df = day_df.map(
+        lambda x: x.toordinal() if pd.notnull(x) else np.nan
+    )  # convert to ordinal so we can calculate the difference between two dates
+
     return day_df
 
 
-def final_matrix_logic(valid_samples:pd.DataFrame, day_df:pd.DataFrame, distance_matrix:np.array, nan_count_matrix:np.array, lagged_eggs:np.array, 
-                        lagged_days:np.array, info_df:dict, trap_index_dict:dict, index_trap_dict:dict, nplaca_index_dict:dict, lags:int, n_traps:int, nplaca_lat_dict:dict,
-                        nplaca_long_dict:dict)->pd.DataFrame:
+def final_matrix_logic(
+    valid_samples: pd.DataFrame,
+    day_df: pd.DataFrame,
+    distance_matrix: np.array,
+    nan_count_matrix: np.array,
+    lagged_eggs: np.array,
+    lagged_days: np.array,
+    info_df: dict,
+    trap_index_dict: dict,
+    index_trap_dict: dict,
+    nplaca_index_dict: dict,
+    lags: int,
+    n_traps: int,
+    nplaca_lat_dict: dict,
+    nplaca_long_dict: dict,
+) -> pd.DataFrame:
     """
     Function to create the final matrix to be used in the neural network model
 
@@ -209,8 +279,8 @@ def final_matrix_logic(valid_samples:pd.DataFrame, day_df:pd.DataFrame, distance
     distance_matrix: pandas dataframe with the distance between the traps
     nan_count_matrix: numpy array with the number of autoregressive traps that have nan for each trap
     lagged_eggs: numpy array with the lagged number of eggs
-    lagged_days: numpy array with the lagged days in ordinal 
-    info_df: pandas dataframe with the information of each trap. It must contain the columns 'narmad' and 'nplaca' 
+    lagged_days: numpy array with the lagged days in ordinal
+    info_df: pandas dataframe with the information of each trap. It must contain the columns 'narmad' and 'nplaca'
     trap_index_dict: dictionary with the index of each trap in the egg matrix and distance matrix
     index_trap_dict: dictionary with the trap of each index in the egg matrix
     nplaca_index_dict: dictionary with the index of each placa in the egg matrix
@@ -223,90 +293,133 @@ def final_matrix_logic(valid_samples:pd.DataFrame, day_df:pd.DataFrame, distance
     Returns:
     final_df: pandas dataframe with the final matrix to be used in the neural network model
     """
-    #convert dfs to numpy
+    # convert dfs to numpy
     distance_matrix_np = distance_matrix.to_numpy()
     day_df_np = day_df.to_numpy()
-    
-    #create lists to store the final samples
+
+    # create lists to store the final samples
     list_placas = []
     list_final_samples = []
 
-    #iterate over the traps
+    # iterate over the traps
     for original_trap in distance_matrix.columns:
-        matching_placas = info_df[info_df['narmad'] == original_trap]['nplaca']                     # get the placas of the trap
-        original_trap_index = trap_index_dict[original_trap]                                        # get the index of the eggs matrix referent to the trap
-        sorted_distance_indexes = np.argsort(distance_matrix_np[original_trap_index])               # sort the other traps by distance from the trap
+        matching_placas = info_df[info_df["narmad"] == original_trap][
+            "nplaca"
+        ]  # get the placas of the trap
+        original_trap_index = trap_index_dict[
+            original_trap
+        ]  # get the index of the eggs matrix referent to the trap
+        sorted_distance_indexes = np.argsort(
+            distance_matrix_np[original_trap_index]
+        )  # sort the other traps by distance from the trap
         if sorted_distance_indexes[0] != original_trap_index:
-            print('trap is not the closest to itself')
-        assert sorted_distance_indexes[0] == original_trap_index, 'trap is not the closest to itself'
+            print("trap is not the closest to itself")
+        assert sorted_distance_indexes[0] == original_trap_index, (
+            "trap is not the closest to itself"
+        )
         # iterate over placas of the trap
-        for placa in matching_placas:  
-            add_row = [placa]                                                                       # create a row to add to the final dataframe
-            order_index = 0                                                                         # index of the sorted traps
-            list_placas.append(placa)                                                               # add the placa to a list to check if there are duplicates
-            week_index = nplaca_index_dict[placa]                                                   # get the index of the eggs matrix referring to the week
+        for placa in matching_placas:
+            add_row = [placa]  # create a row to add to the final dataframe
+            order_index = 0  # index of the sorted traps
+            list_placas.append(
+                placa
+            )  # add the placa to a list to check if there are duplicates
+            week_index = nplaca_index_dict[
+                placa
+            ]  # get the index of the eggs matrix referring to the week
 
-            
-            if nan_count_matrix[week_index,original_trap_index] > lags:                             # remove samples of original traps that doesn't have enough data
-                continue                                                                            # autoregressive samples 
-               
-            #iterate over the neighbors closest to the original trap
-            for _ in range(n_traps): 
-                neighbor_index = sorted_distance_indexes[order_index]                                    # get the index of the eggs matrix referent to the neighbor trap
-                
+            if (
+                nan_count_matrix[week_index, original_trap_index] > lags
+            ):  # remove samples of original traps that doesn't have enough data
+                continue  # autoregressive samples
+
+            # iterate over the neighbors closest to the original trap
+            for _ in range(n_traps):
+                neighbor_index = sorted_distance_indexes[
+                    order_index
+                ]  # get the index of the eggs matrix referent to the neighbor trap
+
                 # loop to avoid traps that don't have enough autoregressive samples
-                while nan_count_matrix[week_index,neighbor_index] > lags:                               
+                while nan_count_matrix[week_index, neighbor_index] > lags:
                     order_index += 1
-                    if order_index >= len(sorted_distance_indexes):                                     # if there are no more neighbors to add
+                    if order_index >= len(
+                        sorted_distance_indexes
+                    ):  # if there are no more neighbors to add
                         break
                     neighbor_index = sorted_distance_indexes[order_index]
-                    #if order_index > 50: #avoid arbitrarily distant traps #it was not necessary
-                        #break
-                if order_index >= len(sorted_distance_indexes):                                     # if there are no more neighbors to add
-                        break
-                lagged_samples = lagged_eggs[:,week_index,neighbor_index]                               # get the eggs of all the lags. [lag x week x trap] -> novos
+                    # if order_index > 50: #avoid arbitrarily distant traps #it was not necessary
+                    # break
+                if order_index >= len(
+                    sorted_distance_indexes
+                ):  # if there are no more neighbors to add
+                    break
+                lagged_samples = lagged_eggs[
+                    :, week_index, neighbor_index
+                ]  # get the eggs of all the lags. [lag x week x trap] -> novos
 
-                [add_row.append(i) for i in lagged_samples[~np.isnan(lagged_samples)]]              # add lagged eggs
-                add_row.append(nplaca_lat_dict[index_trap_dict[neighbor_index]])            # add latitude of the second trap
-                add_row.append(nplaca_long_dict[index_trap_dict[neighbor_index]])           # add longitude of the second trap
+                [
+                    add_row.append(i)
+                    for i in lagged_samples[~np.isnan(lagged_samples)]
+                ]  # add lagged eggs
+                add_row.append(
+                    nplaca_lat_dict[index_trap_dict[neighbor_index]]
+                )  # add latitude of the second trap
+                add_row.append(
+                    nplaca_long_dict[index_trap_dict[neighbor_index]]
+                )  # add longitude of the second trap
 
-                
-                #subtract lagged days from orignal sample day [lag x week x trap] -> ordinal days
-                lagged_samples_days = lagged_days[:,week_index,neighbor_index]
-                days_diff = day_df_np[week_index,original_trap_index] - lagged_samples_days[~np.isnan(lagged_samples_days)] 
-                
-                [add_row.append(i) for i in days_diff]                                              # add lagged days
+                # subtract lagged days from orignal sample day [lag x week x trap] -> ordinal days
+                lagged_samples_days = lagged_days[
+                    :, week_index, neighbor_index
+                ]
+                days_diff = (
+                    day_df_np[week_index, original_trap_index]
+                    - lagged_samples_days[~np.isnan(lagged_samples_days)]
+                )
+
+                [add_row.append(i) for i in days_diff]  # add lagged days
                 order_index += 1
             if order_index >= len(sorted_distance_indexes):
-                        break
+                break
             list_final_samples.append(add_row)
 
-
-    #assert len(list_placas) == valid_samples.shape[0], 'invalid number of placas'
-    assert len(list_placas) == len(set(list_placas)), 'duplicated placas'
+    # assert len(list_placas) == valid_samples.shape[0], 'invalid number of placas'
+    assert len(list_placas) == len(set(list_placas)), "duplicated placas"
 
     # create the final dataframe
-    final_df = pd.DataFrame(list_final_samples)                             
+    final_df = pd.DataFrame(list_final_samples)
 
-    #create the columns names
-    columns_names = ['nplaca']
-    for j in range(n_traps): 
-        for i in range(1,lags+1):
-            columns_names.extend(['trap'+str(j)+'_lag'+str(i)])
-        columns_names.extend(['latitude'+str(j)])
-        columns_names.extend(['longitude'+str(j)])
-        for i in range(1,lags+1):
-            columns_names.extend(['days'+str(j)+'_lag'+str(i)])
-    final_df.columns = columns_names  
+    # create the columns names
+    columns_names = ["nplaca"]
+    for j in range(n_traps):
+        for i in range(1, lags + 1):
+            columns_names.extend(["trap" + str(j) + "_lag" + str(i)])
+        columns_names.extend(["latitude" + str(j)])
+        columns_names.extend(["longitude" + str(j)])
+        for i in range(1, lags + 1):
+            columns_names.extend(["days" + str(j) + "_lag" + str(i)])
+    final_df.columns = columns_names
 
-    #add the number of eggs in the current week (output)
-    final_df = pd.merge(valid_samples[['nplaca','novos','dtcol']],final_df,how='inner',on='nplaca') ###
-    assert final_df.isna().sum().sum() == 0, 'There are nans in the final dataframe'
+    # add the number of eggs in the current week (output)
+    final_df = pd.merge(
+        valid_samples[["nplaca", "novos", "dtcol"]],
+        final_df,
+        how="inner",
+        on="nplaca",
+    )  ###
+    assert final_df.isna().sum().sum() == 0, (
+        "There are nans in the final dataframe"
+    )
 
     return final_df
 
 
-def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = '../data/final_data.csv')->pd.DataFrame:
+def create_final_matrix(
+    lags: str,
+    n_traps: str,
+    save_path: str,
+    data_addr: str = "../data/final_data.csv",
+) -> pd.DataFrame:
     """
     Function to create the final matrix to be used in the neural network model
 
@@ -319,17 +432,21 @@ def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = '..
     Returns:
     final_df: pandas dataframe with the final matrix to be used in the neural network model
     """
-    print('Creating final matrix')
-    data = pd.read_csv(data_addr,parse_dates=['dtcol'])
-    data['semepi'] = data['semepi'] + 100   
-    
+    print("Creating final matrix")
+    data = pd.read_csv(data_addr, parse_dates=["dtcol"])
+    data["semepi"] = data["semepi"] + 100
+
     valid_samples = get_valid_samples(data)
 
     # introduce a small value on traps with the same coordinates to differentiate them
     same_coord = same_coord_samples(valid_samples)
-    for trap in same_coord['narmad'].unique():
-        valid_samples.loc[valid_samples['narmad'] == trap, 'latitude'] += np.random.rand()*0.00000001
-        valid_samples.loc[valid_samples['narmad'] == trap, 'longitude'] += np.random.rand()*0.00000001
+    for trap in same_coord["narmad"].unique():
+        valid_samples.loc[valid_samples["narmad"] == trap, "latitude"] += (
+            np.random.rand() * 0.00000001
+        )
+        valid_samples.loc[
+            valid_samples["narmad"] == trap, "longitude"
+        ] += np.random.rand() * 0.00000001
 
     # Distance matrix
     distance_matrix = get_distance_matrix(valid_samples)
@@ -341,63 +458,139 @@ def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = '..
     lagged_eggs = create_lagged_eggs(week_trap_df, lags)
 
     # Create the nan_count_matrix
-    nan_count_matrix = np.sum(np.isnan(lagged_eggs), axis=0) # [week x trap] -> number of nans in the lagged matrix
-    for i in range(2*lags):
-        print("Number of samples with",i+1,"invalid values: ",np.sum(nan_count_matrix==i+1))
+    nan_count_matrix = np.sum(
+        np.isnan(lagged_eggs), axis=0
+    )  # [week x trap] -> number of nans in the lagged matrix
+    for i in range(2 * lags):
+        print(
+            "Number of samples with",
+            i + 1,
+            "invalid values: ",
+            np.sum(nan_count_matrix == i + 1),
+        )
 
     # info matrix
-    info_df = valid_samples[['ano','semepi','nplaca','dtcol','novos','narmad','latitude','longitude']]
+    info_df = valid_samples[
+        [
+            "ano",
+            "semepi",
+            "nplaca",
+            "dtcol",
+            "novos",
+            "narmad",
+            "latitude",
+            "longitude",
+        ]
+    ]
 
     # lagged days matrix
     day_df = convert_dates_to_ordinal(valid_samples)
-    lagged_days = create_lagged_eggs(day_df,lags) # [lag x week x trap] -> ordinal days
+    lagged_days = create_lagged_eggs(
+        day_df, lags
+    )  # [lag x week x trap] -> ordinal days
 
-    #useful dicts   
-    trap_index_dict = {trap: index for index,trap in enumerate(distance_matrix.columns)}                                           # trap: index 
-    index_trap_dict = {index: trap for index,trap in enumerate(distance_matrix.columns)}                                           # trap: index 
-    
-    yearweek_index_dict = {(year,week): index for index,(year,week) in enumerate(week_trap_df.index)}                           # (year,week): index
-    nplaca_week_dict = {nplaca: (year, week) for nplaca,week,year in zip(info_df['nplaca'],info_df['semepi'],info_df['ano'])}   # nplaca: (year,week)
-    nplaca_index_dict = {nplaca: yearweek_index_dict[(year, week)] 
-                         for nplaca,week,year 
-                         in zip(info_df['nplaca'],info_df['semepi'],info_df['ano'])}   # nplaca: week index 
-    
-    
-    unique_position = valid_samples[['latitude','longitude']].drop_duplicates().dropna().reset_index(drop=True)
-    lat_mean = unique_position['latitude'].mean()
-    long_mean = unique_position['longitude'].mean()
-    lat_std = unique_position['latitude'].std()
-    long_std = unique_position['longitude'].std()
-    
-    trap_lat_dict = {narmad: (lat - lat_mean)/lat_std for narmad,lat in zip(info_df['narmad'],info_df['latitude'])}                                  # narmad: latitude
-    trap_long_dict = {narmad: (long - long_mean)/long_std for narmad,long in zip(info_df['narmad'],info_df['longitude'])}                              # nplaca: longitude
-    #final matrix
-    final_df = final_matrix_logic(valid_samples, day_df, distance_matrix, nan_count_matrix,
-            lagged_eggs, lagged_days, info_df, trap_index_dict, index_trap_dict, nplaca_index_dict, lags, n_traps,trap_lat_dict,trap_long_dict)
-    
+    # useful dicts
+    trap_index_dict = {
+        trap: index for index, trap in enumerate(distance_matrix.columns)
+    }  # trap: index
+    index_trap_dict = {
+        index: trap for index, trap in enumerate(distance_matrix.columns)
+    }  # trap: index
+
+    yearweek_index_dict = {
+        (year, week): index
+        for index, (year, week) in enumerate(week_trap_df.index)
+    }  # (year,week): index
+    nplaca_week_dict = {
+        nplaca: (year, week)
+        for nplaca, week, year in zip(
+            info_df["nplaca"], info_df["semepi"], info_df["ano"]
+        )
+    }  # nplaca: (year,week)
+    nplaca_index_dict = {
+        nplaca: yearweek_index_dict[(year, week)]
+        for nplaca, week, year in zip(
+            info_df["nplaca"], info_df["semepi"], info_df["ano"]
+        )
+    }  # nplaca: week index
+
+    unique_position = (
+        valid_samples[["latitude", "longitude"]]
+        .drop_duplicates()
+        .dropna()
+        .reset_index(drop=True)
+    )
+    lat_mean = unique_position["latitude"].mean()
+    long_mean = unique_position["longitude"].mean()
+    lat_std = unique_position["latitude"].std()
+    long_std = unique_position["longitude"].std()
+
+    trap_lat_dict = {
+        narmad: (lat - lat_mean) / lat_std
+        for narmad, lat in zip(info_df["narmad"], info_df["latitude"])
+    }  # narmad: latitude
+    trap_long_dict = {
+        narmad: (long - long_mean) / long_std
+        for narmad, long in zip(info_df["narmad"], info_df["longitude"])
+    }  # nplaca: longitude
+    # final matrix
+    final_df = final_matrix_logic(
+        valid_samples,
+        day_df,
+        distance_matrix,
+        nan_count_matrix,
+        lagged_eggs,
+        lagged_days,
+        info_df,
+        trap_index_dict,
+        index_trap_dict,
+        nplaca_index_dict,
+        lags,
+        n_traps,
+        trap_lat_dict,
+        trap_long_dict,
+    )
+
     # add the week of the principal trap
-    info_df['semepi'] = info_df['semepi'] - 100
-    final_df = final_df.merge(info_df[['nplaca','semepi']], on='nplaca', how='left') 
+    info_df["semepi"] = info_df["semepi"] - 100
+    final_df = final_df.merge(
+        info_df[["nplaca", "semepi"]], on="nplaca", how="left"
+    )
 
-    #add zero perc
+    # add zero perc
     zero_perc = pd.DataFrame()
     for trap in distance_matrix.columns:
-        trap_df = data[data['narmad'] == trap][['novos','dtcol','nplaca']].sort_values(by='dtcol').reset_index(drop=True)  
+        trap_df = (
+            data[data["narmad"] == trap][["novos", "dtcol", "nplaca"]]
+            .sort_values(by="dtcol")
+            .reset_index(drop=True)
+        )
 
-        trap_df['is_zero'] = trap_df['novos'] == 0
-        trap_df['cumulative_zeros'] = trap_df['is_zero'].cumsum().shift(1)
-        trap_df['zero_perc'] = (trap_df['cumulative_zeros']/ (trap_df.index))
-        zero_perc = pd.concat([zero_perc,trap_df[['nplaca','zero_perc']]])
-    final_df = pd.merge(final_df,zero_perc[['nplaca','zero_perc']],on='nplaca',how='left')
+        trap_df["is_zero"] = trap_df["novos"] == 0
+        trap_df["cumulative_zeros"] = trap_df["is_zero"].cumsum().shift(1)
+        trap_df["zero_perc"] = trap_df["cumulative_zeros"] / (
+            trap_df.index
+        )
+        zero_perc = pd.concat(
+            [zero_perc, trap_df[["nplaca", "zero_perc"]]]
+        )
+    final_df = pd.merge(
+        final_df,
+        zero_perc[["nplaca", "zero_perc"]],
+        on="nplaca",
+        how="left",
+    )
 
-    final_df.sort_values(by=['dtcol'],inplace=True)
-    final_df.drop(columns=['dtcol'],inplace=True)
+    final_df.sort_values(by=["dtcol"], inplace=True)
+    final_df.drop(columns=["dtcol"], inplace=True)
     final_df.reset_index(drop=True)
-    final_df.to_parquet(save_path,index=False,compression='snappy')
+    final_df.to_parquet(save_path, index=False, compression="snappy")
     return final_df
 
 
-def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, parameters:dict)->Tuple[pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame]:
+def data_train_test_split(
+    x: pd.DataFrame, y: pd.DataFrame, parameters: dict
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Split the data into train and test sets
 
@@ -420,54 +613,66 @@ def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, parameters:dict)->Tupl
 
     n = x.shape[0]
 
+    if parameters["split_type"] == "random":
+        x_train, x_test, y_train, y_test = train_test_split(
+            x,
+            y,
+            test_size=parameters["test_size"],
+            random_state=42,
+            stratify=y,
+        )
 
-    if parameters['split_type'] == 'random':
-        x_train, x_test, y_train, y_test = train_test_split(x, y, 
-                                test_size=parameters['test_size'], random_state=42, stratify=y)
-        
-    elif parameters['split_type'] == 'sequential':
-        train_size = 1 - parameters['test_size']
-        y_train = y.iloc[:int(n*train_size)]
-        y_test = y.iloc[int(n*train_size):]
-        x_train = x.iloc[:int(n*train_size)]
-        x_test = x.iloc[int(n*train_size):] 
-        
-    elif parameters['split_type'] == 'year':
-        y_train = y[x['anoepid'].isin(parameters['year_list_train'])]
-        y_test = y[x['anoepid'].isin(parameters['year_list_test'])]
-        x_train = x[x['anoepid'].isin(parameters['year_list_train'])]
-        x_test = x[x['anoepid'].isin(parameters['year_list_test'])]
-        
-        if parameters['month_experiment']:
+    elif parameters["split_type"] == "sequential":
+        train_size = 1 - parameters["test_size"]
+        y_train = y.iloc[: int(n * train_size)]
+        y_test = y.iloc[int(n * train_size) :]
+        x_train = x.iloc[: int(n * train_size)]
+        x_test = x.iloc[int(n * train_size) :]
+
+    elif parameters["split_type"] == "year":
+        y_train = y[x["anoepid"].isin(parameters["year_list_train"])]
+        y_test = y[x["anoepid"].isin(parameters["year_list_test"])]
+        x_train = x[x["anoepid"].isin(parameters["year_list_train"])]
+        x_test = x[x["anoepid"].isin(parameters["year_list_test"])]
+
+        if parameters["month_experiment"]:
             """
             In this experiment, 20% of xtrain months will be randomly chose for testing and the rest will be used for training
             """
-            n_month_test = x_train[['anoepid','mesepid']].drop_duplicates().shape[0]//5
-            month_list = x_train[['anoepid','mesepid']].drop_duplicates().sample(n_month_test)
+            n_month_test = (
+                x_train[["anoepid", "mesepid"]].drop_duplicates().shape[0]
+                // 5
+            )
+            month_list = (
+                x_train[["anoepid", "mesepid"]]
+                .drop_duplicates()
+                .sample(n_month_test)
+            )
             month_list = month_list.apply(tuple, axis=1)
-            mask = x_train[['anoepid', 'mesepid']].apply(tuple, axis=1).isin(month_list)
+            mask = (
+                x_train[["anoepid", "mesepid"]]
+                .apply(tuple, axis=1)
+                .isin(month_list)
+            )
 
             # Apply the mask to filter x_train and y_train
-            x_test = x_train[mask]    
-            x_train = x_train[~mask] 
-            y_test = y_train[mask]   
-            y_train = y_train[~mask] 
+            x_test = x_train[mask]
+            x_train = x_train[~mask]
+            y_test = y_train[mask]
+            y_train = y_train[~mask]
 
-            x_test = x_test.drop(columns='mesepid')
-            x_train = x_train.drop(columns='mesepid')
-            
+            x_test = x_test.drop(columns="mesepid")
+            x_train = x_train.drop(columns="mesepid")
 
-        x_test = x_test.drop(columns='anoepid')
-        x_train = x_train.drop(columns='anoepid')
+        x_test = x_test.drop(columns="anoepid")
+        x_train = x_train.drop(columns="anoepid")
 
+    else:
+        raise ValueError("Invalid split type")
 
-    else :
-        raise ValueError('Invalid split type')
-
-    index_dict = {'train': x_train['nplaca'], 'test': x_test['nplaca']}
-    x_train = x_train.drop(columns='nplaca')
-    x_test = x_test.drop(columns='nplaca')
-
+    index_dict = {"train": x_train["nplaca"], "test": x_test["nplaca"]}
+    x_train = x_train.drop(columns="nplaca")
+    x_test = x_test.drop(columns="nplaca")
 
     x_train.reset_index(drop=True, inplace=True)
     x_test.reset_index(drop=True, inplace=True)
@@ -476,7 +681,10 @@ def data_train_test_split(x:pd.DataFrame, y:pd.DataFrame, parameters:dict)->Tupl
 
     return x_train, x_test, y_train, y_test, index_dict
 
-def scale_column(train:pd.DataFrame, test:pd.DataFrame, columns:list)->Tuple[pd.DataFrame,pd.DataFrame,int]:
+
+def scale_column(
+    train: pd.DataFrame, test: pd.DataFrame, columns: list
+) -> Tuple[pd.DataFrame, pd.DataFrame, int]:
     """
     Scales the same nature columns of train and test using the MinMaxScaler. The reference column is the one with the maximum value.
 
@@ -492,13 +700,10 @@ def scale_column(train:pd.DataFrame, test:pd.DataFrame, columns:list)->Tuple[pd.
 
     """
     # Flatten the columns column and reshape it to a 2D array
-    if isinstance(train,pd.DataFrame):
+    if isinstance(train, pd.DataFrame):
         flattened_train = train[columns].values.flatten().reshape(-1, 1)
         flattened_test = test[columns].values.flatten().reshape(-1, 1)
 
-
-
-    
     elif isinstance(train, pd.Series):
         flattened_train = train.values.flatten().reshape(-1, 1)
         flattened_test = test.values.flatten().reshape(-1, 1)
@@ -511,7 +716,7 @@ def scale_column(train:pd.DataFrame, test:pd.DataFrame, columns:list)->Tuple[pd.
     flattened_test = scaler.transform(flattened_test)
 
     # Reshape back into the original DataFrame shape and update the DataFrames
-    if isinstance(train,pd.DataFrame):
+    if isinstance(train, pd.DataFrame):
         flattened_train = flattened_train.reshape(train[columns].shape)
         flattened_test = flattened_test.reshape(test[columns].shape)
         train[columns] = pd.DataFrame(flattened_train, columns=columns)
@@ -526,7 +731,6 @@ def scale_column(train:pd.DataFrame, test:pd.DataFrame, columns:list)->Tuple[pd.
 
 
 def scale_dataset(x_train, x_test, y_train, y_test, parameters):
-
     """
     Function to scale the dataset respecting the nature of the columns
 
@@ -545,25 +749,26 @@ def scale_dataset(x_train, x_test, y_train, y_test, parameters):
     """
     grouped = defaultdict(list)
     for col in x_train.columns:
-        if col.startswith('days'):
-            grouped['days'].append(col)
-        elif col.startswith('trap'):
-            grouped['trap'].append(col)
-        elif col.startswith('latitude'):    
-            grouped['latitude'].append(col)
-        elif col.startswith('longitude'):
-            grouped['longitude'].append(col)
+        if col.startswith("days"):
+            grouped["days"].append(col)
+        elif col.startswith("trap"):
+            grouped["trap"].append(col)
+        elif col.startswith("latitude"):
+            grouped["latitude"].append(col)
+        elif col.startswith("longitude"):
+            grouped["longitude"].append(col)
         else:
-            prefix = col.split('_')[0]  # Group by the part before '_'
+            prefix = col.split("_")[0]  # Group by the part before '_'
             grouped[prefix].append(col)
-    
+
     grouped_dict = dict(grouped)
     scaler_dicts = {}
 
     for key in grouped_dict:
-        x_train, x_test, scaler = scale_column(x_train, x_test, grouped_dict[key])
+        x_train, x_test, scaler = scale_column(
+            x_train, x_test, grouped_dict[key]
+        )
         scaler_dicts[key] = scaler
-    
 
     return x_train, x_test, y_train, y_test, scaler_dicts
 
@@ -581,39 +786,39 @@ def create_3d_input(df, num_traps, num_lags):
     num_lags: Number of lags
 
     Returns:
-    result_3d_array: 3D NumPy array with shape (num_weeks, num_traps * num_lags, 3)   
-    
+    result_3d_array: 3D NumPy array with shape (num_weeks, num_traps * num_lags, 3)
+
     """
-    
+
     num_weeks = df.shape[0]  # Number of rows (weeks)
 
     # Extract trap lag columns, days lag columns, and distances into NumPy arrays
-    trap_lags = np.hstack([df[[f'trap{trap_num}_lag{i}' for i in range(1, num_lags + 1)]].values 
-                        for trap_num in range(num_traps)])
+    trap_lags = np.hstack(
+        [
+            df[
+                [f"trap{trap_num}_lag{i}" for i in range(1, num_lags + 1)]
+            ].values
+            for trap_num in range(num_traps)
+        ]
+    )
 
-    days_lags = np.hstack([df[[f'days{trap_num}_lag{i}' for i in range(1, num_lags + 1)]].values 
-                        for trap_num in range(num_traps)])
+    days_lags = np.hstack(
+        [
+            df[
+                [f"days{trap_num}_lag{i}" for i in range(1, num_lags + 1)]
+            ].values
+            for trap_num in range(num_traps)
+        ]
+    )
 
-    distances = np.hstack([df[[f'distance{trap_num}']].values.repeat(num_lags, axis=1) 
-                        for trap_num in range(num_traps)])
+    distances = np.hstack(
+        [
+            df[[f"distance{trap_num}"]].values.repeat(num_lags, axis=1)
+            for trap_num in range(num_traps)
+        ]
+    )
 
     # Stack trap lags, days lags, and distances into a 3D array
     # Shape: (num_weeks, num_traps * num_lags, 3)
     result_3d_array = np.stack((trap_lags, days_lags, distances), axis=-1)
     return result_3d_array
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
