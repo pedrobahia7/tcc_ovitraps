@@ -3,14 +3,12 @@ import pandas as pd
 import json
 import numpy as np
 import utils.NN_building as NN_building
-import pdb
 import datetime
 import pickle
 import torch
 
 
-
-def get_runs_by_parameters(parameters:dict)->pd.DataFrame:
+def get_runs_by_parameters(parameters: dict) -> pd.DataFrame:
     """
     Get df with runs and theirs informations filtered by parameters
 
@@ -21,23 +19,28 @@ def get_runs_by_parameters(parameters:dict)->pd.DataFrame:
     runs_df: DataFrame containing the runs and their informations
     """
     # Construct the filter to check model version
-    filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items()])
+    filter_string = " and ".join(
+        [f"params.{key} = '{value}'" for key, value in parameters.items()]
+    )
     # Search for existing runs using the constructed filter string
     runs_df = mlflow.search_runs(filter_string=filter_string)
     return runs_df
+
 
 def get_runs_by_tags(tags):
     # Construct the filter to check model version
-    filter_string = " and ".join([f"tag.{key} = '{value}'" for key, value in tags.items()])
+    filter_string = " and ".join(
+        [f"tag.{key} = '{value}'" for key, value in tags.items()]
+    )
     # Search for existing runs using the constructed filter string
     runs_df = mlflow.search_runs(filter_string=filter_string)
     return runs_df
 
 
-def info_from_artifacts(runs_df:pd.DataFrame,artifact_path:str):
-    """ 
+def info_from_artifacts(runs_df: pd.DataFrame, artifact_path: str):
+    """
     Retrieve the logged dictionaries from artifacts
-    
+
     Parameters:
     runs_df: DataFrame of runs containing the run_id for each analysed model
     artifact_path: path to the artifact to be retrieved ['test_history.json', 'train_history.json', 'output.json', 'index_dict_test.json', 'index_dict_train.json']
@@ -46,25 +49,25 @@ def info_from_artifacts(runs_df:pd.DataFrame,artifact_path:str):
     test_history_list: list of dictionaries containing the test history of each model
     train_history_list: list of dictionaries containing the train history of each model
     output_list: list of dictionaries containing the output of each model
-    version_list: list of integers containing the version of each model    
-    
+    version_list: list of integers containing the version of each model
+
     """
 
     info_history_list = []
 
+    for _, run in runs_df.iterrows():
+        run_id = run["run_id"]
 
-    for _,run in (runs_df.iterrows()):
-        run_id = run['run_id']
-
-        info_history_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=artifact_path)
-        with open(info_history_path, 'r') as f:
+        info_history_path = mlflow.artifacts.download_artifacts(
+            run_id=run_id, artifact_path=artifact_path
+        )
+        with open(info_history_path, "r") as f:
             info_history = json.load(f)
         info_history_list.append(info_history)
     return info_history_list
 
 
-
-def get_version_list(runs_list):    
+def get_version_list(runs_list):
     """
     Retrieve the version of each model
 
@@ -76,13 +79,14 @@ def get_version_list(runs_list):
 
     """
     version_list = []
-    for _,run in (runs_list.iterrows()):
-        version_list.append(int(run['tags.version']))
+    for _, run in runs_list.iterrows():
+        version_list.append(int(run["tags.version"]))
 
     return version_list
 
-def load_model(runs_df:pd.Series, model_lib:str):
-    """ 
+
+def load_model(runs_df: pd.Series, model_lib: str):
+    """
     Load the model from the run id
 
     Parameters:
@@ -93,16 +97,21 @@ def load_model(runs_df:pd.Series, model_lib:str):
     model: loaded model
 
     """
-    model_uri = mlflow.artifacts.download_artifacts(run_id=runs_df['run_id'], artifact_path='model')
-    if model_lib == 'sklearn':
+    model_uri = mlflow.artifacts.download_artifacts(
+        run_id=runs_df["run_id"], artifact_path="model"
+    )
+    if model_lib == "statsmodel":
         return mlflow.statsmodels.load_model(model_uri)
-    elif model_lib == 'pytorch':
+    elif model_lib == "sklearn":
+        return mlflow.sklearn.load_model(model_uri)
+    elif model_lib == "pytorch":
         return mlflow.pytorch.load_model(model_uri)
-    elif model_lib == 'statsmodels':
+    elif model_lib == "statsmodels":
         return mlflow.statsmodels.load_model(model_uri)
     else:
-        raise ValueError('Model library not supported')
-    
+        raise ValueError("Model library not supported")
+
+
 def compare_predictions(yhat, ytest):
     """
     Compare the predictions with the test labels and return a boolean array with the results
@@ -126,7 +135,7 @@ def compare_predictions(yhat, ytest):
     return bool_index
 
 
-def read_parquet(parameters,data_path=None):
+def read_parquet(parameters, data_path=None):
     """
     Read the parquet file and create the dataset for the neural network
 
@@ -143,124 +152,244 @@ def read_parquet(parameters,data_path=None):
     info_cols: list of columns to be used in the dataset
 
     """
-    lags = parameters['lags']
-    ntraps = parameters['ntraps']
-    
+    lags = parameters["lags"]
+    ntraps = parameters["ntraps"]
+
     if data_path is None:
-        data_path = f'../results/final_dfs/final_df_lag{lags}_ntraps{ntraps}.parquet'
+        data_path = f"../results/final_dfs/final_df_lag{lags}_ntraps{ntraps}.parquet"
 
     origianl_df = pd.read_parquet(data_path)
-    unnamed_cols = origianl_df.columns [['Unnamed' in col for col in origianl_df.columns] ]
-    origianl_df.drop(unnamed_cols,axis=1,inplace = True)
+    unnamed_cols = origianl_df.columns[
+        ["Unnamed" in col for col in origianl_df.columns]
+    ]
+    origianl_df.drop(unnamed_cols, axis=1, inplace=True)
 
-    x_train, x_test, y_train, y_test, nplaca_index = NN_building.create_dataset(parameters, data_path )
+    x_train, x_test, y_train, y_test, nplaca_index = (
+        NN_building.create_dataset(parameters, data_path)
+    )
 
     return x_train, x_test, y_train, y_test, nplaca_index
 
-def save_model_mlflow(parameters:dict, model, ytrain:pd.DataFrame ,yhat:pd.DataFrame,ytest:pd.DataFrame, test_history, train_history, features, index_dict):
 
+def save_model_mlflow(
+    parameters: dict,
+    model,
+    ytrain: pd.DataFrame,
+    yhat: pd.DataFrame,
+    ytest: pd.DataFrame,
+    test_history,
+    train_history,
+    features,
+    index_dict,
+):
     """
     Saves the model in the MLflow server.
     """
     #  model
 
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").replace(" ", "_").replace(":", "_")
+    now = (
+        datetime.datetime.now()
+        .strftime("%Y-%m-%d %H:%M:%S")
+        .replace(" ", "_")
+        .replace(":", "_")
+    )
 
-    if parameters['model_type'] in ['logistic' ,'mlp' ,'random_forest', 'catboost' ,'logistic_3c' ,'random_forest_3c' ,'catboost_3c']:
-        pickle.dump(model, open(f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pkl", 'wb'))
-    elif parameters['model_type'] in ['Naive' ,'svm' ,'svm_3c' ,'Naive_3c']:
+    if parameters["model_type"] in [
+        "logistic",
+        "mlp",
+        "random_forest",
+        "catboost",
+        "logistic_3c",
+        "random_forest_3c",
+        "catboost_3c",
+        "mlp_3c",
+        "linear",
+        "linear_3c",
+        "random_forest_reg",
+        "catboost_reg",
+        "mlp_reg",
+        "GAM",
+    ]:
+        pickle.dump(
+            model,
+            open(
+                f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pkl",
+                "wb",
+            ),
+        )
+    elif parameters["model_type"] in [
+        "Naive",
+        "svm",
+        "svm_3c",
+        "Naive_3c",
+        "Naive_reg",
+        "svr",
+    ]:
         pass
-    elif  parameters['model_type'] in ['GAM']:
-        model.save(f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pgam")
+        model.save(
+            f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pgam"
+        )
     else:
-        torch.save(model.state_dict(), f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pth")
+        torch.save(
+            model.state_dict(),
+            f"./results/NN/save_parameters/model{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_{now}.pth",
+        )
 
     # Construct the filter to check model versio
-    filter_string = " and ".join([f"params.{key} = '{value}'" for key, value in parameters.items() if key not in
-                                   ['catboost_params','mlp_params','rf_params','svm_params','year_list_test','year_list_train','info_cols'] ] )
-    
+    filter_string = " and ".join(
+        [
+            f"params.{key} = '{value}'"
+            for key, value in parameters.items()
+            if key
+            not in [
+                "catboost_params",
+                "mlp_params",
+                "rf_params",
+                "svm_params",
+                "year_list_test",
+                "year_list_train",
+                "info_cols",
+            ]
+        ]
+    )
+
     # Convert year lists to strings and add to filter string
-    year_list_test = ','.join(map(str, parameters['year_list_test']))
-    year_list_train = ','.join(map(str, parameters['year_list_train']))
+    year_list_test = ",".join(map(str, parameters["year_list_test"]))
+    year_list_train = ",".join(map(str, parameters["year_list_train"]))
     filter_string += f" and params.year_list_train = '{year_list_train}' and params.year_list_test = '{year_list_test}'"
 
-    
     # Search for existing runs using the constructed filter string
     existing_runs = mlflow.search_runs(filter_string=filter_string)
     version = len(existing_runs) + 1
-    
 
     output = {
-    'yhat': yhat.tolist(),
-    'ytest': ytest.tolist(),
-        }
+        "yhat": yhat.tolist(),
+        "ytest": ytest.tolist(),
+    }
 
     # Start an MLflow run
     # metrics
+
     metrics_dict = {
-                    'Test Classification Accuracy': test_history['acc_class'][-1],
-                    'Train Classification Accuracy': train_history['acc_class'][-1],
-                    'Test Regression Accuracy': test_history['acc_reg'][-1],
-                    'Train Regression Accuracy': train_history['acc_reg'][-1],
-                    'Test Regression Error': test_history['error_reg'][-1],
-                    'Train Regression Error': train_history['error_reg'][-1],
-                    'Percentage of Zeros in Test': (ytest == 0).sum().item()/len(ytest),
-                    'Test Size': len(ytest),
-                    'Train Size': len(ytrain)
-                    }
+        "Test Classification Accuracy": test_history["acc_class"][-1],
+        "Train Classification Accuracy": train_history["acc_class"][-1],
+        "Test Regression Accuracy": test_history["acc_reg"][-1],
+        "Train Regression Accuracy": train_history["acc_reg"][-1],
+        "Test Regression Error": test_history["error_reg"][-1],
+        "Train Regression Error": train_history["error_reg"][-1],
+        "Test Regression RMSE": test_history["loss_reg"][-1],
+        "Train Regression RMSE": train_history["loss_reg"][-1],
+        "Percentage of Zeros in Test": (ytest == 0).sum().item()
+        / len(ytest),
+        "Test Size": len(ytest),
+        "Train Size": len(ytrain),
+    }
 
     mlflow.log_metrics(metrics_dict)
 
     # historic results
-    mlflow.log_dict( test_history,'test_history.json')
-    mlflow.log_dict( train_history,'train_history.json')
-    mlflow.log_dict(index_dict['test'].to_list(), "index_dict_test.json")                        
-    mlflow.log_dict(index_dict['train'].to_list(), "index_dict_train.json")                        
-    
+    mlflow.log_dict(test_history, "test_history.json")
+    mlflow.log_dict(train_history, "train_history.json")
+    mlflow.log_dict(index_dict["test"].to_list(), "index_dict_test.json")
+    mlflow.log_dict(index_dict["train"].to_list(), "index_dict_train.json")
+
     # Log parameters
-    for key, value in parameters.items() :
-        if key not in ['mlp_params','rf_params','year_list_test','year_list_train']:
+    for key, value in parameters.items():
+        if key not in [
+            "mlp_params",
+            "rf_params",
+            "year_list_test",
+            "year_list_train",
+            "catboost_params",
+            "svm_params",
+        ]:
             mlflow.log_param(key, value)
-    
-    mlflow.log_param('year_list_train', year_list_train)
-    mlflow.log_param('year_list_test', year_list_test)
 
-    if parameters['model_type'] in ['mlp']:
-        mlflow.log_params(parameters['mlp_params'],'mlp_params')
-    
-    if parameters['model_type'] in ['random_forest' ,'random_forest_3c']:
-        mlflow.log_params(parameters['rf_params'],'rf_params')
-
-    if parameters['model_type'] in ['svm' ,'svm_3c']:
-        mlflow.log_params(parameters['svm_params'],'svm_params')
-
-    if parameters['model_type'] in ['catboost','catboost_3c']:
-        
-        flattened_params = {f"catboost_{key}": str(value) for key, value in parameters['catboost_params'].items()}
+    mlflow.log_param("year_list_train", year_list_train)
+    mlflow.log_param("year_list_test", year_list_test)
+    if parameters["model_type"] in ["mlp", "mlp_3c", "mlp_reg"]:
+        flattened_params = {
+            f"mlp_{key}": str(value)
+            for key, value in parameters["mlp_params"].items()
+        }
         mlflow.log_params(flattened_params)
-        
+
+    if parameters["model_type"] in [
+        "random_forest",
+        "random_forest_3c",
+        "random_forest_reg",
+    ]:
+        mlflow.log_params(parameters["rf_params"], "rf_params")
+
+    if parameters["model_type"] in ["svm", "svm_3c", "svr"]:
+        mlflow.log_params(parameters["svm_params"], "svm_params")
+
+    if parameters["model_type"] in [
+        "catboost",
+        "catboost_3c",
+        "catboost_reg",
+    ]:
+        flattened_params = {
+            f"catboost_{key}": str(value)
+            for key, value in parameters["catboost_params"].items()
+        }
+        mlflow.log_params(flattened_params)
+
     # Log outputs
 
-    mlflow.log_dict(output, "output.json")     
+    mlflow.log_dict(output, "output.json")
 
     # Log features
-    mlflow.log_param('features', features)
+    mlflow.log_param("features", features)
 
-    
-    #tags
-    mlflow.set_tag('mlflow.runName', f"{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_version{version}")	
-    mlflow.log_param('version', version)                                          # Log version
-
+    # tags
+    mlflow.set_tag(
+        "mlflow.runName",
+        f"{parameters['model_type']}_lags{parameters['lags']}_ntraps{parameters['ntraps']}_version{version}",
+    )
+    mlflow.log_param("version", version)  # Log version
 
     # Log model
-    if parameters['model_type'] in ['logistic'  ,'logistic_3c']:
-        mlflow.statsmodels.log_model(model, "model")#,signature=signature)                      # Log model
-    elif parameters['model_type'] in ['GAM','Naive', 'catboost' ,'Naive_3c' ,'catboost_3c']:
+    if parameters["model_type"] in [
+        "logistic",
+        "logistic_3c",
+        "linear",
+        "linear_3c",
+    ]:
+        mlflow.statsmodels.log_model(
+            model, "model"
+        )  # ,signature=signature)                      # Log model
+    elif parameters["model_type"] in [
+        "GAM",
+        "Naive",
+        "catboost",
+        "Naive_3c",
+        "catboost_3c",
+        "Naive_reg",
+        "catboost_reg",
+    ]:
         pass
-    elif parameters['model_type'] in ['mlp','random_forest','svm','svm_3c','random_forest_3c']:
+    elif parameters["model_type"] in [
+        "mlp",
+        "random_forest",
+        "svm",
+        "svm_3c",
+        "random_forest_3c",
+        "mlp_3c",
+        "svr",
+        "random_forest_reg",
+        "mlp_reg",
+    ]:
         mlflow.sklearn.log_model(model, "model")
-    elif parameters['model_type'] in ['exponential_renato','classifier','regressor','pareto','linear_regressor']:
-        mlflow.pytorch.log_model(model, "model")#,signature=signature)                      # Log model
+    elif parameters["model_type"] in [
+        "exponential_renato",
+        "classifier",
+        "regressor",
+        "pareto",
+        "linear_pytorch",
+    ]:
+        mlflow.pytorch.log_model(
+            model, "model"
+        )  # ,signature=signature)                      # Log model
     else:
         raise ValueError("Model type not supported")
-  
