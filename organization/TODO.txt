@@ -5,7 +5,8 @@ encontrar regionais com taxa amostral semanal
 calcular número de armadilhas que deveriam ser colocadas
 
 
-
+reproduzir resultado do RN em dados pbh
+skater para regionalização
 
 LER: 
     Artigos:
