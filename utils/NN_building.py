@@ -10,11 +10,20 @@ import sklearn
 import statsmodels.api as sm 
 from pygam import LogisticGAM, s, f, te, l 
 import pdb
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.svm import SVC, SVR
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.neural_network import MLPClassifier, MLPRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.kernel_approximation import RBFSampler
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import SGDClassifier
+from sklearn.model_selection import ParameterSampler
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.metrics import accuracy_score, root_mean_squared_error
 from scipy.stats import randint, loguniform
-from catboost import CatBoostClassifier
+from catboost import CatBoostClassifier,CatBoostRegressor
+        
 
 def xy_definition(data:pd.DataFrame, parameters:dict,
                   info_cols:list, eggs_cols:list)->Tuple[pd.DataFrame, pd.DataFrame]:
@@ -24,7 +33,7 @@ def xy_definition(data:pd.DataFrame, parameters:dict,
     Parameters:
     data: dataframe with the data
     paramters: dictionary with the parameters of the model. It must contain
-        model_type: string with the model type: classifier, regressor, exponential_renato, linear_regressor, logistic, GAM, 
+        model_type: string with the model type: classifier, regressor, exponential_renato, linear_pytorch, logistic, GAM, 
         use_trap_info: flag to use the traps information like days and distances
         add_constant: flag to add a constant to the x variables
     inf_col: list with the name of columns of days, latitude, longitude, mesepid and novos
@@ -38,21 +47,24 @@ def xy_definition(data:pd.DataFrame, parameters:dict,
     """
     # Define the output variable according to the model type
     # change ovos flag to 0 and 1 instead of -1 and 1
-    if parameters['model_type'] in ['logistic', 'Naive']:      
-        ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else 0)#.rename('ovos_flag', inplace=True)
-    elif parameters['model_type'] in ['classifier', 'regressor', 'exponential_renato', 'linear_regressor', 'pareto','mlp', 'random_forest', 'svm', 
-                                      'catboost', 'GAM','logistic_3c', 'Naive_3c',  'random_forest_3c', 'svm_3c', 'catboost_3c']:
-        ovos_flag = data['novos'].apply(lambda x: 1 if x > 0 else -1)
-    else:
-        raise ValueError('Model type not found')   
+    if parameters['model_type'] in ['logistic',  'GAM','Naive']:
+        ovos_flag = data['novos'].apply(lambda x: 1 if x > parameters['limit'] else 0)#.rename('ovos_flag', inplace=True)
+    elif parameters['model_type'] in ['classifier', 'regressor', 'exponential_renato', 'pareto','mlp', 'random_forest', 'svm', 
+                                      'catboost','logistic_3c', 'Naive_3c',  'random_forest_3c', 'svm_3c', 'mlp_3c','catboost_3c']:
+        ovos_flag = data['novos'].apply(lambda x: 1 if x > parameters['limit'] else -1)
+
 
     # output variable
     if parameters['model_type'] in ['classifier', 'logistic', 'GAM', 'Naive', 'mlp', 'random_forest', 'svm', 'catboost']:
         y = ovos_flag
-    elif parameters['model_type'] in ['logistic_3c', 'Naive_3c','random_forest_3c','svm_3c', 'catboost_3c']:
+
+    elif parameters['model_type'] in ['logistic_3c', 'Naive_3c','random_forest_3c','svm_3c', 'catboost_3c', 'mlp_3c']:
         y = data['3_class']
-    elif parameters['model_type'] in ['regressor',  'linear_regressor']:
-        y = data['novos']
+
+    elif parameters['model_type'] in ['regressor',  'linear_pytorch','linear','Naive_reg','linear_3c','svr',
+                                      'random_forest_reg', 'catboost_reg','mlp_reg']:
+        y = data['novos'].map(lambda x: 100 if x > 100 else x) 
+
     elif parameters['model_type'] in ['exponential_renato', 'pareto']:
         y = pd.concat([ovos_flag.rename('ovos_flag', inplace=True),data['novos']],axis=1)
     else:
@@ -68,7 +80,7 @@ def xy_definition(data:pd.DataFrame, parameters:dict,
     if parameters['add_constant'] == True:
         x = sm.add_constant(x)
     
-    if 'mesepid' in x.columns and parameters['model_type'] not in ['catboost','catboost_3c']:
+    if 'mesepid' in x.columns and parameters['model_type'] not in ['catboost','catboost_3c','catboost_reg']:
         x = pd.get_dummies(x, columns=['mesepid'], drop_first=True)
         x = x.astype({col: 'float' for col in x.columns if 'mesepid_' in col})
     return x, y
@@ -82,7 +94,7 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
     x_test: numpy array with the test data
     y_train: numpy array with the training data
     y_test: numpy array with the test data
-    model_type: classifier, regressor, exponential_renato, linear_regressor, logistic, GAM, Naive, mlp, random_forest, svm, catboost
+    model_type: classifier, regressor, exponential_renato, linear_pytorch, logistic, GAM, Naive, mlp, random_forest, svm, catboost
     device: device to send the tensors
 
     Returns:
@@ -92,9 +104,9 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
     ytest: tensor with the test data    
     """
 
-    if model_type in ['classifier','logistic','GAM','Naive','mlp','random_forest','svm','catboost','logistic_3c','Naive_3c','random_forest_3c','svm_3c','catboost_3c']:
+    if model_type in ['classifier','logistic','GAM','Naive','mlp','random_forest','svm','catboost','logistic_3c','Naive_3c','random_forest_3c','svm_3c','catboost_3c', 'mlp_3c','linear','Naive_reg']:
         output_type = torch.long
-    elif model_type  in ['regressor' , 'exponential_renato' , 'linear_regressor' , 'pareto']:
+    elif model_type  in ['regressor' , 'exponential_renato' , 'linear_pytorch' , 'pareto','linear_3c']:
         output_type = torch.float32
 
     if isinstance(x_train, pd.DataFrame):
@@ -116,11 +128,11 @@ def transform_data_to_tensor(x_train: np.array, x_test: np.array, y_train: np.ar
 class CustomDataset(Dataset):
     def __init__(self, features, targets, model_type):
         self.features  = features.clone().detach().float()
-        if model_type in ['logistic_3c', 'classifier', 'logistic', 'GAM', 'Naive', 'mlp', 'random_forest', 'svm', 'catboost', 'Naive_3c', 'random_forest_3c', 
-                          'svm_3c', 'catboost_3c']:
+        if model_type in ['logistic_3c', 'classifier', 'logistic', 'GAM', 'Naive', 'mlp', 'random_forest', 'svm', 'catboost', 'Naive_3c', 
+                          'random_forest_3c', 'svm_3c', 'catboost_3c', 'mlp_3c','svr','random_forest_reg', 'catboost_reg','mlp_reg']:
             self.targets =  targets.clone().detach().long()
 
-        elif model_type in ['exponential_renato', 'pareto', 'regressor', 'linear_regressor']:
+        elif model_type in ['exponential_renato', 'pareto', 'regressor', 'linear_pytorch','Naive_reg','linear','linear_3c']:
             self.targets = targets.clone().detach().float()
 
     def __len__(self):
@@ -138,8 +150,9 @@ def input_output_sizes(xtrain, model_type):
         
     if model_type  in ['classifier' , 'exponential_renato' , 'pareto']:# , 'mlp':
         model_output = 2
-    elif model_type  in ['regressor', 'linear_regressor', 'logistic', 'GAM', 'Naive', 'mlp', 'random_forest', 'svm', 'catboost', 
-                         'logistic_3c', 'Naive_3c', 'random_forest_3c', 'svm_3c', 'catboost_3c']:
+    elif model_type  in ['regressor', 'linear_pytorch', 'logistic', 'GAM', 'Naive', 'mlp', 'random_forest', 'svm', 'catboost', 
+                         'logistic_3c', 'Naive_3c', 'random_forest_3c', 'svm_3c', 'catboost_3c', 'mlp_3c','linear','Naive_reg','linear_3c',
+                         'svr','random_forest_reg', 'catboost_reg','mlp_reg']:
         model_output = 1
     return model_input, model_output
 
@@ -147,8 +160,8 @@ def define_model(model_type, model_input, model_output, input_3d,device):
     """
     Function to define pytorch models
     """
-    if model_type  in ['linear_regressor']:
-        model = NN_arquitectures.LogisticRegression(model_input,input_3d, model_type).to(device)
+    if model_type  in ['linear_pytorch']:
+        model = NN_arquitectures.linear_pytorch(model_input).to(device)
     elif model_type  in ['exponential_renato']:
         model = NN_arquitectures.NeuralNetworkExponential(model_input, model_output,model_type,input_3d).to(device)
     elif model_type  in ['pareto']:
@@ -165,12 +178,13 @@ def define_loss_functions(model_type):
     if model_type  in ['classifier' , 'mlp']:
         loss_func_class = nn.CrossEntropyLoss()
         loss_func_reg = None
-    elif model_type in ['logistic','GAM','Naive','random_forest', 'svm','catboost','logistic_3c','Naive_3c','random_f,est_3c', 'svm_3c','catboost_3c']:
+    elif model_type in ['logistic','GAM','Naive','random_forest', 'svm','catboost','logistic_3c','Naive_3c','random_f,est_3c', 'svm_3c','catboost_3c',
+                         'mlp_3c','linear','Naive_reg','linear_3c','svr','random_forest_reg', 'catboost_reg','mlp_reg']:
         loss_func_class = None
         loss_func_reg = None
-    elif model_type  in ['regressor' , 'linear_regressor']:
+    elif model_type  in ['regressor' , 'linear_pytorch']:
         loss_func_class = None
-        loss_func_reg = nn.MSELoss()
+        loss_func_reg = NN_arquitectures.MSELoss()
     elif model_type  in ['exponential_renato']:
         loss_func_class = nn.CrossEntropyLoss()
         loss_func_reg = NN_arquitectures.ExponentialLoss()
@@ -183,7 +197,7 @@ def define_loss_functions(model_type):
 def torch_accuracy(yref, yhat,model_type):
     if model_type  in ['classifier' , 'mlp']: #TODO check if this is correct
         return (yhat.argmax(1) == yref).type(torch.float).sum().item()
-    elif model_type  in ['regressor' , 'linear_regressor']:
+    elif model_type  in ['regressor' , 'linear_pytorch']:
         return ((torch.round(yhat) == yref).type(torch.float)).sum().item()
     else:
         raise ValueError('Model type not found')
@@ -212,7 +226,7 @@ def calc_model_output(model, xtest,loss_func_reg=None):
     if model.model_type  in ['classifier' ,'mlp']:
         yhat = model(xtest).argmax(1).cpu().numpy()
         return yhat
-    elif model.model_type  in ['regressor' ,'linear_regressor']:
+    elif model.model_type  in ['regressor' ,'linear_pytorch']:
         yhat = model(xtest).round().cpu().detach().numpy() 
         return yhat.squeeze()
     elif model.model_type  in ['exponential_renato']:
@@ -437,9 +451,7 @@ def select_model_stepwise(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:
         return model_backward, current_features
 
     
-
-
-def GAM_model(x_train:pd.DataFrame, y_train:pd.DataFrame)->LogisticGAM:
+def GAM_model(x_train:pd.DataFrame, y_train:pd.DataFrame, parameters)->LogisticGAM:
     """
     Fit a Generalized Additive Model (GAM) to the data. The function fits a GAM model with splines for the semepi, latitude and longitude variables.
 
@@ -475,7 +487,6 @@ def GAM_model(x_train:pd.DataFrame, y_train:pd.DataFrame)->LogisticGAM:
         model.fit(x_train[features], y_train)        
     return model, features
  
-
 def random_forest_model(x_train:pd.DataFrame, y_train:pd.DataFrame, parameters:dict)->RandomForestClassifier:
     """
     Fit a Random Forest model to the data 
@@ -496,7 +507,7 @@ def random_forest_model(x_train:pd.DataFrame, y_train:pd.DataFrame, parameters:d
 
         # Define the parameter grid
         param_dist = {
-            'n_estimators': randint(10, 200),  # Random integer between 50 and 200
+            'n_estimators': randint(50, 200),  # Random integer between 50 and 200
             'max_depth': [None, 10, 20, 30, 40],  # Fixed choices
             'min_samples_split': randint(2, 100),  # Random integer between 2 and 10
             'min_samples_leaf': randint(1, 50),  # Random integer between 1 and 5
@@ -525,8 +536,69 @@ def random_forest_model(x_train:pd.DataFrame, y_train:pd.DataFrame, parameters:d
         model.fit(x_train, y_train)
     return model, parameters
 
+def random_forest_reg_model(x_train:pd.DataFrame, y_train:pd.DataFrame, parameters:dict)->RandomForestRegressor:
+    """
+    Fit a Random Forest model to the data 
 
-def svm_model(x_train:pd.DataFrame, y_train:pd.DataFrame, x_test:pd.DataFrame, y_test:pd.DataFrame, parameters:dict)->RandomForestClassifier:
+    Parameters:
+    x_train: pd.DataFrame with the input features
+    y_train: pd.Series with the target variable
+    parameters: dictionary with the parameters of the model
+
+    Returns:
+    model: the fitted Random Forest model
+    """
+
+    if parameters['rf_params']['grid_search'] == True:
+            # Initialize the Random Forest model
+        rf = RandomForestRegressor()
+
+        # Define the parameter grid
+        param_dist = {
+            'n_estimators': randint(50, 200),  # Random integer between 50 and 200
+            'max_depth': [None, 10, 20, 30, 40],  # Fixed choices
+            'min_samples_split': randint(2, 100),  # Random integer between 2 and 10
+            'min_samples_leaf': randint(20, 50),  # Random integer between 1 and 5
+            'bootstrap': [True, False]  # Binary choice
+        }
+
+        grid_search = RandomizedSearchCV(estimator=rf, param_distributions=param_dist,
+                                        n_iter=1, cv=3, verbose=2, n_jobs=-1)
+
+
+        # Fit the model to the training data
+        grid_search.fit(x_train, y_train)
+        model = grid_search.best_estimator_
+        parameters['rf_params'] = grid_search.best_params_  
+        parameters['rf_params']['grid_search'] = True
+
+    else:
+        model = RandomForestRegressor(
+                                        n_estimators=int(parameters['rf_params']["n_estimators"]),
+                                        max_depth=int(parameters['rf_params']["max_depth"]),
+                                        min_samples_split=int(parameters['rf_params']["min_samples_split"]),
+                                        min_samples_leaf=int(parameters['rf_params']["min_samples_leaf"]),
+                                        bootstrap=parameters['rf_params']["bootstrap"]
+                                    )
+        model.fit(x_train, y_train)
+    return model, parameters    
+
+# Custom evaluation function
+def evaluate_svm_model(pipeline, params, x_train, y_train, x_test, y_test, n_runs=1):
+    scores = []
+    best_model = None
+    best_score = 0 
+    for _ in range(n_runs):
+        pipeline.set_params(**params)  # Update pipeline with current parameters
+        pipeline.fit(x_train, y_train)  # Fit the model
+        y_pred = pipeline.predict(x_test)  # Predict
+        scores.append(accuracy_score(y_test, y_pred))  # Compute accuracy
+        if scores[-1] > best_score:
+            best_score = scores[-1]
+            best_model = pipeline
+    return np.mean(scores), best_model
+
+def svr_model(x_train:pd.DataFrame, y_train:pd.DataFrame, x_test:pd.DataFrame, y_test:pd.DataFrame, parameters:dict)->SVC:
     """
     Fit a Support Vector Machine (SVM) model to the data.
 
@@ -541,43 +613,11 @@ def svm_model(x_train:pd.DataFrame, y_train:pd.DataFrame, x_test:pd.DataFrame, y
 
     if parameters['svm_params']['grid_search'] == True:
         
-        from sklearn.pipeline import Pipeline
-        from sklearn.kernel_approximation import RBFSampler
-        from sklearn.preprocessing import PolynomialFeatures
-        from sklearn.linear_model import SGDClassifier
-        from sklearn.model_selection import ParameterSampler
-        from sklearn.base import BaseEstimator, TransformerMixin
-        from sklearn.metrics import accuracy_score
-        
-
-
-        # Define the custom TransformerSelector class
-        class TransformerSelector(BaseEstimator, TransformerMixin):
-            """Custom transformer to select between RBF, Polynomial, or None."""
-            def __init__(self, transformer=None):
-                self.transformer = transformer
-
-            def fit(self, X, y=None):
-                if self.transformer is not None:
-                    self.transformer.fit(X, y)
-                return self
-
-            def transform(self, X):
-                if self.transformer is not None:
-                    return self.transformer.transform(X)
-                return X
-
-            def fit_transform(self, X, y=None):
-                self.fit(X, y)
-                return self.transform(X)
-
-        # Define the pipeline
         pipeline = Pipeline([
-            ('transformer', TransformerSelector()),  # Placeholder for transformations
-            ('sgd', SGDClassifier(max_iter=1000, tol=1e-3))
+            ('transformer', NN_arquitectures.TransformerSelector()),  # Placeholder for transformations
+            ('sgd', SGDClassifier(loss = 'epsilon_insensitive', max_iter=1000, tol=1e-3))
         ])
 
-        # Define the parameter grid
         param_dist = {
             # Transformation selection
             'transformer': [
@@ -587,53 +627,112 @@ def svm_model(x_train:pd.DataFrame, y_train:pd.DataFrame, x_test:pd.DataFrame, y
             ],
             # Parameters for RBF Kernel
             'transformer__gamma': [0.1, 0.5, 1.0, 2.0],
-            # Parameters for PolynomialFeatures
-            #'transformer__degree': [2, 3, 4, 5],
-            #'transformer__interaction_only': [False],
+            # SGDClassifier parameters
+            'sgd__alpha': np.logspace(-5, -1, 10),
+            'sgd__penalty': ['l2', 'l1', 'elasticnet'],
+            'sgd__l1_ratio': np.linspace(0.1, 1, 5),
+            'sgd__epsilon': [0.1, 0.2, 0.5]  # Epsilon value for SVR-like behavior
+        }
+
+    
+        
+        n_iter = 10 # Number of parameter combinations to try
+        param_list = list(ParameterSampler(param_dist, n_iter=n_iter,random_state=None))
+
+        results = []
+        models= []
+        for i, params in enumerate(param_list):
+            print(f"Evaluating parameter set {i + 1}/{len(param_list)}...\n",params)
+            # Filter invalid combinations (e.g., gamma for non-RBF transformers)
+            if params['transformer'] is None:
+                params = {k: v for k, v in params.items() if not k.startswith('transformer')}
+            else:
+                if isinstance(params['transformer'], PolynomialFeatures):
+                    params = {k: v for k, v in params.items() if k not in ['transformer__gamma']}
+                if isinstance(params['transformer'], RBFSampler):
+                    params = {k: v for k, v in params.items() if k not in ['transformer__degree', 'transformer__interaction_only']}
+
+            mean_score, model = evaluate_svm_model(pipeline, params, x_train, y_train, x_test, y_test, n_runs=10)
+            results.append({'params': params, 'mean_score': mean_score})
+            models.append(model)    
+
+        # Select the best model
+        results_df = pd.DataFrame(results)
+        best_result = results_df.loc[results_df['mean_score'].idxmax()]
+        model = models[results_df['mean_score'].idxmax()]
+
+        # Save best model parameters 
+        if 'transformer' in best_result['params'].keys():
+            parameters['svm_params']['gamma'] = best_result['params']['transformer__gamma']
+            parameters['svm_params']['kernel'] = 'rbf'
+        else:
+            parameters['svm_params']['gamma'] = 'None'
+            parameters['svm_params']['kernel'] = 'linear'
+        parameters['svm_params']['alpha'] = best_result['params']['sgd__alpha']
+        parameters['svm_params']['penalty'] = best_result['params']['sgd__penalty']
+        parameters['svm_params']['l1_ratio'] = best_result['params']['sgd__l1_ratio']
+        parameters['svm_params']['epsilon'] = best_result['params']['sgd__epsilon']
+
+    else:
+        model = SVR( C=1/parameters['svm_params']['alpha'],
+                        gamma=parameters['svm_params']['gamma'],
+                        kernel=parameters['svm_params']['kernel'],
+                        degree=parameters['svm_params']['degree'],
+                        epsilon=parameters['svm_params']['epsilon'],
+                        )
+        model.fit(x_train, y_train)
+    return model,parameters
+
+def svm_model(x_train:pd.DataFrame, y_train:pd.DataFrame, x_test:pd.DataFrame, y_test:pd.DataFrame, parameters:dict)->SVC:
+    """
+    Fit a Support Vector Machine (SVM) model to the data.
+
+    Parameters:
+    x_train: pd.DataFrame with the input features
+    y_train: pd.Series with the target variable
+    parameters: dictionary with the parameters of the model
+
+    Returns:
+    model: the fitted SVM model
+    """
+
+    if parameters['svm_params']['grid_search'] == True:
+        pipeline = Pipeline([
+            ('transformer', NN_arquitectures.TransformerSelector()),  # Placeholder for transformations
+            ('sgd', SGDClassifier(max_iter=1000, tol=1e-3))
+        ])
+
+        param_dist = {
+            'transformer': [
+                None,  # No transformation
+                RBFSampler(),  # RBF Kernel approximation
+            ],
+            # Parameters for RBF Kernel
+            'transformer__gamma': [0.1, 0.5, 1.0, 2.0],
+
             # SGDClassifier parameters
             'sgd__alpha': np.logspace(-5, -1, 10),
             'sgd__penalty': ['l2', 'l1', 'elasticnet'],
             'sgd__l1_ratio': np.linspace(0.1, 1, 5)
         }
 
-        # Custom evaluation function
-        def evaluate_model(pipeline, params, x_train, y_train, x_test, y_test, n_runs=1):
-            scores = []
-            best_model = None
-            best_score = 0 
-            for _ in range(n_runs):
-                pipeline.set_params(**params)  # Update pipeline with current parameters
-                pipeline.fit(x_train, y_train)  # Fit the model
-                y_pred = pipeline.predict(x_test)  # Predict
-                scores.append(accuracy_score(y_test, y_pred))  # Compute accuracy
-                if scores[-1] > best_score:
-                    best_score = scores[-1]
-                    best_model = pipeline
-            return np.mean(scores), best_model
-
-        # Generate parameter combinations
-        n_iter = 10
+        n_iter = 10 # Number of parameter combinations to try
         param_list = list(ParameterSampler(param_dist, n_iter=n_iter))
 
-        # Run the search
         results = []
         models= []
         for i, params in enumerate(param_list):
-            print(f"Evaluating parameter set {i + 1}/{len(param_list)}...")
-            print(params)
+            print(f"Evaluating parameter set {i + 1}/{len(param_list)}...\n",params)
             # Filter invalid combinations (e.g., gamma for non-RBF transformers)
             if params['transformer'] is None:
                 params = {k: v for k, v in params.items() if not k.startswith('transformer')}
             else:
                 if isinstance(params['transformer'], PolynomialFeatures):
-                    # Remove `gamma` for PolynomialFeatures
                     params = {k: v for k, v in params.items() if k not in ['transformer__gamma']}
-                # Filter invalid combinations (e.g., degree for non-Polynomial transformers)
                 if isinstance(params['transformer'], RBFSampler):
-                    # Remove `degree` for RBF Sampler
                     params = {k: v for k, v in params.items() if k not in ['transformer__degree', 'transformer__interaction_only']}
 
-            mean_score, model = evaluate_model(pipeline, params, x_train, y_train, x_test, y_test, n_runs=10)
+            mean_score, model = evaluate_svm_model(pipeline, params, x_train, y_train, x_test, y_test, n_runs=10)
             results.append({'params': params, 'mean_score': mean_score})
             models.append(model)    
 
@@ -681,7 +780,7 @@ def catboost_model(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:dict)->
     if parameters['catboost_params']['grid_search'] == True:
         # Define the parameter grid
         param_dist = {
-            'iterations': randint(100, 500),  # Random integer between 100 and 500
+            'iterations': randint(100, 200),  # Random integer between 100 and 500
             'learning_rate': np.linspace(0.001, 0.2, 100),  # 0.01 to 0.2
             'depth': randint(1,20),
             'l2_leaf_reg':  randint(1,10),
@@ -705,6 +804,54 @@ def catboost_model(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:dict)->
 
     return model,parameters
 
+def catboost_reg_model(x_train:pd.DataFrame, y_train:pd.DataFrame,parameters:dict)->CatBoostClassifier:
+    """
+    Fit a CatBoost model to the data for a regression problem.
+
+    Parameters:
+    x_train: pd.DataFrame with the input features
+    y_train: pd.Series with the target variable
+    parameters: dictionary with the parameters of the model
+
+    Returns:
+    model: the fitted CatBoost model
+    """
+    if parameters['catboost_params']['grid_search'] == True:
+        # Define the parameter grid
+        param_dist = {
+            'iterations': randint(100,200),  # Random integer between 100 and 500
+            'learning_rate': np.linspace(0.001, 0.2, 100),  # 0.01 to 0.2
+            'depth': randint(1,20),
+            'l2_leaf_reg':  randint(1,10),
+            'random_strength':  randint(1,10),
+
+        }
+
+        grid_search = RandomizedSearchCV(estimator=CatBoostRegressor(), param_distributions=param_dist,
+                                        n_iter=20, cv=3, verbose=2, n_jobs=-1)
+
+
+        # Fit the model to the training data
+        grid_search.fit(x_train, y_train)
+        model = grid_search.best_estimator_
+        parameters['catboost_params'] = grid_search.best_params_  
+        parameters['catboost_params']['grid_search'] = True
+    else:
+        # Train a CatBoost model
+        model = CatBoostRegressor(iterations=100, learning_rate=0.1, depth=6, verbose=0)
+        model.fit(x_train, y_train,cat_features=['mesepid'])
+
+    return model,parameters
+
+def mlp_model(x_train, y_train, parameters):
+    model = MLPClassifier(**parameters['mlp_params'])
+    model.fit(x_train, y_train)
+    return model
+
+def mlp_reg_model(x_train, y_train, parameters):
+    model = MLPRegressor(**parameters['mlp_params'])
+    model.fit(x_train, y_train)
+    return model
 
 def easy_save(train_history:dict, test_history:dict, yhat_train:list, ytrain:list, yhat:list, ytest:list, model_type:str,loss_func_class:float, loss_func_reg:float):
     """
@@ -719,7 +866,8 @@ def easy_save(train_history:dict, test_history:dict, yhat_train:list, ytrain:lis
 
 def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
 
-    if model_type in['logistic', 'GAM', 'Naive', 'mlp', 'random_forest', 'svm', 'catboost', 'logistic_3c', 'Naive_3c', 'random_forest_3c', 'svm_3c', 'catboost_3c']:
+    if model_type in['logistic', 'GAM', 'Naive', 'mlp', 'random_forest', 'svm', 'catboost', 'logistic_3c', 'Naive_3c', 'random_forest_3c', 'svm_3c', 
+                     'catboost_3c', 'mlp_3c','linear_3c']:
 
         loss_reg =  0
         loss_class =  0
@@ -729,6 +877,16 @@ def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
         total_loss = 0
         return total_loss, loss_class, loss_reg, acc_class, acc_reg, error_reg
 
+    elif model_type in['linear','Naive_reg','svr','random_forest_reg', 'catboost_reg','mlp_reg']:
+        loss_reg = root_mean_squared_error(y, yhat)
+        loss_class =  0
+        acc_class = 0
+        acc_reg =  0 
+        error_reg =  0
+        total_loss = 0
+        return total_loss, loss_class, loss_reg, acc_class, acc_reg, error_reg
+
+
     elif model_type in ['classifier']:# or 'mlp':
         loss_class = loss_func_class(yhat.squeeze(), y) # yhat = logit
         loss_reg =  torch.tensor(0)
@@ -736,13 +894,13 @@ def evaluate_NN(model_type,loss_func_class, loss_func_reg, yhat, y ):
         acc_reg =  0
         error_reg =  0
 
-    elif model_type in ['regressor' , 'linear_regressor']:
+    elif model_type in ['regressor' , 'linear_pytorch']:
         yhat = yhat.squeeze()
         loss_class =  torch.tensor(0)
-        loss_reg = loss_func_reg(yhat, y)
-        acc_class =  0
-        acc_reg = torch_accuracy(y, yhat, model_type)
-        error_reg = ((yhat - y)**2).sum().item()
+        loss_reg = loss_func_reg(y, yhat) #mse
+        acc_class =  0 
+        acc_reg = torch_accuracy(y, yhat, model_type) # (y == yhat).sum()
+        error_reg = ((yhat - y)**2).sum().item() # rmse (division and root are done later)
     
     elif model_type in ['exponential_renato']:
         logit, lamb = yhat
