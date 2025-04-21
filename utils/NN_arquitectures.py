@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pdb
+from sklearn.base import BaseEstimator, TransformerMixin
+
 # from utils.NN_building 
 # separate NN and create function eval 
 
@@ -41,7 +43,50 @@ class mlp(nn.Module):
         final_output = self.output_layer(self.layer4(out3))
         return final_output
     
+def compute_weights_slow_decay(values, highlight_targets):
+        weights = []
+        for value in values:
+            # Highlight values near the targets
+            highlight_factor = sum(1 / (abs(value - target)*0.4 + 1) for target in highlight_targets)
+            weights.append(highlight_factor)
+        return weights
+
+
+class MSELoss(nn.Module):
+    """
+    Class to create a custom loss and calculonge the pdf of its original distribution if necessary. The name of the distribution must 
+    be passed in the constructor
     
+    Currently available distributions:
+    exponential - **params['lamb']
+
+    """
+    def __init__(self):
+        """
+        Distribution: name of the distribution to be used as reference. 
+        
+        
+        """
+        super(MSELoss, self).__init__()
+
+
+    
+    def forward(self, y, y_pred):
+        #weights = torch.tensor([1 if val < 100 else 100 / val for val in y], dtype=torch.float32)
+        weights = compute_weights_slow_decay(y, [19, 35])
+        weights = torch.tensor(weights)        
+        loss = torch.mean((y - y_pred)**2 * weights)
+
+        return loss
+        #return torch.mean((y - y_pred)**2)
+
+        
+    """def pdf(self, x, **params):
+        if self.model_type == 'exponential_renato':
+            lamb = params.get('lamb')
+            return lamb*torch.exp(-lamb*x)
+        else:
+            raise ValueError('Distribution not found')"""
 
 class ExponentialLoss(nn.Module):
     """
@@ -215,6 +260,16 @@ class NeuralNetworkPareto(nn.Module):
         alpha = self.pareto_layer(torch.cat((out3, logit), dim=1)) # concat weights and logits. To use class instead, change to torch.cat((out3, logit.argmax(1)), dim=1) and self.exp
         return logit, alpha
 
+class linear_pytorch(nn.Module):
+    def __init__(self, model_input):
+        super(linear_pytorch, self).__init__()
+        self.layer1 = nn.Linear(model_input , 1)
+        self.model_type = 'linear_pytorch'
+        
+    def forward(self, x):
+        return self.layer1(x)
+    
+
 class LogisticRegression(nn.Module):
     def __init__(self, model_input,input_3d, model_type):
         super(LogisticRegression, self).__init__()
@@ -237,3 +292,23 @@ class LogisticRegression(nn.Module):
             return torch.sigmoid(self.layer1(x)) 
         elif self.model_type == 'linear_regressor':
             return self.layer1(x)
+
+
+class TransformerSelector(BaseEstimator, TransformerMixin):
+            """Custom transformer to select between RBF, Polynomial, or None."""
+            def __init__(self, transformer=None):
+                self.transformer = transformer
+
+            def fit(self, X, y=None):
+                if self.transformer is not None:
+                    self.transformer.fit(X, y)
+                return self
+
+            def transform(self, X):
+                if self.transformer is not None:
+                    return self.transformer.transform(X)
+                return X
+
+            def fit_transform(self, X, y=None):
+                self.fit(X, y)
+                return self.transform(X)
