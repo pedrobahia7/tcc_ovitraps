@@ -23,7 +23,7 @@ def get_valid_samples(df:pd.DataFrame)->pd.DataFrame:
     pandas dataframe
     
     """
-    return df[['nplaca','novos','latitude','longitude','narmad','ano','semepi','dtcol']].drop_duplicates().dropna().reset_index(drop=True)
+    return df[['nplaca','novos','latitude','longitude','narmad','ano','anoepid','semepi','dtcol','GerCat']].drop_duplicates().dropna().reset_index(drop=True)
 
 
 def same_coord_samples(df:pd.DataFrame)->pd.DataFrame:
@@ -85,7 +85,7 @@ def create_distance_matrix(position_matrix: pd.DataFrame) -> pd.DataFrame:
     return distance_matrix
 
 
-def get_distance_matrix(df:str,address:str = './results/distance_matrix.csv')->pd.DataFrame:
+def get_distance_matrix(df:str,address:str = '../results/distance_matrix.csv')->pd.DataFrame:
     """
     Function to laod the distance matrix. If it doesn't exist calculate if
     from the coordinates of the traps
@@ -128,6 +128,25 @@ def create_week_trap_df(df:pd.DataFrame)->pd.DataFrame:
 
     valid_samples = get_valid_samples(df)
     week_trap_df = valid_samples.pivot(index=['ano','semepi'],columns='narmad',values='novos')
+    new_index = pd.MultiIndex.from_product([week_trap_df.index.levels[0], range(101,153)]) # introduce weeks 51 and 52
+    new_index = new_index[(new_index <= week_trap_df.iloc[-1].name) & (new_index >= week_trap_df.iloc[0].name)] #remove indexes that are greater than the last sample or smaller than the first one
+    week_trap_df = week_trap_df.reindex(new_index) # [week,trap] - > novos
+    return week_trap_df
+
+def create_week_trap_df_anoepid(df:pd.DataFrame)->pd.DataFrame:
+    """
+    Create a dataframe of the number of eggs(value), in each week(rows) in each trap(columns)
+
+    Parameters:
+    df: pandas dataframe with the data in Dilermando format
+
+    Returns:
+    week_trap_df: pandas dataframe with the number of eggs in each week in each trap
+    
+    """
+
+    valid_samples = get_valid_samples(df)
+    week_trap_df = valid_samples.pivot(index=['anoepid','semepi'],columns='narmad',values='novos')
     new_index = pd.MultiIndex.from_product([week_trap_df.index.levels[0], range(101,153)]) # introduce weeks 51 and 52
     new_index = new_index[(new_index <= week_trap_df.iloc[-1].name) & (new_index >= week_trap_df.iloc[0].name)] #remove indexes that are greater than the last sample or smaller than the first one
     week_trap_df = week_trap_df.reindex(new_index) # [week,trap] - > novos
@@ -287,7 +306,7 @@ def final_matrix_logic(valid_samples:pd.DataFrame, day_df:pd.DataFrame, distance
     return final_df
 
 
-def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = './data/final_data.csv')->pd.DataFrame:
+def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = '../data/final_data.csv')->pd.DataFrame:
     """
     Function to create the final matrix to be used in the neural network model
 
@@ -302,6 +321,8 @@ def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = './
     """
     print('Creating final matrix')
     data = pd.read_csv(data_addr,parse_dates=['dtcol'])
+    data['semepi'] = data['semepi'] + 100   
+    
     valid_samples = get_valid_samples(data)
 
     # introduce a small value on traps with the same coordinates to differentiate them
@@ -337,7 +358,9 @@ def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = './
     
     yearweek_index_dict = {(year,week): index for index,(year,week) in enumerate(week_trap_df.index)}                           # (year,week): index
     nplaca_week_dict = {nplaca: (year, week) for nplaca,week,year in zip(info_df['nplaca'],info_df['semepi'],info_df['ano'])}   # nplaca: (year,week)
-    nplaca_index_dict = {nplaca: yearweek_index_dict[(year, week)] for nplaca,week,year in zip(info_df['nplaca'],info_df['semepi'],info_df['ano'])}   # nplaca: week index 
+    nplaca_index_dict = {nplaca: yearweek_index_dict[(year, week)] 
+                         for nplaca,week,year 
+                         in zip(info_df['nplaca'],info_df['semepi'],info_df['ano'])}   # nplaca: week index 
     
     
     unique_position = valid_samples[['latitude','longitude']].drop_duplicates().dropna().reset_index(drop=True)
@@ -348,7 +371,6 @@ def create_final_matrix(lags:str, n_traps:str,save_path:str, data_addr:str = './
     
     trap_lat_dict = {narmad: (lat - lat_mean)/lat_std for narmad,lat in zip(info_df['narmad'],info_df['latitude'])}                                  # narmad: latitude
     trap_long_dict = {narmad: (long - long_mean)/long_std for narmad,long in zip(info_df['narmad'],info_df['longitude'])}                              # nplaca: longitude
-
     #final matrix
     final_df = final_matrix_logic(valid_samples, day_df, distance_matrix, nan_count_matrix,
             lagged_eggs, lagged_days, info_df, trap_index_dict, index_trap_dict, nplaca_index_dict, lags, n_traps,trap_lat_dict,trap_long_dict)
@@ -536,21 +558,13 @@ def scale_dataset(x_train, x_test, y_train, y_test, parameters):
             grouped[prefix].append(col)
     
     grouped_dict = dict(grouped)
-
-
-
     scaler_dicts = {}
 
     for key in grouped_dict:
         x_train, x_test, scaler = scale_column(x_train, x_test, grouped_dict[key])
         scaler_dicts[key] = scaler
     
-    #TODO adapt this to the case of two output vectors 
-    if parameters['model_type'] not in ['logistic_3c', 'Naive_3c', 'random_forest_3c', 'svm_3c', 'catboost_3c']:
-        y_train, y_test, scaler = scale_column(y_train, y_test, ['novos'])
 
-    scaler_dicts['output'] = scaler
-      
     return x_train, x_test, y_train, y_test, scaler_dicts
 
 
