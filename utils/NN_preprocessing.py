@@ -274,24 +274,27 @@ def final_matrix_logic(
     Function to create the final matrix to be used in the neural network model
 
     Parameters:
-    valid_samples: pandas dataframe with the valid samples
-    day_df: pandas dataframe with the ordinal days
-    distance_matrix: pandas dataframe with the distance between the traps
-    nan_count_matrix: numpy array with the number of autoregressive traps that have nan for each trap
-    lagged_eggs: numpy array with the lagged number of eggs
-    lagged_days: numpy array with the lagged days in ordinal
-    info_df: pandas dataframe with the information of each trap. It must contain the columns 'narmad' and 'nplaca'
-    trap_index_dict: dictionary with the index of each trap in the egg matrix and distance matrix
-    index_trap_dict: dictionary with the trap of each index in the egg matrix
-    nplaca_index_dict: dictionary with the index of each placa in the egg matrix
-    lags: number of lags to be created
-    n_traps: number of traps to be considered, including the original trap
-    nplaca_lat_dict: dictionary with the latitude of each placa
-    nplaca_long_dict: dictionary with the longitude of each placa
+    - valid_samples: pandas dataframe with the valid samples
+    - day_df: pandas dataframe with the ordinal days
+    - distance_matrix: pandas dataframe with the distance between the traps
+    - nan_count_matrix: numpy array with the number of autoregressive traps
+     that have nan for each trap
+    - lagged_eggs: numpy array with the lagged number of eggs
+    - lagged_days: numpy array with the lagged days in ordinal
+    - info_df: pandas dataframe with the information of each trap. It must
+     contain the columns 'narmad' and 'nplaca'
+    - trap_index_dict: dictionary with the index of each trap in the egg
+     matrix and distance matrix
+    - index_trap_dict: dictionary with the trap of each index in the egg matrix
+    - nplaca_index_dict: dictionary with the index of each placa in the egg matrix
+    - lags: number of lags to be created
+    - n_traps: number of traps to be considered, including the original trap
+    - nplaca_lat_dict: dictionary with the latitude of each placa
+    - nplaca_long_dict: dictionary with the longitude of each placa
 
 
     Returns:
-    final_df: pandas dataframe with the final matrix to be used in the neural network model
+    - final_df: pandas dataframe with the final matrix to be used in the neural network model
     """
     # convert dfs to numpy
     distance_matrix_np = distance_matrix.to_numpy()
