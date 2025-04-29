@@ -1,3 +1,14 @@
+PROXIMA REUNIÃO:
+tester o modelo cbic para centroides individuais (treino em agregados e individual)
+ajustar o xlim para colocar anos nos plots das cidades 
+treinar sarima agregado da cidade e compara com modelo deles e naive com e sem mediana
+
+
+
+
+
+
+
 REUNIÕES:
 30/35 armadilhas ruins
 mais comum entre 10 e 150
