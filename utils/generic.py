@@ -8,7 +8,6 @@ import folium
 import os
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
-
 ############# Music Functions :) #############
 
 
@@ -76,57 +75,44 @@ def calculate_correlation(
 
     Returns
     ----------
-    - results (dict): Dictionary with the correlation values for each lag.
+    - results (float): Correlation value.
 
     """
-
     if len(series_1) != len(series_2):
-        raise ValueError(
-            "The two series must have the same length to calculate\
-                  correlation."
-        )
+        raise ValueError("Both series must have the same length.")
 
-    # Check if the series are pandas Series or numpy arrays
-    if (
-        type(series_1) is not pd.Series
-        and type(series_1) is not np.ndarray
-    ) or (
-        type(series_2) is not pd.Series
-        and type(series_2) is not np.ndarray
+    if not isinstance(series_1, (pd.Series, np.ndarray)) or not isinstance(
+        series_2, (pd.Series, np.ndarray)
     ):
-        raise TypeError(
-            "Both series must be pandas Series or numpy arrays to\
-calculate correlation."
-        )
+        raise TypeError("Inputs must be pandas Series or numpy arrays.")
 
-    # Normalize the series
+    # Ensure Series for .corr()
+    series_1 = pd.Series(series_1)
+    series_2 = pd.Series(series_2)
+
+    # Normalize
     series_1 = normalize_series(series_1, method="zscore")
     series_2 = normalize_series(series_2, method="zscore")
 
-    # Drop NaN values from both series and align them
-    combined = pd.concat([series_1, series_2], axis=1)
-    cleaned = combined.dropna(axis=0, how="any")
+    # Drop NaNs
+    cleaned = pd.concat([series_1, series_2], axis=1).dropna()
     if cleaned.empty:
         print("Both series are empty after dropping NaN values.")
         return np.nan
+
     series_1 = cleaned.iloc[:, 0]
     series_2 = cleaned.iloc[:, 1]
 
-    # Calculate the correlation based on the specified method
     if method == "pearson":
-        x_corr = series_1.corr(series_2)
+        return series_1.corr(series_2)
+
     elif method == "mutual_information":
-        x_corr = mutual_info_regression(
-            np.array(series_1).reshape(-1, 1),
-            np.array(series_2).reshape(-1, 1),
+        return mutual_info_regression(
+            series_1.values.reshape(-1, 1), series_2.values.reshape(-1, 1)
         )[0]
 
     else:
-        raise ValueError(
-            f"Method {method} not supported. Only 'pearson' is available."
-        )
-
-    return x_corr
+        raise ValueError(f"Method '{method}' not supported.")
 
 
 def windowed_correlation(
@@ -172,8 +158,8 @@ def windowed_correlation(
 
     """
     # Drop both indexes to ensure they are aligned
-    series_1.reset_index(drop=True, inplace=True)
-    series_2.reset_index(drop=True, inplace=True)
+    series_1 = series_1.reset_index(drop=True)
+    series_2 = series_2.reset_index(drop=True)
 
     # Get the last valid index if not provided
     if last_valid_index is None:
@@ -192,33 +178,36 @@ def windowed_correlation(
             # series_2 is shifted backward (leading series)
             windowed_series_1 = series_1[
                 last_valid_index - window_size : last_valid_index
-            ]
+            ].reset_index(drop=True)
 
             windowed_series_2 = series_2[
-                max(
-                    0, last_valid_index - window_size + lag
-                ) : last_valid_index + lag
-            ]
+                max(0, last_valid_index - window_size + lag) : max(
+                    0, last_valid_index + lag
+                )
+            ].reset_index(drop=True)
 
         else:
             # series_1 is shifted backward (leading series)
             windowed_series_1 = series_1[
-                max(
-                    last_valid_index - window_size - lag, 0
-                ) : last_valid_index - lag
-            ]
+                max(last_valid_index - window_size - lag, 0) : max(
+                    0, last_valid_index - lag
+                )
+            ].reset_index(drop=True)
 
             windowed_series_2 = series_2[
                 last_valid_index - window_size : last_valid_index
-            ]
+            ].reset_index(drop=True)
 
         # Ensure both series are of the same length. Since the window is
         # moving backward, it may reach the beginning of the series
         # before the other series, leading to different lengths.
         min_length = min(len(windowed_series_1), len(windowed_series_2))
-        windowed_series_1 = windowed_series_1[:min_length]
-        windowed_series_2 = windowed_series_2[:min_length]
-
+        windowed_series_1 = windowed_series_1[-min_length:].reset_index(
+            drop=True
+        )
+        windowed_series_2 = windowed_series_2[-min_length:].reset_index(
+            drop=True
+        )
         # Calculate the correlation
         corr = calculate_correlation(
             windowed_series_1,
@@ -235,9 +224,9 @@ def windowed_correlation(
 def max_correlation(
     series_1: pd.Series,
     series_2: pd.Series,
-    last_valid_index: pd.Timestamp,
-    window_size: int,
     max_lag: int,
+    last_valid_index: pd.Timestamp = None,
+    window_size: int = None,
     method: str = "pearson",
 ) -> Tuple[int, float]:
     """
@@ -275,12 +264,12 @@ def max_correlation(
 
     """
     results = windowed_correlation(
-        series_1,
-        series_2,
-        last_valid_index,
-        window_size,
-        max_lag,
-        method,
+        series_1=series_1,
+        series_2=series_2,
+        max_lag=max_lag,
+        last_valid_index=last_valid_index,
+        window_size=window_size,
+        method=method,
     )
 
     abs_results = {
@@ -295,8 +284,8 @@ def max_correlation(
 def plot_cross_correlation(
     series_1: pd.Series,
     series_2: pd.Series,
-    window_lengths: list,
     max_lag: int,
+    window_lengths: list = None,
     last_valid_index: pd.Timestamp = None,
     method: str = "pearson",
     title: str = "Cross-Correlation",
@@ -332,9 +321,6 @@ def plot_cross_correlation(
     """
     # If last_valid_index is not provided, use the last valid index of the
     # both series
-    if last_valid_index is None:
-        last_valid_index = min(series_1.index.max(), series_2.index.max())
-
     for size in window_lengths:
         # Calculate the cross-correlation
         results_dict = windowed_correlation(
