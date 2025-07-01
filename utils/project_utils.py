@@ -4,7 +4,7 @@ import numpy as np
 ################ Dengue Cases Functions ################
 
 
-def process_dengue(dengue_data: pd.DataFrame) -> pd.DataFrame:
+def process_dengue(dengue_data: pd.DataFrame) -> pd.Series:
     """
     Process the dengue data DataFrame to prepare it for further analysis.
     This function renames the 'SemEpi' column to 'semepid', extracts the week
@@ -17,12 +17,12 @@ def process_dengue(dengue_data: pd.DataFrame) -> pd.DataFrame:
     
     Returns
     ----------
-    - dengue_data (pd.DataFrame): Processed DataFrame with 'semepid' as an integer\
+    - dengue_data (pd.Series): Processed DataFrame with 'semepid' as an integer\
       column, ready for further analysis.
     
     """
 
-    # Step 1: Rename and clean the DataFrame
+    # Rename and clean the DataFrame
     # Rename columns
     dengue_data.rename(
         columns={
@@ -61,7 +61,7 @@ def get_weekly_dengue(
       each week.
 
     """
-    # Step 1: Rename and clean the DataFrame
+    # Rename and clean the DataFrame
     dengue_data = process_dengue(dengue_data)
 
     # Create a new datetime column from ano and semepid
@@ -73,20 +73,20 @@ def get_weekly_dengue(
     )
 
     # Pivot the DataFrame to create a matrix with 'ano' and 'semepid' as index
-    pivot_data = (
-        dengue_data.groupby(["date"]).size().reset_index(name="count")
-    )
-
+    pivot_data = dengue_data.groupby(["date"]).size().reset_index()
     pivot_data.set_index(["date"], inplace=True)
 
-    # Step 2: Generate new MultiIndex with all weeks
+    # Generate new MultiIndex with all weeks
     new_tuples = generate_all_weeks(pivot_data)
 
-    # Step 3: Combine with existing index and reindex the DataFrame
+    # Combine with existing index and reindex the DataFrame
     weekly_data = pivot_data.reindex(new_tuples).sort_index()
 
-    # Step 4: Fill NaN values with 0
+    # Fill NaN values with 0
     weekly_data.replace(np.nan, 0, inplace=True)
+
+    # Convert df to Series
+    weekly_data = weekly_data[0]
 
     return weekly_data
 
@@ -109,17 +109,17 @@ def get_daily_dengue(
       value is the count of 'novos' cases on that date.
 
     """
-    # Step 1: Rename and clean the DataFrame
+    # Rename and clean the DataFrame
     dengue_data = process_dengue(dengue_data)
 
-    # Step 2: Get daily counts of dengue cases
+    # Get daily counts of dengue cases
     dengue_cases_serie = (
-        dengue_data.groupby("dt_notific").size().reset_index(name="count")
+        dengue_data.groupby("dt_notific").size().reset_index()
     )
 
-    # Step 3: Reset index
+    # Reset index and transform to Series
     dengue_cases_serie.set_index("dt_notific", inplace=True)
-
+    dengue_cases_serie = dengue_cases_serie[0]
     return dengue_cases_serie
 
 
@@ -141,7 +141,7 @@ def process_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     - ovitraps_data (pd.DataFrame): Processed DataFrame ready for analysis.
 
     """
-    # Step 1: Rename columns for consistency
+    # Rename columns for consistency
     ovitraps_data.rename(
         columns={
             "semepi": "semepid",
