@@ -38,6 +38,8 @@ def process_dengue(dengue_data: pd.DataFrame) -> pd.Series:
         lambda x: int(str(x)[-2:])
     )
 
+    dengue_data["semepid"] = dengue_data["semepid"].astype(int)
+
     return dengue_data
 
 

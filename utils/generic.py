@@ -59,12 +59,11 @@ def calculate_correlation(
     method: str = "pearson",
 ) -> dict:
     """
-    Calculate the Pearson correlation between two time series with a given
-    maximum lag. The function normalizes the series and calculate the
-    correlation according to the specified method. This function expects
-    them to be non-stationary series of the same length. The function
-    returns the value of the correlation. Only one value of lag is
-    considered.
+    Calculate the Pearson correlation between two time series. The function
+    normalizes the series and calculate the correlation according to the
+    specified method. This function expects them to be non-stationary
+    series of the same length. The function returns the value of the
+    correlation. Only one value of lag is considered.
 
     Parameters
     ----------
@@ -124,7 +123,7 @@ def windowed_correlation(
     method: str = "pearson",
 ) -> dict:
     """
-    Calculate the maximum correlation between two time series and the lag
+    Calculate the correlation between two time series and the lag
     at which it occurs. This function creates a window of size
     'window_size' and move this window from the 'last_valid_index' sample
     backwards 'max_lag' times. The series_1 window is shifted backward by
@@ -188,16 +187,17 @@ def windowed_correlation(
         # Roll the series to create a window of size 'window_size'
         if lag <= 0:
             # series_2 is shifted backward (leading series)
-
             windowed_series_1 = series_1[first_index:last_valid_index]
             windowed_series_2 = series_2.shift(lag)[
                 first_index:last_valid_index
             ]
+
         elif lag > 0:
             # series_1 is shifted backward (leading series)
             windowed_series_1 = series_1.shift(-lag)[
                 first_index:last_valid_index
             ]
+
             windowed_series_2 = series_2[first_index:last_valid_index]
 
         # Calculate the correlation
@@ -294,7 +294,8 @@ def plot_cross_correlation(
     - series_1 (pd.Series): First time series.
     - series_2 (pd.Series): Second time series.
     - window_lengths (list): A list of integers representing all window\
-        lengths to be analyzed.
+        lengths to be analyzed. Use the smaller series length if\
+        window_size is not provided.
     - max_lag (int): The maximum lag to consider for each analysis.
     - last_valid_index (pd.Timestamp): The last valid index of the series\
       to consider for the correlation calculation. This is typically the\
@@ -328,25 +329,39 @@ def plot_cross_correlation(
         lags = list(results_dict.keys())
         correlations = list(results_dict.values())
 
+        # Confidence interval
+        if size is None:
+            size = min(len(series_1), len(series_2))
+        ci = 1.96 / np.sqrt(size)
+
         plt.figure(figsize=(10, 5))
         plt.plot(lags, correlations, marker="o")
         plt.title(title)
         plt.xlabel(x_label)
         plt.ylabel(y_label)
+        plt.fill_between(
+            lags,
+            -ci,
+            ci,
+            color="gray",
+            alpha=0.2,
+        )
+
         plt.grid()
+
         if size != window_lengths[-1]:
             plt.show()
 
 
 def two_series_scatter_plot(
-    series_1,
-    series_2,
-    series_2_shift,
-    title="",
-    xlabel="Series 1",
-    ylabel="Series 2 Shifted",
-    xlim=None,
-    ylim=None,
+    series_1: pd.Series,
+    series_2: pd.Series,
+    series_2_shift: int,
+    title: str = "",
+    xlabel: str = "Series 1",
+    ylabel: str = "Series 2 Shifted",
+    xlim: tuple = None,
+    ylim: tuple = None,
 ):
     series_2_shifted = series_2.shift(series_2_shift)
     if len(series_1) < len(series_2_shifted):
@@ -403,6 +418,7 @@ def create_map(coordinates: np.array, title=None) -> folium.map:
 def add_points_to_map(
     mymap: folium.map,
     coordinates: np.array,
+    size: int = 3,
 ) -> folium.map:
     """
     Adds black points to a folium map given a list of coordinates.
@@ -423,7 +439,7 @@ def add_points_to_map(
         folium.Marker(
             location=(point[0], point[1]),
             icon=folium.DivIcon(
-                html='<div style="width: 3px; height: 3px; background-color: black; border-radius: 50%;"></div>'
+                html=f'<div style="width: {size}px; height: {size}px; background-color: black; border-radius: 50%;"></div>'
             ),
         ).add_to(mymap)
     return mymap
@@ -483,7 +499,8 @@ def cluster_points(
 
 
 def add_clustered_markers_to_map(
-    mymap: folium.map, cluster_data: pd.DataFrame
+    mymap: folium.map,
+    cluster_data: pd.DataFrame,
 ) -> folium.map:
     # Add clustered markers
     for _, row in cluster_data.iterrows():
