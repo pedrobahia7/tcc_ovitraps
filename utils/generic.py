@@ -338,6 +338,39 @@ def plot_cross_correlation(
             plt.show()
 
 
+def two_series_scatter_plot(
+    series_1,
+    series_2,
+    series_2_shift,
+    title="",
+    xlabel="Series 1",
+    ylabel="Series 2 Shifted",
+    xlim=None,
+    ylim=None,
+):
+    series_2_shifted = series_2.shift(series_2_shift)
+    if len(series_1) < len(series_2_shifted):
+        series_2_shifted = series_2_shifted.reindex(series_1.index)
+    if len(series_1) > len(series_2_shifted):
+        series_1 = series_1.reindex(series_2_shifted.index)
+
+    if series_1.isnull().all() or series_2_shifted.isnull().all():
+        raise ValueError(
+            "Both series must have at least one valid value to plot."
+        )
+    plt.figure(figsize=(10, 5))
+    plt.scatter(series_1, series_2_shifted, alpha=0.5)
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    if xlim is not None:
+        plt.xlim(xlim)
+    if ylim is not None:
+        plt.ylim(ylim)
+    plt.grid()
+    plt.show()
+
+
 ################### Map Functions ###################
 
 
@@ -513,7 +546,7 @@ def convert_iso_year_week_to_string(date_iso: str) -> str:
     return str_date
 
 
-######## Series Manipulation Functions ########
+######## Series Manipulation Functions ################
 
 
 def normalize_series(

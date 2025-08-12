@@ -91,6 +91,74 @@ def get_weekly_dengue(
     return weekly_data
 
 
+def get_biweekly_dengue(
+    dengue_data: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Convert raw dengue data to a pivoted format suitable for comparison
+    with ovitrap data, with 'ano_Caso' and 'semepid' as index. The
+    DataFrame will contain counts of 'novos' cases.
+
+    Parameters
+    ----------
+    - data (pd.DataFrame): DataFrame containing dengue data with columns\
+        'Ano_Caso', 'semepid', and 'novos'.
+
+    Returns
+    ----------
+    - weekly_data (pd.DataFrame): A pivoted DataFrame with "'ano'W'semepid'"
+      as index, where each cell contains the count of 'novos' cases in
+      each week.
+
+    """
+    # Rename and clean the DataFrame
+    dengue_data = process_dengue(dengue_data)
+
+    #  Convert week 53 to week 1 of the next year
+    for row in dengue_data.itertuples():
+        if row.semepid == "53":
+            dengue_data.at[row.Index, "semepid"] = "01"
+            year = int(row.anoepid[:4])
+            dengue_data.at[row.Index, "anoepid"] = (
+                f"{year + 1}_{year - 1999:02d}"
+            )
+
+    # Convert odd weeks to even weeks
+    dengue_data["semepid"] = dengue_data["semepid"].apply(
+        lambda x: str(int(x) + 1) if int(x) % 2 != 0 else x
+    )
+
+    # Create a new datetime column from ano and semepid
+    dengue_data["date"] = dengue_data.apply(
+        lambda row: str(row["anoepid"]) + "W" + str(row["semepid"])
+        if row["semepid"] > 9
+        else str(row["anoepid"]) + "W0" + str(row["semepid"]),
+        axis=1,
+    )
+
+    # Pivot the DataFrame to create a matrix with 'ano' and 'semepid' as index
+    pivot_data = dengue_data.groupby(["date"]).size().reset_index()
+    pivot_data.set_index(["date"], inplace=True)
+
+    # Fill weeks
+    all_weeks = generate_all_weeks(pivot_data)
+    all_even_weeks = [
+        week for week in all_weeks if int(week.split("W")[1]) % 2 == 0
+    ]
+    pivot_data = pivot_data.reindex(all_even_weeks).sort_index()
+
+    # Combine with existing index and reindex the DataFrame
+    biweekly_data = pivot_data.reindex(all_even_weeks).sort_index()
+
+    # Fill NaN values with 0
+    biweekly_data.replace(np.nan, 0, inplace=True)
+
+    # Convert df to Series
+    biweekly_data = biweekly_data[0]
+
+    return biweekly_data
+
+
 def get_daily_dengue(
     dengue_data: pd.DataFrame,
 ) -> pd.Series:
@@ -153,6 +221,40 @@ def process_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     ovitraps_data["semepid"] = ovitraps_data["semepid"].apply(
         lambda x: f"{int(x):02d}" if pd.notnull(x) else x
     )
+
+    # Correct wrong dates
+    ovitraps_data.loc[ovitraps_data["dtcol"] == "2032-09-14", "dtcol"] = (
+        "2023-09-14"
+    )
+    ovitraps_data.loc[
+        (ovitraps_data["narmad"] == 901011)
+        & (ovitraps_data["dtcol"] == "2017-04-20"),
+        "dtcol",
+    ] = "2016-03-08"
+
+    ovitraps_data.loc[
+        (ovitraps_data["narmad"] == 901013)
+        & (ovitraps_data["dtcol"] == "2017-04-20"),
+        "dtcol",
+    ] = "2016-03-08"
+
+    ovitraps_data.loc[
+        (ovitraps_data["narmad"] == 901199)
+        & (ovitraps_data["dtcol"] == "2021-01-27"),
+        "dtcol",
+    ] = "2020-04-13"
+
+    ovitraps_data.loc[
+        (ovitraps_data["narmad"] == 907066)
+        & (ovitraps_data["dtcol"] == "2032-09-14"),
+        "dtcol",
+    ] = "2023-09-14"
+
+    ovitraps_data.loc[
+        (ovitraps_data["narmad"] == 909027)
+        & (ovitraps_data["dtcol"] == "2025-05-08"),
+        "dtcol",
+    ] = "2024-05-08"
 
     return ovitraps_data
 
@@ -259,6 +361,55 @@ def get_weekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     all_weeks = generate_all_weeks(pivot_data)
     pivot_data = pivot_data.reindex(all_weeks).sort_index()
     return pivot_data
+
+
+def get_daily_ovitraps(
+    ovitraps_data: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Convert raw ovitraps data to a daily samples by the mean of eggs in a
+    sample over the whole time period the trap was installed. 
+
+    Parameters
+    ----------
+    - ovitraps_data (pd.DataFrame): DataFrame containing ovitraps data with columns\
+        'dtinstal', 'dtcol', 'narmad', and 'novos'.
+
+    Returns
+    ----------
+    - daily_ovitraps (pd.DataFrame): A DataFrame indexed by date, with 'narmad'
+      as columns and the mean of 'novos' cases per day.
+
+    """
+    # Rename and clean the DataFrame
+    ovitraps_data = process_ovitraps(ovitraps_data)
+
+    # Get daily counts of ovitraps cases
+    expanded_rows = ovitraps_data.apply(
+        lambda row: pd.DataFrame(
+            {
+                "date": pd.date_range(row["dtinstal"], row["dtcol"]),
+                "narmad": row["narmad"],
+                "novos": row["novos"]
+                / len(pd.date_range(row["dtinstal"], row["dtcol"])),
+            }
+        ),
+        axis=1,
+    )
+
+    ovitraps_expanded = pd.concat(
+        expanded_rows.tolist(), ignore_index=True
+    )
+
+    # Group by date and narmad, summing the 'novos' values
+    daily_ovitraps = (
+        ovitraps_expanded.groupby(["date", "narmad"])["novos"]
+        .sum()
+        .unstack()
+        .sort_index(axis=1)
+    )
+
+    return daily_ovitraps
 
 
 ################# Epidemiological Functions #################
