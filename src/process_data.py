@@ -45,3 +45,21 @@ daily_ovitraps.to_csv(
 
 # %% Health Centers data
 # Load
+if os.path.isfile("../data/processed/health_centers.csv"):
+    health_centers = pd.read_csv("../data/processed/health_centers.csv")
+
+else:
+    health_centers = pd.read_excel("../data/raw/HealthCenters.xlsx")
+    health_centers["CENTRO DE SAÚDE"].replace(
+        {
+            "BONSUO": "BONSUCESSO",
+            "TARO": "TARCISIO",
+            "DE IA": "DE CASSIA",
+            "FRANO": "FRANCISCO",
+            "DE RO": "DE CASTRO",
+        },
+        regex=True,
+        inplace=True,
+    )
+
+    health_centers.to_csv("data/processed/health_centers.csv", index=False)
