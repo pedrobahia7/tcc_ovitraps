@@ -38,8 +38,6 @@ def process_dengue(dengue_data: pd.DataFrame) -> pd.Series:
         lambda x: int(str(x)[-2:])
     )
 
-    dengue_data["semepid"] = dengue_data["semepid"].astype(int)
-
     return dengue_data
 
 
@@ -127,7 +125,7 @@ def get_biweekly_dengue(
 
     # Convert odd weeks to even weeks
     dengue_data["semepid"] = dengue_data["semepid"].apply(
-        lambda x: str(int(x) + 1) if int(x) % 2 != 0 else x
+        lambda x: int(int(x) + 1) if int(x) % 2 != 0 else x
     )
 
     # Create a new datetime column from ano and semepid
@@ -190,6 +188,18 @@ def get_daily_dengue(
     # Reset index and transform to Series
     dengue_cases_serie.set_index("dt_notific", inplace=True)
     dengue_cases_serie = dengue_cases_serie[0]
+    dengue_cases_serie.index = pd.to_datetime(dengue_cases_serie.index)
+
+    # Fill missing values with 0
+    dengue_cases_serie = dengue_cases_serie.reindex(
+        pd.date_range(
+            dengue_cases_serie.index.min(),
+            dengue_cases_serie.index.max(),
+            freq="D",
+        ),
+        fill_value=0,
+    )
+
     return dengue_cases_serie
 
 
@@ -409,6 +419,16 @@ def get_daily_ovitraps(
         .sum()
         .unstack()
         .sort_index(axis=1)
+    )
+
+    # Fill missing values with NaN
+    daily_ovitraps = daily_ovitraps.reindex(
+        pd.date_range(
+            daily_ovitraps.index.min(),
+            daily_ovitraps.index.max(),
+            freq="D",
+        ),
+        fill_value=np.nan,
     )
 
     return daily_ovitraps
