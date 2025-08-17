@@ -439,7 +439,7 @@ def add_points_to_map(
         folium.Marker(
             location=(point[0], point[1]),
             icon=folium.DivIcon(
-                html=f'<div style="width: {size}px; height: {size}px; background-color: black; border-radius: 50%;"></div>'
+                html=f'<div style="width: {size}px; height: {size}px; background-color: red; border-radius: 50%;"></div>'
             ),
         ).add_to(mymap)
     return mymap
@@ -594,3 +594,37 @@ def normalize_series(
         return series / np.linalg.norm(series.dropna())
     else:
         raise ValueError(f"Unknown normalization method: {method}")
+
+
+def group_series(
+    series: pd.Series,
+    offset: int,
+    group_size: int,
+    operation: str,
+) -> pd.Series:
+    """
+    Group series with a specified group size. An offset is applied to
+    alignment reasons. The type of operation to be performed on each group
+    (e.g., "sum", "mean") is specified by the user.
+
+    Parameters
+    ----------
+    - series (pd.Series): The Series to be grouped.
+    - offset (int): The offset to be applied for alignment.
+    - group_size (int): The size of each group.
+    - operation (str): The operation to be performed on each group.
+
+    Returns
+    -------
+    - pd.Series: The grouped Series.
+
+    """
+    group_ids = (pd.RangeIndex(len(series)) - offset) // group_size
+    if operation == "sum":
+        grouped = series.groupby(group_ids).sum()
+    elif operation == "mean":
+        grouped = series.groupby(group_ids).mean()
+    else:
+        raise ValueError(f"Invalid operation: {operation}")
+    grouped.index = series.groupby(group_ids).apply(lambda x: x.index[0])
+    return grouped
