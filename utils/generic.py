@@ -8,6 +8,7 @@ import folium
 import os
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
+import math
 ############# Music Functions :) #############
 
 
@@ -418,7 +419,9 @@ def create_map(coordinates: np.array, title=None) -> folium.map:
 def add_points_to_map(
     mymap: folium.map,
     coordinates: np.array,
+    text: np.array = None,
     size: int = 3,
+    color: str = "black",
 ) -> folium.map:
     """
     Adds black points to a folium map given a list of coordinates.
@@ -428,19 +431,28 @@ def add_points_to_map(
     - mymap (folium.map): The folium map to which the points will be added.
     - coordinates (np.array): A 2D numpy array with shape (n, 2) where n is the number of points,
       and each row contains the latitude and longitude of a point.
+    - size (int, optional): The size of the points to be added. Defaults to 3.
+    - text (np.array | None, optional): An array of text labels for each point. Defaults to None.
 
     Returns
     -------
     - mymap (folium.map): The folium map with the added points.
     """
     # Add points to the map
-    for point in coordinates:
+    for n in range(coordinates.shape[0]):
+        # Get the popup text for the marker
+        if text is not None:
+            popup_text = text[n]
+        else:
+            popup_text = ""
+
         # Add a custom marker for a very small dot
         folium.Marker(
-            location=(point[0], point[1]),
+            location=(coordinates[n, 0], coordinates[n, 1]),
             icon=folium.DivIcon(
-                html=f'<div style="width: {size}px; height: {size}px; background-color: red; border-radius: 50%;"></div>'
+                html=f'<div style="width: {size}px; height: {size}px; background-color: {color}; border-radius: 50%;"></div>'
             ),
+            popup=popup_text,
         ).add_to(mymap)
     return mymap
 
@@ -502,7 +514,22 @@ def add_clustered_markers_to_map(
     mymap: folium.map,
     cluster_data: pd.DataFrame,
 ) -> folium.map:
-    # Add clustered markers
+    """
+    Add clustered markers to the folium map. It requires a DataFrame
+    containing cluster name in column 'cluster', its coordinates in columns
+    'latitude' and 'longitude', and the number of points in each cluster
+    in column 'count'.
+
+    Parameters
+    ----------
+    - mymap (folium.map): The folium map to which the clustered markers will be added.
+    - cluster_data (pd.DataFrame): A DataFrame containing cluster information.
+
+    Returns
+    -------
+    - mymap (folium.map): The folium map with the added clustered markers.
+
+    """
     for _, row in cluster_data.iterrows():
         if row["cluster"] == -1:
             continue
@@ -515,6 +542,182 @@ def add_clustered_markers_to_map(
             fill_opacity=0.6,
         ).add_to(mymap)
     return mymap
+
+
+##################### Geographical Functions #####################
+
+
+def haversine_distance(
+    latitude1: float,
+    longitude1: float,
+    latitude2: float,
+    longitude2: float,
+) -> float:
+    """
+    Function to calculate the distance between two points in the globe. It
+    calculates the great-circle distance between two points on the Earth's
+    surface using the Haversine formula, which assumes a perfectly
+    spherical Earth. It introduces an error of about 0.5% in the distance
+    calculation, which is negligible for most applications. This function
+    is more computationally intensive than Planar Approximation
+    (Equirectangular Projection with Pythagorean Theorem). For better
+    performance, consider using the Vincenty's Formula, which is the most
+    accurate method for calculating but also the slowest one.
+
+    Parameters
+    ----------
+        latitude1 (float): Latitude of the first point in degrees.
+        longitude1 (float): Longitude of the first point in degrees.
+        latitude2 (float): Latitude of the second point in degrees.
+        longitude2 (float): Longitude of the second point in degrees.
+
+    Returns
+        distance (float): Distance between the two points in kilometers.
+    """
+
+    EARTH_RADIUS = 6371  # Earth's mean radius in kilometers
+    # Convert degrees to radians
+    lat1_radians = math.radians(latitude1)
+    lon1_radians = math.radians(longitude1)
+    lat2_radians = math.radians(latitude2)
+    lon2_radians = math.radians(longitude2)
+
+    # Differences in coordinates
+    dlat = lat2_radians - lat1_radians
+    dlon = lon2_radians - lon1_radians
+
+    # Haversine formula
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1_radians)
+        * math.cos(lat2_radians)
+        * math.sin(dlon / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    distance = EARTH_RADIUS * c
+    return distance
+
+
+def planar_approximation_distance(
+    latitude1: float,
+    longitude1: float,
+    latitude2: float,
+    longitude2: float,
+) -> float:
+    """
+    Function to calculate the distance between two points in the globe. It
+    calculates the distance between two points on the Earth's surface using
+    the Equirectangular Projection with Pythagorean Theorem, which assumes
+    the Earth to be locally flat. This method is generally the least
+    accurate formula, with the error being proportional to the longitude
+    and the distance between the two points. For small distances, the error
+    is approximately 0.1%, what makes the method more precise than the
+    Haversine formula. Furthermore, it is also the least computationally
+    expensive method to calculate distances.
+
+    Parameters
+    ----------
+        latitude1 (float): Latitude of the first point in degrees.
+        longitude1 (float): Longitude of the first point in degrees.
+        latitude2 (float): Latitude of the second point in degrees.
+        longitude2 (float): Longitude of the second point in degrees.
+    Returns
+        distance (float): Distance between the two points in kilometers.
+    """
+    EARTH_RADIUS = 6371  # Earth's mean radius in kilometers
+    # Convert degrees to radians
+    lat1_radians = math.radians(latitude1)
+    lon1_radians = math.radians(longitude1)
+    lat2_radians = math.radians(latitude2)
+    lon2_radians = math.radians(longitude2)
+
+    # Differences in coordinates
+    dlat = lat2_radians - lat1_radians
+    dlon = lon2_radians - lon1_radians
+
+    # Equirectangular projection
+    x = dlon * math.cos((lat1_radians + lat2_radians) / 2)
+    y = dlat
+
+    distance = EARTH_RADIUS * math.sqrt(x**2 + y**2)
+    return distance
+
+
+def distance_between_points(
+    latitude1: float,
+    longitude1: float,
+    latitude2: float,
+    longitude2: float,
+    method: str,
+) -> float:
+    """
+    Calculate the distance between two points on the Earth's surface using
+    the chosen method.
+
+    Parameters
+    ----------
+        - latitude1 (float): Latitude of the first point in degrees.
+        - longitude1 (float): Longitude of the first point in degrees.
+        - latitude2 (float): Latitude of the second point in degrees.
+        - longitude2 (float): Longitude of the second point in degrees.
+        - method (str): Method to calculate the distance. Options are
+            "haversine" and "planar".
+
+    Returns
+    -------
+        distance (float): Distance between the two points in kilometers.
+    """
+    if method == "haversine":
+        return haversine_distance(
+            latitude1,
+            longitude1,
+            latitude2,
+            longitude2,
+        )
+    elif method == "planar":
+        return planar_approximation_distance(
+            latitude1,
+            longitude1,
+            latitude2,
+            longitude2,
+        )
+    else:
+        raise ValueError(f"Method '{method}' not supported.")
+
+
+def smaller_distance_in_df(
+    latitude: float,
+    longitude: float,
+    df: pd.DataFrame,
+    method: str,
+) -> pd.Series:
+    """
+    Find the row in the DataFrame with the smallest distance to the given point.
+
+    Parameters
+    ----------
+        - latitude (float): Latitude of the point.
+        - longitude (float): Longitude of the point.
+        - df (pd.DataFrame): DataFrame with the points.
+        - method (str): Method to calculate the distance. Options are
+            "haversine" and "planar".
+
+    Returns
+    -------
+        pd.Series: Row with the smallest distance.
+    """
+    distances = df.apply(
+        lambda row: distance_between_points(
+            latitude,
+            longitude,
+            row["latitude"],
+            row["longitude"],
+            method=method,
+        ),
+        axis=1,
+    )
+    return df.loc[distances.idxmin()]
 
 
 ##################### OS Functions #####################
