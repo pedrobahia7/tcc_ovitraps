@@ -1,10 +1,11 @@
 import pandas as pd
 import numpy as np
+import generic
 
 ################ Dengue Cases Functions ################
 
 
-def process_dengue(dengue_data: pd.DataFrame) -> pd.Series:
+def process_dengue(dengue_data: pd.DataFrame) -> pd.DataFrame:
     """
     Process the dengue data DataFrame to prepare it for further analysis.
     This function renames the 'SemEpi' column to 'semepid', extracts the week
@@ -17,7 +18,7 @@ def process_dengue(dengue_data: pd.DataFrame) -> pd.Series:
     
     Returns
     ----------
-    - dengue_data (pd.Series): Processed DataFrame with 'semepid' as an integer\
+    - dengue_data (pd.DataFrame): Processed DataFrame with 'semepid' as an integer\
       column, ready for further analysis.
     
     """
@@ -467,3 +468,40 @@ def generate_all_weeks(pivot_data: pd.DataFrame) -> list:
     ]
 
     return new_tuples
+
+
+################# Geographical Functions ###################
+
+
+def closest_health_center(df, health_centers, method="haversine"):
+    """
+    Find the closest health center to each point in the DataFrame.
+
+    Parameters
+    ----------
+        df (pd.DataFrame): DataFrame with the points.
+        health_centers (pd.DataFrame): DataFrame with health center locations and names.
+        method (str): Method to calculate the distance. Options are
+            "haversine" and "planar".
+
+    Returns
+    -------
+        pd.DataFrame: DataFrame with the closest health center for each point.
+
+    """
+    # Calculate the distance between each point and each health center
+    closest_health_center_list = []
+    for _, row in df.iterrows():
+        if row[["latitude", "longitude"]].notnull().all():
+            closest_health_center_list.append(
+                generic.smaller_distance_in_df(
+                    row["latitude"],
+                    row["longitude"],
+                    health_centers,
+                    method=method,
+                )["health_center"]
+            )
+        else:
+            closest_health_center_list.append(np.nan)
+
+    return closest_health_center_list
