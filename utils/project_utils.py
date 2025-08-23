@@ -2,6 +2,10 @@ import pandas as pd
 import numpy as np
 import generic
 
+
+EPIDEMY_YEARS = ["2012_13", "2015_16", "2018_19", "2023_24"]
+
+
 ################ Dengue Cases Functions ################
 
 
@@ -468,6 +472,28 @@ def generate_all_weeks(pivot_data: pd.DataFrame) -> list:
     ]
 
     return new_tuples
+
+
+def get_epidemic_years_date_ranges(dengue_data: pd.DataFrame) -> dict:
+    """
+    Get the date ranges for each epidemic year.
+
+    Parameters
+    ----------
+    - dengue_data (pd.DataFrame): Data containing the 'anoepid' and 'dt_notific' columns.
+
+    Returns
+    -------
+    - dict: A dictionary where the keys are epidemic years and the values are date ranges.
+    """
+    day_anoepid = {}
+    for year in dengue_data.anoepid.unique():
+        year_data = dengue_data[dengue_data["anoepid"] == year]
+        day_anoepid[year] = pd.date_range(
+            start=year_data["dt_notific"].min(),
+            end=year_data["dt_notific"].max(),
+        )
+    return day_anoepid
 
 
 ################# Geographical Functions ###################
