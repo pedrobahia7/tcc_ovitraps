@@ -3,6 +3,9 @@ import numpy as np
 import generic
 
 
+from pyproj import Transformer
+
+
 EPIDEMY_YEARS = ["2012_13", "2015_16", "2018_19", "2023_24"]
 
 
@@ -43,6 +46,8 @@ def process_dengue(dengue_data: pd.DataFrame) -> pd.DataFrame:
         lambda x: int(str(x)[-2:])
     )
 
+    # Convert coordinates to latitude and longitude
+    dengue_data = convert_qgis_to_latlon(dengue_data)
     return dengue_data
 
 
@@ -244,35 +249,31 @@ def process_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
         "2023-09-14"
     )
     ovitraps_data.loc[
-        (ovitraps_data["narmad"] == 901011)
-        & (ovitraps_data["dtcol"] == "2017-04-20"),
+        (ovitraps_data["dtcol"] == "2017-04-20"),
         "dtcol",
     ] = "2016-03-08"
 
     ovitraps_data.loc[
-        (ovitraps_data["narmad"] == 901013)
-        & (ovitraps_data["dtcol"] == "2017-04-20"),
+        (ovitraps_data["dtcol"] == "2017-04-20"),
         "dtcol",
     ] = "2016-03-08"
 
     ovitraps_data.loc[
-        (ovitraps_data["narmad"] == 901199)
-        & (ovitraps_data["dtcol"] == "2021-01-27"),
+        (ovitraps_data["dtcol"] == "2021-01-27"),
         "dtcol",
     ] = "2020-04-13"
 
     ovitraps_data.loc[
-        (ovitraps_data["narmad"] == 907066)
-        & (ovitraps_data["dtcol"] == "2032-09-14"),
+        (ovitraps_data["dtcol"] == "2032-09-14"),
         "dtcol",
     ] = "2023-09-14"
 
     ovitraps_data.loc[
-        (ovitraps_data["narmad"] == 909027)
-        & (ovitraps_data["dtcol"] == "2025-05-08"),
+        (ovitraps_data["dtcol"] == "2025-05-08"),
         "dtcol",
     ] = "2024-05-08"
 
+    ovitraps_data = convert_qgis_to_latlon(ovitraps_data)
     return ovitraps_data
 
 
@@ -474,9 +475,11 @@ def generate_all_weeks(pivot_data: pd.DataFrame) -> list:
     return new_tuples
 
 
-def get_epidemic_years_date_ranges(dengue_data: pd.DataFrame) -> dict:
+def get_epidemic_years_date_ranges_dengue(
+    dengue_data: pd.DataFrame,
+) -> dict:
     """
-    Get the date ranges for each epidemic year.
+    Get the date ranges for each epidemic year based on the dengue data.
 
     Parameters
     ----------
@@ -492,6 +495,30 @@ def get_epidemic_years_date_ranges(dengue_data: pd.DataFrame) -> dict:
         day_anoepid[year] = pd.date_range(
             start=year_data["dt_notific"].min(),
             end=year_data["dt_notific"].max(),
+        )
+    return day_anoepid
+
+
+def get_epidemic_years_date_ranges_ovitraps(  # DO NOT USE THIS. DATES IN OVITRAPS ARE NOT RELIABLE
+    ovitrap_data: pd.DataFrame,
+) -> dict:
+    """
+    Get the date ranges for each epidemic year based on ovitraps data.
+
+    Parameters
+    ----------
+    - ovitrap_data (pd.DataFrame): Data containing the 'anoepid' and 'dtcol' columns.
+
+    Returns
+    -------
+    - dict: A dictionary where the keys are epidemic years and the values are date ranges.
+    """
+    day_anoepid = {}
+    for year in ovitrap_data.anoepid.unique():
+        year_data = ovitrap_data[ovitrap_data["anoepid"] == year]
+        day_anoepid[year] = pd.date_range(
+            start=year_data["dtcol"].min(),
+            end=year_data["dtcol"].max(),
         )
     return day_anoepid
 
@@ -531,3 +558,29 @@ def closest_health_center(df, health_centers, method="haversine"):
             closest_health_center_list.append(np.nan)
 
     return closest_health_center_list
+
+
+def convert_qgis_to_latlon(df, x_col="coordx", y_col="coordy"):
+    """
+    Convert projected coordinates in a DataFrame to latitude/longitude.
+
+    Parameters:
+        df (pd.DataFrame): DataFrame containing coordx, coordy
+        x_col (str): column name for easting
+        y_col (str): column name for northing
+
+    Returns:
+        pd.DataFrame with extra columns 'latitude' and 'longitude'
+    """
+    # Define Belo Horizonte GTZ
+    transformer = Transformer.from_crs(
+        "EPSG:31983", "EPSG:4326", always_xy=True
+    )
+
+    lon, lat = transformer.transform(df[x_col].values, df[y_col].values)
+    df = df.copy()
+    df["latitude"] = lat
+    df["longitude"] = lon
+    df.loc[df["coordx"] == 0.0, "latitude"] = np.nan
+    df.loc[df["coordy"] == 0.0, "longitude"] = np.nan
+    return df
