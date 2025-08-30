@@ -43,11 +43,17 @@ def process_dengue(dengue_data: pd.DataFrame) -> pd.DataFrame:
 
     # Extract week from 'semepid' and convert to integer
     dengue_data["semepid"] = dengue_data["semepid"].apply(
-        lambda x: int(str(x)[-2:])
+        lambda x: f"{int(str(x)[-2:]):02d}" if pd.notnull(x) else x
     )
 
     # Convert coordinates to latitude and longitude
     dengue_data = convert_qgis_to_latlon(dengue_data)
+
+    # Drop rows with 'Dengue' == 'N'
+    dengue_data.drop(
+        dengue_data[dengue_data["Dengue"] == "N"].index, axis=0
+    )
+
     return dengue_data
 
 
@@ -241,7 +247,7 @@ def process_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
 
     # At least two digits for semepid
     ovitraps_data["semepid"] = ovitraps_data["semepid"].apply(
-        lambda x: f"{int(x):02d}" if pd.notnull(x) else x
+        lambda x: f"{int(x) - 100:02d}" if pd.notnull(x) else x
     )
 
     # Correct wrong dates
@@ -249,17 +255,20 @@ def process_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
         "2023-09-14"
     )
     ovitraps_data.loc[
-        (ovitraps_data["dtcol"] == "2017-04-20"),
+        (ovitraps_data["narmad"] == 901011)
+        & (ovitraps_data["dtcol"] == "2017-04-20"),
         "dtcol",
     ] = "2016-03-08"
 
     ovitraps_data.loc[
-        (ovitraps_data["dtcol"] == "2017-04-20"),
+        (ovitraps_data["narmad"] == 901013)
+        & (ovitraps_data["dtcol"] == "2017-04-20"),
         "dtcol",
     ] = "2016-03-08"
 
     ovitraps_data.loc[
-        (ovitraps_data["dtcol"] == "2021-01-27"),
+        (ovitraps_data["narmad"] == 901199)
+        & (ovitraps_data["dtcol"] == "2021-01-27"),
         "dtcol",
     ] = "2020-04-13"
 
@@ -269,7 +278,8 @@ def process_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     ] = "2023-09-14"
 
     ovitraps_data.loc[
-        (ovitraps_data["dtcol"] == "2025-05-08"),
+        (ovitraps_data["narmad"] == 909027)
+        & (ovitraps_data["dtcol"] == "2025-05-08"),
         "dtcol",
     ] = "2024-05-08"
 

@@ -64,17 +64,17 @@ health_centers.rename(
     inplace=True,
 )
 
-# Save
 health_centers.to_csv("data/processed/health_centers.csv", index=False)
 
 # %% Dengue data
 # Process
-# print("Processing dengue data")
-# dengue_data = project_utils.process_dengue(dengue_data)
-# dengue_data["closest_health_center"] = project_utils.closest_health_center(
-#     dengue_data, health_centers
-# )
-# dengue_data.to_csv("data/processed/dengue_data.csv", index=True)
+print("Processing dengue data")
+dengue_data = project_utils.process_dengue(dengue_data)
+dengue_data["closest_health_center"] = project_utils.closest_health_center(
+    dengue_data, health_centers
+)
+
+dengue_data.to_csv("data/processed/dengue_data.csv", index=False)
 
 
 # %% Ovitraps data
@@ -85,10 +85,10 @@ ovitraps_data["closest_health_center"] = (
     project_utils.closest_health_center(ovitraps_data, health_centers)
 )
 
-ovitraps_data.to_csv("data/processed/ovitraps_data.csv", index=True)
-daily_ovitraps = project_utils.get_daily_ovitraps(ovitraps_data)
+ovitraps_data.to_csv("data/processed/ovitraps_data.csv", index=False)
 
-# Save
+# Get daily ovitraps
+daily_ovitraps = project_utils.get_daily_ovitraps(ovitraps_data)
 daily_ovitraps.to_csv(
     "data/processed/daily_ovitraps.csv",
     index=True,
