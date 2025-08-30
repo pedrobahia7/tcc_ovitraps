@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import generic
-
+import matplotlib.pyplot as plt
 
 from pyproj import Transformer
 
@@ -584,3 +584,113 @@ def convert_qgis_to_latlon(df, x_col="coordx", y_col="coordy"):
     df.loc[df["coordx"] == 0.0, "latitude"] = np.nan
     df.loc[df["coordy"] == 0.0, "longitude"] = np.nan
     return df
+
+
+########### Visualization Functions #######################
+
+
+def boxplot_filtered_data(
+    df_to_plot,
+    df_filter,
+    lower_limit=range(0, 100, 10),
+    upper_limit=range(10, 110, 10),
+    title="Boxplot of Filtered Data",
+    truncate_plot=True,
+    truncation_limit=1000,
+):
+    """
+    Function to create boxplots for separate groups of samples of
+    df_to_plot, according to the values of df_filter. Both dataframes must
+    have the same index, so the index of df_filter values inside the given
+    range will be used to separate df_to_plot into different groups.
+
+    Parameters
+    ----------
+    - df_to_plot (pd.DataFrame): DataFrame to plot be ploted. Each box will
+      represent a group of values from df_filter.
+    - df_filter (pd.Series): Series used to filter df_to_plot. It's values
+      will define groups for the boxplots.
+    - lower_limit (range): Lower limits for each boxplot group. Must be an
+      iterable of the same length as upper_limit.
+    - upper_limit (range): Upper limits for each boxplot group. Must be an
+      iterable of the same length as lower_limit.
+    - title (str): Title of the plot.
+    - truncate_plot (bool): Whether plot a new graph with values cliped on
+      the truncation_limit.
+    - truncation_limit (int): The value at which to truncate the plot.
+
+    Returns
+    -------
+    None
+    """
+    filtered_series = []
+    # Filter df_to_plot according to df_filter values
+    for down, up in zip(lower_limit, upper_limit):
+        if up == list(upper_limit)[-1]:
+            up = np.inf
+        filter_index = (
+            df_filter[(df_filter < up) & (df_filter >= down)]
+            .dropna()
+            .index
+        )
+        filtered_series.append(
+            pd.Series(
+                df_to_plot.loc[
+                    df_to_plot.index.intersection(filter_index)
+                ].dropna(),
+                name=f"{down}-{up}",
+            )
+        )
+
+    filtered_df_epidemy = pd.DataFrame(filtered_series).T
+    cat_samples = filtered_df_epidemy.notna().sum()
+
+    # Plot
+    plt.figure(figsize=(12, 6))
+    # Add the text inside the plot (adjust x, y as needed)
+    ax = filtered_df_epidemy.boxplot()
+
+    # Add text above each box
+    for i, col in enumerate(filtered_df_epidemy.columns, start=1):
+        if filtered_df_epidemy[col].isna().all():
+            continue
+        ax.text(
+            i,  # x = box position
+            filtered_df_epidemy[col].max(),  # y = max value of that box
+            str(cat_samples[col]),  # text = count
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            fontweight="bold",
+            color="darkred",
+        )
+    plt.ylabel("Dengue Cases")
+    plt.xlabel("Ovitraps Mean")
+    plt.title(title)
+    plt.show()
+
+    if truncate_plot:
+        plt.figure(figsize=(12, 6))
+        # Add the text inside the plot (adjust x, y as needed)
+        ax = filtered_df_epidemy.clip(upper=truncation_limit).boxplot()
+        # Add text above each box
+        for i, col in enumerate(filtered_df_epidemy.columns, start=1):
+            if filtered_df_epidemy[col].isna().all():
+                continue
+            ax.text(
+                i,  # x = box position
+                filtered_df_epidemy[col]
+                .clip(upper=truncation_limit)
+                .max(),  # y = max value of that box
+                str(cat_samples[col]),  # text = count
+                ha="center",
+                va="bottom",
+                fontsize=10,
+                fontweight="bold",
+                color="darkred",
+            )
+
+        plt.title(f"{title} (truncated at {truncation_limit})")
+        plt.ylabel("Dengue Cases")
+        plt.xlabel("Ovitraps Mean")
+        plt.show()
