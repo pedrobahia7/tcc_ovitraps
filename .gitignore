@@ -6,3 +6,4 @@ mlruns/
 mlartifacts/
 catboost_info
 .vscode/
+.conda/
