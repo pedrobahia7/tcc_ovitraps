@@ -1,4 +1,4 @@
-import pygame
+#import pygame
 import time
 import numpy as np
 import pandas as pd
@@ -12,43 +12,43 @@ import math
 ############# Music Functions :) #############
 
 
-def play_ending_song(
-    addr: str = "../data/Sinfonia To Cantata # 29.mp3",
-) -> None:
-    """
-    Function to play a song when the program ends
+# def play_ending_song(
+#     addr: str = "../data/Sinfonia To Cantata # 29.mp3",
+# ) -> None:
+#     """
+#     Function to play a song when the program ends
 
-    Parameters:
-    addr (str): Address of the MP3 file
+#     Parameters:
+#     addr (str): Address of the MP3 file
 
-    Returns:
-    None
-
-
-    """
-    # Initialize the mixer
-    pygame.mixer.init()
-    # Load the MP3 file
-    pygame.mixer.music.load(addr)
-    # Play the MP3 file
-    pygame.mixer.music.play()
+#     Returns:
+#     None
 
 
-def stop_ending_song(seconds: int = 5) -> None:
-    """
-    Function to stop the song that is playing
+#     """
+#     # Initialize the mixer
+#     pygame.mixer.init()
+#     # Load the MP3 file
+#     pygame.mixer.music.load(addr)
+#     # Play the MP3 file
+#     pygame.mixer.music.play()
 
-    Parameters:
-    seconds (int): Number of seconds to wait before stopping the song
 
-    Returns:
-    None
-    """
+# def stop_ending_song(seconds: int = 5) -> None:
+#     """
+#     Function to stop the song that is playing
 
-    time.sleep(seconds)
-    pygame.mixer.music.stop()
-    # Optional: Clean up the mixer
-    pygame.mixer.quit()
+#     Parameters:
+#     seconds (int): Number of seconds to wait before stopping the song
+
+#     Returns:
+#     None
+#     """
+
+#     time.sleep(seconds)
+#     pygame.mixer.music.stop()
+#     # Optional: Clean up the mixer
+#     pygame.mixer.quit()
 
 
 ############# Correlation Funtions #############
