@@ -43,7 +43,7 @@ def process_dengue(dengue_data: pd.DataFrame) -> pd.DataFrame:
 
     # Extract week from 'semepid' and convert to integer
     dengue_data["semepid"] = dengue_data["semepid"].apply(
-        lambda x: f"{int(str(x)[-2:]):02d}" if pd.notnull(x) else x
+        lambda x: int(str(x)[-2:]) if pd.notnull(x) else x
     )
 
     # Convert coordinates to latitude and longitude
@@ -77,8 +77,7 @@ def get_weekly_dengue(
       each week.
 
     """
-    # Rename and clean the DataFrame
-    dengue_data = process_dengue(dengue_data)
+    dengue_data = dengue_data.copy()
 
     # Create a new datetime column from ano and semepid
     dengue_data["date"] = dengue_data.apply(
@@ -127,8 +126,7 @@ def get_biweekly_dengue(
       each week.
 
     """
-    # Rename and clean the DataFrame
-    dengue_data = process_dengue(dengue_data)
+    dengue_data = dengue_data.copy()
 
     #  Convert week 53 to week 1 of the next year
     for row in dengue_data.itertuples():
@@ -193,8 +191,7 @@ def get_daily_dengue(
       value is the count of 'novos' cases on that date.
 
     """
-    # Rename and clean the DataFrame
-    dengue_data = process_dengue(dengue_data)
+    dengue_data = dengue_data.copy()
 
     # Get daily counts of dengue cases
     dengue_cases_serie = (
@@ -307,8 +304,8 @@ def get_biweekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
       combination of 'ano', 'semepid', and 'narmad'.
     
     """
-    # Rename and clean the DataFrame
-    ovitraps_data = process_ovitraps(ovitraps_data)
+    #  Copy dataframe
+    ovitraps_data = ovitraps_data.copy()
 
     #  Convert week 53 to week 1 of the next year
     for row in ovitraps_data.itertuples():
@@ -368,8 +365,7 @@ def get_weekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
       combination of 'ano', 'semepid', and 'narmad'.
     
     """
-    # Rename and clean the DataFrame
-    ovitraps_data = process_ovitraps(ovitraps_data)
+    ovitraps_data = ovitraps_data.copy()
 
     # Create a new datetime column from ano and semepid
     ovitraps_data["date"] = ovitraps_data.apply(
@@ -409,8 +405,7 @@ def get_daily_ovitraps(
       as columns and the mean of 'novos' cases per day.
 
     """
-    # Rename and clean the DataFrame
-    ovitraps_data = process_ovitraps(ovitraps_data)
+    ovitraps_data = ovitraps_data.copy()
 
     # Get daily counts of ovitraps cases
     expanded_rows = ovitraps_data.apply(
