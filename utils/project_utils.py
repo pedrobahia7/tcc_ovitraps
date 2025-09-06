@@ -12,63 +12,18 @@ EPIDEMY_YEARS = ["2012_13", "2015_16", "2018_19", "2023_24"]
 ################ Dengue Cases Functions ################
 
 
-def process_dengue(dengue_data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Process the dengue data DataFrame to prepare it for further analysis.
-    This function renames the 'SemEpi' column to 'semepid', extracts the week
-    from 'semepid', and converts it to an integer.
-    
-    Parameters
-    ----------
-    - dengue_data (pd.DataFrame): DataFrame containing dengue data with columns\
-        'Ano_Caso', 'SemEpi', and 'novos'.
-    
-    Returns
-    ----------
-    - dengue_data (pd.DataFrame): Processed DataFrame with 'semepid' as an integer\
-      column, ready for further analysis.
-    
-    """
-
-    # Rename and clean the DataFrame
-    # Rename columns
-    dengue_data.rename(
-        columns={
-            "SemEpi": "semepid",
-            "Ano_Caso": "ano",
-            "anoCepid": "anoepid",
-        },
-        inplace=True,
-    )
-
-    # Extract week from 'semepid' and convert to integer
-    dengue_data["semepid"] = dengue_data["semepid"].apply(
-        lambda x: int(str(x)[-2:]) if pd.notnull(x) else x
-    )
-
-    # Convert coordinates to latitude and longitude
-    dengue_data = convert_qgis_to_latlon(dengue_data)
-
-    # Drop rows with 'Dengue' == 'N'
-    dengue_data.drop(
-        dengue_data[dengue_data["Dengue"] == "N"].index, axis=0
-    )
-
-    return dengue_data
-
-
 def get_weekly_dengue(
     dengue_data: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Convert raw dengue data to a pivoted format suitable for comparison
-    with ovitrap data, with 'ano_Caso' and 'semepid' as index. The
+    Convert processed dengue data to a pivoted format suitable for comparison
+    with ovitrap data, with 'epidemic_date' as index. The
     DataFrame will contain counts of 'novos' cases.
 
     Parameters
     ----------
     - data (pd.DataFrame): DataFrame containing dengue data with columns\
-        'Ano_Caso', 'semepid', and 'novos'.
+        'anoepid', 'semepid', and 'novos'.
 
     Returns
     ----------
@@ -76,26 +31,28 @@ def get_weekly_dengue(
       as index, where each cell contains the count of 'novos' cases in
       each week.
 
+    Doctest
+    --------
+    >>> week_data = get_weekly_dengue(dengue_data)
+    >>> week_data['2007_08W01'] == ((dengue_data['anoepid'] == '2007_08') & (dengue_data['semepid'] == 1)).sum()
     """
     dengue_data = dengue_data.copy()
 
     # Create a new datetime column from ano and semepid
-    dengue_data["date"] = dengue_data.apply(
-        lambda row: str(row["anoepid"]) + "W" + str(row["semepid"])
-        if row["semepid"] > 9
-        else str(row["anoepid"]) + "W0" + str(row["semepid"]),
-        axis=1,
+    dengue_data["epidemic_date"] = get_epidemic_date(dengue_data)
+
+    # Pivot the DataFrame to create a matrix with 'epidemic_date' as index
+    pivot_data = (
+        dengue_data.groupby(["epidemic_date"]).size().reset_index()
     )
 
-    # Pivot the DataFrame to create a matrix with 'ano' and 'semepid' as index
-    pivot_data = dengue_data.groupby(["date"]).size().reset_index()
-    pivot_data.set_index(["date"], inplace=True)
+    pivot_data.set_index(["epidemic_date"], inplace=True)
 
     # Generate new MultiIndex with all weeks
-    new_tuples = generate_all_weeks(pivot_data)
+    all_weeks_index = generate_all_weeks(pivot_data)
 
     # Combine with existing index and reindex the DataFrame
-    weekly_data = pivot_data.reindex(new_tuples).sort_index()
+    weekly_data = pivot_data.reindex(all_weeks_index).sort_index()
 
     # Fill NaN values with 0
     weekly_data.replace(np.nan, 0, inplace=True)
@@ -110,8 +67,8 @@ def get_biweekly_dengue(
     dengue_data: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Convert raw dengue data to a pivoted format suitable for comparison
-    with ovitrap data, with 'ano_Caso' and 'semepid' as index. The
+    Convert processed dengue data to a pivoted format suitable for comparison
+    with ovitrap data, with 'anoepid' and 'semepid' as index. The
     DataFrame will contain counts of 'novos' cases.
 
     Parameters
@@ -126,50 +83,17 @@ def get_biweekly_dengue(
       each week.
 
     """
-    dengue_data = dengue_data.copy()
-
-    #  Convert week 53 to week 1 of the next year
-    for row in dengue_data.itertuples():
-        if row.semepid == "53":
-            dengue_data.at[row.Index, "semepid"] = "01"
-            year = int(row.anoepid[:4])
-            dengue_data.at[row.Index, "anoepid"] = (
-                f"{year + 1}_{year - 1999:02d}"
-            )
+    # Get weekly dengue data
+    weekly_data = get_weekly_dengue(dengue_data)
 
     # Convert odd weeks to even weeks
     dengue_data["semepid"] = dengue_data["semepid"].apply(
         lambda x: int(int(x) + 1) if int(x) % 2 != 0 else x
     )
-
-    # Create a new datetime column from ano and semepid
-    dengue_data["date"] = dengue_data.apply(
-        lambda row: str(row["anoepid"]) + "W" + str(row["semepid"])
-        if row["semepid"] > 9
-        else str(row["anoepid"]) + "W0" + str(row["semepid"]),
-        axis=1,
+    raise NotImplementedError(
+        "Biweekly dengue data generation not implemented"
     )
-
-    # Pivot the DataFrame to create a matrix with 'ano' and 'semepid' as index
-    pivot_data = dengue_data.groupby(["date"]).size().reset_index()
-    pivot_data.set_index(["date"], inplace=True)
-
-    # Fill weeks
-    all_weeks = generate_all_weeks(pivot_data)
-    all_even_weeks = [
-        week for week in all_weeks if int(week.split("W")[1]) % 2 == 0
-    ]
-    pivot_data = pivot_data.reindex(all_even_weeks).sort_index()
-
-    # Combine with existing index and reindex the DataFrame
-    biweekly_data = pivot_data.reindex(all_even_weeks).sort_index()
-
-    # Fill NaN values with 0
-    biweekly_data.replace(np.nan, 0, inplace=True)
-
-    # Convert df to Series
-    biweekly_data = biweekly_data[0]
-
+    biweekly_data = 1
     return biweekly_data
 
 
@@ -221,8 +145,8 @@ def get_daily_dengue(
 
 def process_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     """
-    Process the raw ovitraps data by renaming columns and filtering relevant
-    information.
+    Function to be used in dvc pipeline. Process the raw ovitraps data by
+    renaming columns and filtering relevant information.
 
     Parameters
     ----------
@@ -234,53 +158,7 @@ def process_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     - ovitraps_data (pd.DataFrame): Processed DataFrame ready for analysis.
 
     """
-    # Rename columns for consistency
-    ovitraps_data.rename(
-        columns={
-            "semepi": "semepid",
-        },
-        inplace=True,
-    )
 
-    # At least two digits for semepid
-    ovitraps_data["semepid"] = ovitraps_data["semepid"].apply(
-        lambda x: f"{int(x) - 100:02d}" if pd.notnull(x) else x
-    )
-
-    # Correct wrong dates
-    ovitraps_data.loc[ovitraps_data["dtcol"] == "2032-09-14", "dtcol"] = (
-        "2023-09-14"
-    )
-    ovitraps_data.loc[
-        (ovitraps_data["narmad"] == 901011)
-        & (ovitraps_data["dtcol"] == "2017-04-20"),
-        "dtcol",
-    ] = "2016-03-08"
-
-    ovitraps_data.loc[
-        (ovitraps_data["narmad"] == 901013)
-        & (ovitraps_data["dtcol"] == "2017-04-20"),
-        "dtcol",
-    ] = "2016-03-08"
-
-    ovitraps_data.loc[
-        (ovitraps_data["narmad"] == 901199)
-        & (ovitraps_data["dtcol"] == "2021-01-27"),
-        "dtcol",
-    ] = "2020-04-13"
-
-    ovitraps_data.loc[
-        (ovitraps_data["dtcol"] == "2032-09-14"),
-        "dtcol",
-    ] = "2023-09-14"
-
-    ovitraps_data.loc[
-        (ovitraps_data["narmad"] == 909027)
-        & (ovitraps_data["dtcol"] == "2025-05-08"),
-        "dtcol",
-    ] = "2024-05-08"
-
-    ovitraps_data = convert_qgis_to_latlon(ovitraps_data)
     return ovitraps_data
 
 
@@ -318,12 +196,14 @@ def get_biweekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
 
     # Convert odd weeks to even weeks
     ovitraps_data["semepid"] = ovitraps_data["semepid"].apply(
-        lambda x: str(int(x) + 1) if int(x) % 2 != 0 else x
+        lambda x: int(int(x) + 1) if int(x) % 2 != 0 else x
     )
 
     # Create a new datetime column from ano and semepid
     ovitraps_data["date"] = ovitraps_data.apply(
-        lambda row: str(row["anoepid"]) + "W" + str(row["semepid"]),
+        lambda row: str(row["anoepid"]) + "W" + str(row["semepid"])
+        if row["semepid"] > 9
+        else str(row["anoepid"]) + "W0" + str(row["semepid"]),
         axis=1,
     )
 
@@ -397,7 +277,7 @@ def get_daily_ovitraps(
     Parameters
     ----------
     - ovitraps_data (pd.DataFrame): DataFrame containing ovitraps data with columns\
-        'dtinstal', 'dtcol', 'narmad', and 'novos'.
+        'dt_instal', 'dt_col', 'narmad', and 'novos'.
 
     Returns
     ----------
@@ -411,10 +291,10 @@ def get_daily_ovitraps(
     expanded_rows = ovitraps_data.apply(
         lambda row: pd.DataFrame(
             {
-                "date": pd.date_range(row["dtinstal"], row["dtcol"]),
+                "date": pd.date_range(row["dt_instal"], row["dt_col"]),
                 "narmad": row["narmad"],
                 "novos": row["novos"]
-                / len(pd.date_range(row["dtinstal"], row["dtcol"])),
+                / len(pd.date_range(row["dt_instal"], row["dt_col"])),
             }
         ),
         axis=1,
@@ -512,7 +392,7 @@ def get_epidemic_years_date_ranges_ovitraps(  # DO NOT USE THIS. DATES IN OVITRA
 
     Parameters
     ----------
-    - ovitrap_data (pd.DataFrame): Data containing the 'anoepid' and 'dtcol' columns.
+    - ovitrap_data (pd.DataFrame): Data containing the 'anoepid' and 'dt_col' columns.
 
     Returns
     -------
@@ -522,10 +402,35 @@ def get_epidemic_years_date_ranges_ovitraps(  # DO NOT USE THIS. DATES IN OVITRA
     for year in ovitrap_data.anoepid.unique():
         year_data = ovitrap_data[ovitrap_data["anoepid"] == year]
         day_anoepid[year] = pd.date_range(
-            start=year_data["dtcol"].min(),
-            end=year_data["dtcol"].max(),
+            start=year_data["dt_col"].min(),
+            end=year_data["dt_col"].max(),
         )
     return day_anoepid
+
+
+def get_epidemic_date(data: pd.DataFrame) -> pd.Series:
+    """
+    Function to convert epidemic week and year into a single string of the
+    format {anoepid}W{semepid} with two digits for the week.
+
+    Parameters
+    ----------
+    - data (pd.DataFrame): DataFrame containing columns for the epidemic
+      week and year.
+
+    Returns
+    -------
+    epidemic_date (pd.Series): Series containing the formatted epidemic
+    dates.
+    """
+
+    epidemic_date = data.apply(
+        lambda row: str(row["anoepid"]) + "W" + str(row["semepid"])
+        if int(row["semepid"]) > 9
+        else str(row["anoepid"]) + "W0" + str(row["semepid"]),
+        axis=1,
+    )
+    return epidemic_date
 
 
 ################# Geographical Functions ###################
@@ -591,7 +496,7 @@ def convert_qgis_to_latlon(df, x_col="coordx", y_col="coordy"):
     return df
 
 
-########### Visualization Functions #######################
+############### Visualization Functions #######################
 
 
 def boxplot_filtered_data(

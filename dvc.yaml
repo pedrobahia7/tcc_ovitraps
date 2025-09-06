@@ -1,0 +1,30 @@
+stages:
+  convert_to_csv:
+    cmd: python src/convert_to_csv.py
+    deps:
+      - src/convert_to_csv.py
+      - data/raw/CENTRO_SAUDE_new.xlsx
+      - data/raw/Dengue2007_2025.xlsx
+      - data/raw/MasterDataExtend062025.xlsx
+    outs:
+      - data/raw/CENTRO_SAUDE_new.csv
+      - data/raw/Dengue2007_2025.csv
+      - data/raw/MasterDataExtend062025.csv
+  slow_processing:
+    cmd: python src/process_data_slow.py
+    deps:
+      - src/process_data_slow.py
+      - data/raw/CENTRO_SAUDE_new.csv
+      - data/raw/Dengue2007_2025.csv
+      - data/raw/MasterDataExtend062025.csv
+    outs:
+      - data/processed/slow/
+  fast_processing:
+    cmd: python src/process_data_fast.py
+    deps:
+      - src/process_data_fast.py
+      - data/processed/slow/
+    outs:
+      - data/processed/ovitraps_data.csv
+      - data/processed/health_centers.csv
+      - data/processed/dengue_data.csv
