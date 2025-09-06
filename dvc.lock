@@ -1,0 +1,84 @@
+schema: '2.0'
+stages:
+  convert_to_csv:
+    cmd: python src/convert_to_csv.py
+    deps:
+    - path: data/raw/CENTRO_SAUDE_new.xlsx
+      hash: md5
+      md5: 958a7eb73ebabf47cd19c271f1953674
+      size: 15557
+    - path: data/raw/Dengue2007_2025.xlsx
+      hash: md5
+      md5: 9106855d61385311af5afa70ef0b7fbf
+      size: 159939359
+    - path: data/raw/MasterDataExtend062025.xlsx
+      hash: md5
+      md5: 69e68a7c4dc13d9c4aa97e41b13e6e40
+      size: 156595090
+    - path: src/convert_to_csv.py
+      hash: md5
+      md5: 34637bac78fd1852aa10d04409b0a133
+      size: 839
+    outs:
+    - path: data/raw/CENTRO_SAUDE_new.csv
+      hash: md5
+      md5: 0add8a3c30d9513847be9ce7e252f6ff
+      size: 8643
+    - path: data/raw/Dengue2007_2025.csv
+      hash: md5
+      md5: b5df7ac3ff6a3298b4d442fabee86486
+      size: 203030067
+    - path: data/raw/MasterDataExtend062025.csv
+      hash: md5
+      md5: df499ee47b140f9b8f8973a1fbe4bc55
+      size: 241625327
+  slow_processing:
+    cmd: python src/process_data_slow.py
+    deps:
+    - path: data/raw/CENTRO_SAUDE_new.csv
+      hash: md5
+      md5: 0add8a3c30d9513847be9ce7e252f6ff
+      size: 8643
+    - path: data/raw/Dengue2007_2025.csv
+      hash: md5
+      md5: b5df7ac3ff6a3298b4d442fabee86486
+      size: 203030067
+    - path: data/raw/MasterDataExtend062025.csv
+      hash: md5
+      md5: df499ee47b140f9b8f8973a1fbe4bc55
+      size: 241625327
+    - path: src/process_data_slow.py
+      hash: md5
+      md5: c9f27e644aa7f759a7052d567b96700d
+      size: 1887
+    outs:
+    - path: data/processed/slow/
+      hash: md5
+      md5: bc87ab4436523ff17b1cb57a60b48c45.dir
+      size: 517724800
+      nfiles: 3
+  fast_processing:
+    cmd: python src/process_data_fast.py
+    deps:
+    - path: data/processed/slow/
+      hash: md5
+      md5: bc87ab4436523ff17b1cb57a60b48c45.dir
+      size: 517724800
+      nfiles: 3
+    - path: src/process_data_fast.py
+      hash: md5
+      md5: 7d9b7198ba209455d2b55e3e95acd004
+      size: 3273
+    outs:
+    - path: data/processed/dengue_data.csv
+      hash: md5
+      md5: 865c2d5f398ce8a2103f7e71316e22e3
+      size: 182964789
+    - path: data/processed/health_centers.csv
+      hash: md5
+      md5: 88d0536056166b2560c6f260de716162
+      size: 8640
+    - path: data/processed/ovitraps_data.csv
+      hash: md5
+      md5: d504ef11cb48aa1827d9666d92a1c1ba
+      size: 282996536
