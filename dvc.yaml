@@ -28,3 +28,10 @@ stages:
       - data/processed/ovitraps_data.csv
       - data/processed/health_centers.csv
       - data/processed/dengue_data.csv
+  daily_ovitraps:
+    cmd: python src/daily_ovitraps.py
+    deps:
+      - src/daily_ovitraps.py
+      - data/processed/ovitraps_data.csv
+    outs:
+      - data/processed/daily_ovitraps_data.csv

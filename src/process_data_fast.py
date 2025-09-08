@@ -29,7 +29,7 @@ print("Processing dengue data")
 # Rename columns
 dengue_data.rename(
     columns={
-        "SemEpi": "semepid",
+        "SemEpi": "semana",
         "Ano_Caso": "ano",
         "anoCepid": "anoepid",
     },
@@ -37,8 +37,17 @@ dengue_data.rename(
 )
 
 # Extract week from 'semepid' and convert to integer
-dengue_data["semepid"] = dengue_data["semepid"].apply(
+dengue_data["semana"] = dengue_data["semana"].apply(
     lambda x: int(str(x)[-2:])
+)
+
+# Assign epidemic week and year based on notification date
+dengue_data["semepid"] = project_utils.assign_epidemic_week(
+    dengue_data, "dt_notific"
+)
+
+dengue_data["anoepid"] = project_utils.assign_epidemic_year(
+    dengue_data, "dt_notific"
 )
 
 # Drop rows without confirmed Dengue cases
@@ -50,7 +59,8 @@ dengue_data.drop(
 
 dengue_data.reset_index(drop=True, inplace=True)
 
-# Add useful columns
+### Add useful columns ###
+# Epidemic date
 dengue_data["epidemic_date"] = project_utils.get_epidemic_date(dengue_data)
 
 # Save
@@ -64,17 +74,27 @@ print("Processing ovitraps data")
 # Rename columns for consistency
 ovitraps_data.rename(
     columns={
-        "semepi": "semepid",
+        "semepi": "semana",
         "dtcol": "dt_col",
         "dtinstal": "dt_instal",
     },
     inplace=True,
 )
 
-# Convert semepid to string with at least two digits
-ovitraps_data["semepid"] = ovitraps_data["semepid"].apply(
-    lambda x: f"{int(x) - 100:02d}" if pd.notnull(x) else x
+# Convert semana into integer
+ovitraps_data["semana"] = ovitraps_data["semana"].apply(
+    lambda x: int(str(x)[-2:])
 )
+
+# Assign epidemic week based on installation date
+ovitraps_data["semepid"] = project_utils.assign_epidemic_week(
+    ovitraps_data, "dt_instal"
+)
+
+ovitraps_data["anoepid"] = project_utils.assign_epidemic_year(
+    ovitraps_data, "dt_instal"
+)
+
 
 # Correct wrong dates
 ovitraps_data.loc[ovitraps_data["dt_col"] == "2032-09-14", "dt_col"] = (
@@ -110,27 +130,32 @@ ovitraps_data.loc[
 ] = "2024-05-08"
 
 
-# Add useful columns
+### Add useful columns ###
+# Days of exposition
 ovitraps_data["days_expo"] = (
     pd.to_datetime(ovitraps_data["dt_col"])
     - pd.to_datetime(ovitraps_data["dt_instal"])
 ).dt.days
 
+# Mean eggs per day of exposition
+ovitraps_data["eggs_per_day"] = ovitraps_data["novos"] / ovitraps_data[
+    "days_expo"
+].replace(0, pd.NA)
+
+# Filter traps with exposition time > 30 days and negative exposition time
 ovitraps_data = ovitraps_data.drop(
     ovitraps_data[ovitraps_data["days_expo"] > 30].index,
+    axis=0,
 )
 
+ovitraps_data = ovitraps_data.drop(
+    ovitraps_data[ovitraps_data["days_expo"] < 0].index,
+    axis=0,
+)
+
+# Epidemic date
 ovitraps_data["epidemic_date"] = project_utils.get_epidemic_date(
     ovitraps_data
 )
 # Save Data
 ovitraps_data.to_csv("data/processed/ovitraps_data.csv", index=False)
-
-# Get daily ovitraps
-print("Daily ovitraps logic")
-daily_ovitraps = project_utils.get_daily_ovitraps(ovitraps_data)
-daily_ovitraps.to_csv(
-    "data/processed/daily_ovitraps.csv",
-    index=True,
-    date_format="%Y-%m-%d",
-)

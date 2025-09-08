@@ -143,25 +143,6 @@ def get_daily_dengue(
 ################ Ovitraps Eggs Functions ################
 
 
-def process_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Function to be used in dvc pipeline. Process the raw ovitraps data by
-    renaming columns and filtering relevant information.
-
-    Parameters
-    ----------
-    - ovitraps_data (pd.DataFrame): DataFrame containing ovitraps data with columns\
-        'ano', 'semepid', 'narmad', and 'novos'.
-
-    Returns
-    ----------
-    - ovitraps_data (pd.DataFrame): Processed DataFrame ready for analysis.
-
-    """
-
-    return ovitraps_data
-
-
 def get_biweekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     """
     Pivot the ovitraps_data DataFrame to create a matrix with
@@ -433,6 +414,170 @@ def get_epidemic_date(data: pd.DataFrame) -> pd.Series:
     return epidemic_date
 
 
+def assign_epidemic_year(df: pd.DataFrame, date_col: str) -> pd.Series:
+    """
+    Assign epidemic year to each date in the DataFrame column. The epidemic year
+    starts on the first Sunday before June 1st.
+
+    Parameters
+    ----------
+    df (pd.DataFrame) - DataFrame containing the date column.
+    date_col (str) - Name of the date column in the DataFrame.
+
+    Returns
+    -------
+    pd.Series
+        Series containing the assigned epidemic years.
+    """
+    dates = pd.to_datetime(df[date_col])
+
+    # Determine preliminary year
+    year = np.where(dates.dt.month >= 6, dates.dt.year, dates.dt.year - 1)
+    year = pd.Series(year, index=df.index)
+
+    # Compute first Sunday on or before June 1
+    june_first = pd.to_datetime(year.astype(str) + "-06-01")
+    # weekday: Monday=0 ... Sunday=6
+    offset = (june_first.dt.weekday + 1) % 7
+    epi_year_start = june_first - pd.to_timedelta(offset, unit="D")
+
+    # If date >= epi_year_start and < next year's epi_year_start → same epidemic year
+    next_june_first = pd.to_datetime((year + 1).astype(str) + "-06-01")
+    next_offset = (next_june_first.dt.weekday + 1) % 7
+    next_epi_year_start = next_june_first - pd.to_timedelta(
+        next_offset, unit="D"
+    )
+
+    # If date >= next year start, increment the epidemic year
+    epi_year = year.copy()
+    epi_year[dates >= next_epi_year_start] += 1
+
+    # Create label "YYYY_YY"
+    return epi_year.astype(str) + "_" + (epi_year + 1).astype(str).str[-2:]
+
+
+def is_same_week_as_june1(dates: pd.Series) -> pd.Series:
+    """
+    Check if each date falls within the same week as June 1 of that year.
+
+    Parameters
+    ----------
+    dates (pd.Series): Series of dates to check.
+
+    Returns
+    -------
+    pd.Series: Boolean Series indicating if each date is in the same week as June 1.
+
+    """
+    # Convert to datetime
+    dates = pd.to_datetime(dates)
+
+    # Year corresponding to each date
+    year = dates.dt.year
+
+    # June 1 of each date's year
+    june1 = pd.to_datetime(year.astype(str) + "-06-01")
+
+    # First Sunday on or before June 1
+    offset = (june1.dt.weekday + 1) % 7  # Monday=0 ... Sunday=6
+    first_sunday = june1 - pd.to_timedelta(offset, unit="D")
+
+    # Check if each date falls within that week (Sunday → Saturday)
+    return (dates >= first_sunday) & (
+        dates <= first_sunday + pd.Timedelta(days=6)
+    )
+
+
+def assign_epidemic_week(df: pd.DataFrame, date_col: str) -> pd.Series:
+    """
+    Assign epidemic week to each date in the DataFrame column. The epidemic
+    week changes every Sunday, and the count starts every year on the first
+    Sunday before June 1st. Some years may have 53 weeks.
+
+    Parameters
+    ----------
+    df (pd.DataFrame) - DataFrame containing the date column.
+    date_col (str) - Name of the date column in the DataFrame.
+
+    Returns
+    -------
+    pd.Series - Series containing the assigned epidemic weeks (1-53).
+
+    """
+
+    dates = pd.to_datetime(df[date_col])
+
+    # Determine epidemic year start: first Sunday on or before June 1 of that date's year
+    year = np.where(dates.dt.month >= 6, dates.dt.year, dates.dt.year - 1)
+    year = pd.Series(year, index=df.index)
+
+    june_first = pd.to_datetime(year.astype(str) + "-06-01")
+    offset = (june_first.dt.weekday + 1) % 7  # Sunday=6
+    epi_year_start = june_first - pd.to_timedelta(offset, unit="D")
+
+    # Epidemic week = number of Sundays since epidemic year start + 1, modulo 53
+    week_num = ((dates - epi_year_start).dt.days // 7) + 1
+
+    week_num[is_same_week_as_june1(dates)] = 1
+    return week_num
+
+
+def week_days_of_year(year: int) -> pd.DataFrame:
+    """
+    Generate a DataFrame containing all days of each week for a given year.
+
+    Parameters
+    ----------
+    - year (int): The year for which to generate the week days.
+
+    Returns
+    -------
+    - pd.DataFrame: A DataFrame with columns for each day of the week and rows
+    representing each week of the year.
+    """
+
+    sundays = pd.date_range(
+        start=f"{year}-01-01", end=f"{year}-12-31", freq="W-SUN"
+    )
+    data = {
+        "Sunday": sundays,
+        "Monday": sundays + pd.Timedelta(days=1),
+        "Tuesday": sundays + pd.Timedelta(days=2),
+        "Wednesday": sundays + pd.Timedelta(days=3),
+        "Thursday": sundays + pd.Timedelta(days=4),
+        "Friday": sundays + pd.Timedelta(days=5),
+        "Saturday": sundays + pd.Timedelta(days=6),
+    }
+    return pd.DataFrame(data)
+
+
+def convert_week_df_to_epidemic_week_and_year(
+    df_week: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Convert a DataFrame with week-days based columns to two DataFrames: one
+    with epidemic weeks and another with epidemic years.
+
+    Parameters
+    ----------
+    - df_week (pd.DataFrame): DataFrame with week-days based columns.
+
+    Returns
+    -------
+    - df_epi_week (pd.DataFrame): DataFrame with epidemic weeks.
+    - df_epi_year (pd.DataFrame): DataFrame with epidemic years.
+
+
+    """
+    df_epi_week = df_week.copy()
+    for col in df_week.columns:
+        df_epi_week[col] = assign_epidemic_week(df_week, col)
+    df_epi_year = df_week.copy()
+    for col in df_week.columns:
+        df_epi_year[col] = assign_epidemic_year(df_week, col)
+    return df_epi_week, df_epi_year
+
+
 ################# Geographical Functions ###################
 
 
@@ -442,14 +587,14 @@ def closest_health_center(df, health_centers, method="haversine"):
 
     Parameters
     ----------
-        df (pd.DataFrame): DataFrame with the points.
-        health_centers (pd.DataFrame): DataFrame with health center locations and names.
-        method (str): Method to calculate the distance. Options are
-            "haversine" and "planar".
+    - df (pd.DataFrame): DataFrame with the points.
+    - health_centers (pd.DataFrame): DataFrame with health center locations and names.
+    - method (str): Method to calculate the distance. Options are
+        "haversine" and "planar".
 
     Returns
     -------
-        pd.DataFrame: DataFrame with the closest health center for each point.
+    - pd.DataFrame: DataFrame with the closest health center for each point.
 
     """
     # Calculate the distance between each point and each health center
