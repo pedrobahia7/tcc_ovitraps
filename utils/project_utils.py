@@ -250,7 +250,7 @@ def get_weekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
 
 def get_daily_ovitraps(
     ovitraps_data: pd.DataFrame,
-) -> pd.DataFrame:
+    ) -> pd.DataFrame:
     """
     Convert raw ovitraps data to a daily samples by the mean of eggs in a
     sample over the whole time period the trap was installed. 
@@ -266,6 +266,37 @@ def get_daily_ovitraps(
       as columns and the mean of 'novos' cases per day.
 
     """
+    # Input validation
+    assert isinstance(ovitraps_data, pd.DataFrame), "Input must be a DataFrame"
+    assert ovitraps_data.empty is False, "Input DataFrame must not be empty"
+    assert all(
+        col in ovitraps_data.columns
+        for col in ["dt_instal", "dt_col", "narmad", "novos"]
+    ), "DataFrame must contain 'dt_instal', 'dt_col', 'narmad', and 'novos' columns"
+    
+    assert pd.api.types.is_datetime64_any_dtype(
+        ovitraps_data["dt_instal"]
+    ), "'dt_instal' column must be of datetime type"
+    
+    assert pd.api.types.is_datetime64_any_dtype(
+        ovitraps_data["dt_col"]
+    ), "'dt_col' column must be of datetime type"
+    
+    assert pd.api.types.is_numeric_dtype(
+        ovitraps_data["novos"].dropna(),
+    ), "'novos' column must be numeric or NaN"
+    
+    assert (
+        ovitraps_data["dt_col"] >= ovitraps_data["dt_instal"]
+    ).all(), "'dt_col' must be greater than or equal to 'dt_instal'"
+    
+    assert ovitraps_data["narmad"].notnull().all(), "'narmad' must not contain null values"
+    assert ovitraps_data["novos"].notnull().all(), "'novos' must not contain null values"
+    assert (
+        ovitraps_data["novos"] >= 0
+    ).all(), "'novos' must be non-negative"
+
+
     ovitraps_data = ovitraps_data.copy()
 
     # Get daily counts of ovitraps cases
@@ -275,7 +306,7 @@ def get_daily_ovitraps(
                 "date": pd.date_range(row["dt_instal"], row["dt_col"]),
                 "narmad": row["narmad"],
                 "novos": row["novos"]
-                / len(pd.date_range(row["dt_instal"], row["dt_col"])),
+                / (len(pd.date_range(row["dt_instal"], row["dt_col"])) - 1),
             }
         ),
         axis=1,
@@ -303,8 +334,32 @@ def get_daily_ovitraps(
         fill_value=np.nan,
     )
 
-    return daily_ovitraps
+    # Output Validation
+    assert isinstance(daily_ovitraps, pd.DataFrame)
+    assert daily_ovitraps.empty is False
+    assert all(
+        col in daily_ovitraps.columns for col in ovitraps_data["narmad"].unique()
+    ), "Output DataFrame must contain all 'narmad' columns from input"
+    
+    assert pd.api.types.is_datetime64_any_dtype(
+        daily_ovitraps.index
+    ), "Output DataFrame index must be of datetime type"
 
+    assert (all([pd.api.types.is_numeric_dtype(daily_ovitraps[col].dropna())
+            for col in daily_ovitraps.columns]),
+            "Output DataFrame must contain numeric values")
+
+    assert (all([((daily_ovitraps[col].dropna() >= 0).all())
+            for col in daily_ovitraps.columns]),
+            "Output DataFrame must contain non-negative values")
+
+    assert(daily_ovitraps.index.min() == ovitraps_data["dt_instal"].min(),
+        "Output DataFrame index min must match input 'dt_instal' min")
+    
+    assert(daily_ovitraps.index.max() == ovitraps_data["dt_col"].max(),
+        "Output DataFrame index max must match input 'dt_col' max")
+
+    return daily_ovitraps
 
 ################# Epidemiological Functions #################
 
@@ -343,7 +398,7 @@ def generate_all_weeks(pivot_data: pd.DataFrame) -> list:
 
 def get_epidemic_years_date_ranges_dengue(
     dengue_data: pd.DataFrame,
-) -> dict:
+    ) -> dict:
     """
     Get the date ranges for each epidemic year based on the dengue data.
 
@@ -367,7 +422,7 @@ def get_epidemic_years_date_ranges_dengue(
 
 def get_epidemic_years_date_ranges_ovitraps(  # DO NOT USE THIS. DATES IN OVITRAPS ARE NOT RELIABLE
     ovitrap_data: pd.DataFrame,
-) -> dict:
+    ) -> dict:
     """
     Get the date ranges for each epidemic year based on ovitraps data.
 
@@ -553,7 +608,7 @@ def week_days_of_year(year: int) -> pd.DataFrame:
 
 def convert_week_df_to_epidemic_week_and_year(
     df_week: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Convert a DataFrame with week-days based columns to two DataFrames: one
     with epidemic weeks and another with epidemic years.
@@ -652,7 +707,7 @@ def boxplot_filtered_data(
     title="Boxplot of Filtered Data",
     truncate_plot=True,
     truncation_limit=1000,
-):
+    ):
     """
     Function to create boxplots for separate groups of samples of
     df_to_plot, according to the values of df_filter. Both dataframes must
