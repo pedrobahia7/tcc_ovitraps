@@ -27,7 +27,9 @@ class TestGetDailyOvitraps:
                 datetime(2023, 1, 12)  # 3 days (10th-12th)
             ],
             'narmad': ['A', 'B', 'A'],
-            'novos': [6, 9, 12]  # Will be divided by number of days
+            'novos': [6, 9, 12],  # Will be divided by number of days
+            'days_expo': [2, 2, 2]  # Not used in function but realistic
+            
         })
     
     @pytest.fixture
@@ -83,7 +85,7 @@ class TestGetDailyOvitraps:
         
         # On Jan 2-3, both installations should contribute
         # First: 6/2 = 3 per day, Second: 4/2 = 2 per day
-        # On Jan 2: 3 + 2 = 5, On Jan 3: 3 + 2 = 5
+        # On Jan 2: 3 + 2 = 5, On Jan 3: 2 = 2
         jan_1_trap_a = result.loc[datetime(2023, 1, 1), 'A']
         expected_jan_1 = 3.0 
         assert abs(jan_1_trap_a - expected_jan_1) < 0.01
@@ -93,12 +95,9 @@ class TestGetDailyOvitraps:
         assert abs(jan_2_trap_a - expected_jan_2) < 0.01
 
         jan_3_trap_a = result.loc[datetime(2023, 1, 3), 'A']
-        expected_jan_3 = 5.0
+        expected_jan_3 = 2.0
         assert abs(jan_3_trap_a - expected_jan_3) < 0.01
         
-        jan_4_trap_a = result.loc[datetime(2023, 1, 4), 'A']
-        expected_jan_4 = 2.0
-        assert abs(jan_4_trap_a - expected_jan_4) < 0.01
 
         
     def test_missing_values_filled_with_nan(self, sample_data):
@@ -126,7 +125,7 @@ class TestGetDailyOvitraps:
         # Check that date range is complete from min to max date
         expected_start = datetime(2023, 1, 1)
         expected_end = datetime(2023, 1, 12)
-        expected_range = pd.date_range(expected_start, expected_end, freq='D')
+        expected_range = pd.date_range(expected_start, expected_end - pd.Timedelta(days=1), freq='D')
         
         assert result.index.equals(expected_range)
         
@@ -201,7 +200,7 @@ class TestGetDailyOvitraps:
         
         # Check that traps have NaN when not active
         assert pd.isna(result.loc[datetime(2023, 1, 1), 'B'])  # B not active yet
-        assert pd.isna(result.loc[datetime(2023, 1, 7), 'A'])  # A no longer active
+        assert pd.isna(result.loc[datetime(2023, 1, 6), 'A'])  # A no longer active
 
     def test_zero_novos_values(self):
         """
@@ -236,7 +235,7 @@ class TestGetDailyOvitraps:
         result = project_utils.get_daily_ovitraps(test_data)
         
         # Check that we have the full year
-        assert len(result) - 1 == 366  # 2020 is a leap year
+        assert len(result)  == 366  # 2020 is a leap year
         
         # Check that daily average is correct
         assert result.loc[datetime(2020, 1, 1), 'A'] == 1.0

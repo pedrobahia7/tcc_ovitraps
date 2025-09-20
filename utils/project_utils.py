@@ -14,7 +14,7 @@ EPIDEMY_YEARS = ["2012_13", "2015_16", "2018_19", "2023_24"]
 
 def get_weekly_dengue(
     dengue_data: pd.DataFrame,
-) -> pd.DataFrame:
+    ) -> pd.DataFrame:
     """
     Convert processed dengue data to a pivoted format suitable for comparison
     with ovitrap data, with 'epidemic_date' as index. The
@@ -65,7 +65,7 @@ def get_weekly_dengue(
 
 def get_biweekly_dengue(
     dengue_data: pd.DataFrame,
-) -> pd.DataFrame:
+    ) -> pd.DataFrame:
     """
     Convert processed dengue data to a pivoted format suitable for comparison
     with ovitrap data, with 'anoepid' and 'semepid' as index. The
@@ -99,7 +99,7 @@ def get_biweekly_dengue(
 
 def get_daily_dengue(
     dengue_data: pd.DataFrame,
-) -> pd.Series:
+    ) -> pd.Series:
     """
     Convert raw dengue data to a daily time series format suitable for analysis.
     The DataFrame will contain counts of 'novos' cases per day.
@@ -247,13 +247,20 @@ def get_weekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     pivot_data = pivot_data.reindex(all_weeks).sort_index()
     return pivot_data
 
-
 def get_daily_ovitraps(
     ovitraps_data: pd.DataFrame,
     ) -> pd.DataFrame:
     """
     Convert raw ovitraps data to a daily samples by the mean of eggs in a
-    sample over the whole time period the trap was installed. 
+    sample over the whole period the trap was exposed. This function
+    considers days of exposition the period from the day of installation
+    to one day before the collection date, in a way that one exposition
+    day will only be accomplished after 24 hours of exposition.
+
+    Example:
+    If a trap was installed on 2023-01-01 and collected on 2023-01-05,
+    the trap was exposed for 4 days (2023-01-01, 2023-01-02, 2023-01-03,
+    2023-01-04).
 
     Parameters
     ----------
@@ -296,25 +303,33 @@ def get_daily_ovitraps(
         ovitraps_data["novos"] >= 0
     ).all(), "'novos' must be non-negative"
 
-
     ovitraps_data = ovitraps_data.copy()
 
-    # Get daily counts of ovitraps cases
-    expanded_rows = ovitraps_data.apply(
-        lambda row: pd.DataFrame(
-            {
-                "date": pd.date_range(row["dt_instal"], row["dt_col"]),
-                "narmad": row["narmad"],
-                "novos": row["novos"]
-                / (len(pd.date_range(row["dt_instal"], row["dt_col"])) - 1),
-            }
-        ),
-        axis=1,
-    )
+    # Pre-calculate days for each row (vectorized)
+    ovitraps_data['days'] = (ovitraps_data['dt_col'] - ovitraps_data['dt_instal']).dt.days
+    ovitraps_data['daily_novos'] = ovitraps_data['novos'] / (ovitraps_data['days'])
+    
+    # Create lists to store expanded data
+    dates_list = []
+    narmad_list = []
+    novos_list = []
+    
+    # Vectorized expansion using numpy
+    for _, row in ovitraps_data.iterrows():
+        n_days = row['days']
+        dates = pd.date_range(row['dt_instal'], row['dt_col'] - pd.Timedelta(days=1), freq='D')
+        
+        dates_list.extend(dates)
+        narmad_list.extend([row['narmad']] * n_days )
+        novos_list.extend([row['daily_novos']] * n_days )
+    
+    # Create ovitraps DataFrame 
+    ovitraps_expanded = pd.DataFrame({
+        'date': dates_list,
+        'narmad': narmad_list,
+        'novos': novos_list
+    })
 
-    ovitraps_expanded = pd.concat(
-        expanded_rows.tolist(), ignore_index=True
-    )
 
     # Group by date and narmad, summing the 'novos' values
     daily_ovitraps = (
@@ -356,11 +371,10 @@ def get_daily_ovitraps(
     assert(daily_ovitraps.index.min() == ovitraps_data["dt_instal"].min(),
         "Output DataFrame index min must match input 'dt_instal' min")
     
-    assert(daily_ovitraps.index.max() == ovitraps_data["dt_col"].max(),
+    assert(daily_ovitraps.index.max() == ovitraps_data["dt_col"].max() - pd.Timedelta(days=1),
         "Output DataFrame index max must match input 'dt_col' max")
 
     return daily_ovitraps
-
 ################# Epidemiological Functions #################
 
 
