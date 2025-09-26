@@ -142,6 +142,12 @@ def get_daily_dengue(
 
 ################ Ovitraps Eggs Functions ################
 
+def load_ovitraps_data(file_path):
+    """Load ovitraps data from CSV."""
+    return pd.read_csv(
+        file_path,
+        parse_dates=["dt_col", "dt_instal"],
+    )
 
 def get_biweekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     """

@@ -1,5 +1,4 @@
-#import pygame
-import time
+# import pygame
 import numpy as np
 import pandas as pd
 from typing import Tuple
@@ -831,3 +830,24 @@ def group_series(
         raise ValueError(f"Invalid operation: {operation}")
     grouped.index = series.groupby(group_ids).apply(lambda x: x.index[0])
     return grouped
+
+
+################# Plot Functions #################
+def text_above_plot(plot_df, text_df):
+    if isinstance(plot_df, pd.Series):
+        plot_df = plot_df.to_frame().T
+
+    # Add text above each box
+    for i, col in enumerate(plot_df.columns):
+        if plot_df[col].isna().all():
+            continue
+        plt.text(
+            i,  # x = box position
+            plot_df[col].max(),  # y = max value of that box
+            text_df[col],
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            fontweight="bold",
+            color="darkred",
+        )

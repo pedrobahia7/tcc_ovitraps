@@ -57,6 +57,9 @@ dengue_data.drop(
     inplace=True,
 )
 
+# Drop duplicated rows 
+dengue_data.drop_duplicates(inplace=True)
+
 dengue_data.reset_index(drop=True, inplace=True)
 
 ### Add useful columns ###
@@ -100,6 +103,7 @@ ovitraps_data["anoepid"] = project_utils.assign_epidemic_year(
 ovitraps_data.loc[ovitraps_data["dt_col"] == "2032-09-14", "dt_col"] = (
     "2023-09-14"
 )
+
 ovitraps_data.loc[
     (ovitraps_data["narmad"] == 901011)
     & (ovitraps_data["dt_col"] == "2017-04-20"),
@@ -129,6 +133,18 @@ ovitraps_data.loc[
     "dt_col",
 ] = "2024-05-08"
 
+# Same installation and collection date. Collection date is probably wrong
+# so I'll set it to seven days after installation date
+ovitraps_data.loc[ovitraps_data["dt_col"] == ovitraps_data["dt_instal"], "dt_col"] = (
+    pd.to_datetime(ovitraps_data["dt_instal"]) + pd.Timedelta(days=7)
+).dt.strftime("%Y-%m-%d")
+
+# Drop rows with missing critical information
+ovitraps_data.drop(
+    ovitraps_data[ovitraps_data["novos"].isna()].index,
+    axis=0,
+    inplace=True,
+)
 
 ### Add useful columns ###
 # Days of exposition
@@ -142,16 +158,12 @@ ovitraps_data["eggs_per_day"] = ovitraps_data["novos"] / ovitraps_data[
     "days_expo"
 ].replace(0, pd.NA)
 
-# Filter traps with exposition time > 30 days and negative exposition time
+# Filter traps with exposition time > 30 days 
 ovitraps_data = ovitraps_data.drop(
     ovitraps_data[ovitraps_data["days_expo"] > 30].index,
     axis=0,
 )
 
-ovitraps_data = ovitraps_data.drop(
-    ovitraps_data[ovitraps_data["days_expo"] < 0].index,
-    axis=0,
-)
 
 # Epidemic date
 ovitraps_data["epidemic_date"] = project_utils.get_epidemic_date(

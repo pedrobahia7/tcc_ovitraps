@@ -4,7 +4,8 @@ import sys
 sys.path.append("utils")
 import project_utils
 
-ovitraps_data = pd.read_csv("data/processed/ovitraps_data.csv")
+# %% Load data
+ovitraps_data = project_utils.load_ovitraps_data("data/processed/ovitraps_data.csv")
 
 # Get daily ovitraps
 print("Daily ovitraps logic")
