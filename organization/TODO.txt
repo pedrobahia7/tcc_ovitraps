@@ -5,7 +5,6 @@ encontrar regionais com taxa amostral semanal
 calcular número de armadilhas que deveriam ser colocadas
 
 
-reproduzir resultado do RN em dados pbh
 skater para regionalização
 
 LER: 
@@ -14,8 +13,12 @@ LER:
         https://epubs.siam.org/doi/10.1137/070710111 (Renato)
         https://arxiv.org/abs/2406.16232 (Renato)
 
-
-
+Reunião FIOCRUZ:
+    aumentar janela preditiva
+    predizer super contagens > 100
+    usar power law
+    lembrar que : ovos demoram para eclodir então ovoposição pode significar presença de mosquitos no presente e não no futuro
+    200 metros é uma disância muito grande para avaliar o comportamento espacial do mosquito 
 
 
 MAPEAMENTO:

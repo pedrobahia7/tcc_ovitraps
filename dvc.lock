@@ -67,18 +67,18 @@ stages:
       nfiles: 3
     - path: src/process_data_fast.py
       hash: md5
-      md5: 4d8cedeb8b87bbfe3d55d5390dcd768a
-      size: 3910
+      md5: 3d4308f85777fd2f83a3803f9cd2015f
+      size: 4299
     outs:
     - path: data/processed/dengue_data.csv
       hash: md5
-      md5: ec26d4372409bfb709e1485fa9b43000
-      size: 177386351
+      md5: b998c2b6176b4c144c7b0a1bbd500201
+      size: 176798996
     - path: data/processed/health_centers.csv
       hash: md5
       md5: 88d0536056166b2560c6f260de716162
       size: 8640
     - path: data/processed/ovitraps_data.csv
       hash: md5
-      md5: d47234e3fadcf0f1350f626fa0eb238f
-      size: 287198592
+      md5: aab953f0eb3abd1203718a4e59f8e987
+      size: 284863213
