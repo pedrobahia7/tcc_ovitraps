@@ -1,7 +1,9 @@
-data/
 venv_ovitraps/
 __pycache__/
+data/
+!/test/data/
 results/
+!/test/results/
 mlruns/
 mlartifacts/
 catboost_info
