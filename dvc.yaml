@@ -15,11 +15,11 @@ stages:
           persist: true
   raw_data_test:
     cmd: 
-      - pytest test/src/test_raw_data.py
-      - pytest test/src/test_raw_data_comparison.py
+      - pytest test/data/raw/test_raw_data.py
+      - pytest test/data/raw/test_raw_data_comparison.py
     deps:
-      - test/src/test_raw_data.py
-      - test/src/test_raw_data_comparison.py
+      - test/data/raw/test_raw_data.py
+      - test/data/raw/test_raw_data_comparison.py
       - ${all.paths.data.raw.ovitraps_csv}
       - ${all.paths.data.raw.dengue_csv}
       - ${all.paths.data.raw.health_centers_csv}
@@ -37,13 +37,20 @@ stages:
       - ${all.paths.data.raw.dengue_csv}
       - ${all.paths.data.raw.ovitraps_csv}
     outs:
-      - ${all.paths.data.processed.slow.health_centers}
-  
+      - ${all.paths.data.processed.slow.health_centers}:
+          persist: true
+      - ${all.paths.data.processed.slow.dengue}:
+          persist: true
+      - ${all.paths.data.processed.slow.ovitraps}:
+          persist: true
+
   fast_processing:
     cmd: python src/process_data_fast.py
     deps:
       - src/process_data_fast.py
-      - ${all.paths.data.processed.slow.folder}
+      - ${all.paths.data.processed.slow.health_centers}
+      - ${all.paths.data.processed.slow.dengue}
+      - ${all.paths.data.processed.slow.ovitraps}
     outs:
       - ${all.paths.data.processed.health_centers}
       - ${all.paths.data.processed.dengue}
@@ -60,7 +67,7 @@ stages:
   process_data_test:
     cmd: pytest test/data/processed/test_processed_data.py
     deps:
-      - test/src/test_processed_data.py
+      - test/data/processed/test_processed_data.py
       - ${all.paths.data.processed.health_centers}
       - ${all.paths.data.processed.dengue}
       - ${all.paths.data.processed.ovitraps}
@@ -70,5 +77,5 @@ stages:
     cmd: pytest test/utils/test_project_utils.py
     deps:
       - test/utils/test_project_utils.py
-      - src/project_utils.py
-      - src/generic_utils.py
+      - utils/project_utils.py
+      - utils/generic.py

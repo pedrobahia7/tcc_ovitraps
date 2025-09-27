@@ -20,7 +20,7 @@ from datetime import datetime
 import yaml
 params = yaml.safe_load(open("params.yaml"))
 
-diagnosis_file = params["all"]["paths"]["test"]["data"]["raw"]["diagnosis_raw_data_comparison"]
+diagnosis_file = params["all"]["paths"]["test"]["data"]["raw"]["diagnosis_raw_comparison"]
 with open(diagnosis_file, "w", encoding="utf-8") as f:
     pass
 
@@ -33,7 +33,7 @@ class TestRawDataComparison:
             'dengue': params["all"]["paths"]["data"]["raw"]["dengue_csv"],
             'ovitraps': params["all"]["paths"]["data"]["raw"]["ovitraps_csv"],
             'health_centers': params["all"]["paths"]["data"]["raw"]["health_centers_csv"],
-            'old_ovitraps': ["data/final_data.csv"]
+            'old_ovitraps': ["data/final_data.csv","data/raw/MasterDataExtend062025_v1.csv"]
         }
     
     @pytest.fixture(scope="class")
@@ -91,11 +91,12 @@ class TestRawDataComparison:
             else:
                 raise ValueError(f"Invalid path type for {name}: {type(path)}")
             
-
     def test_nplaca_consistency(self, ovitraps_data, old_ovitraps_data):
         """
         Test consistency of 'nplaca' between old and new ovitraps files.
         If an 'nplaca' value is present in both files, it must refer to the same sample.
+
+        After talking to Dilermando, it's not possible to consider 'nplaca' as consistent between datasets.
         """
         key_fields = ["dtinstal", "dtcol", "narmad", "novos"]
 
@@ -122,16 +123,18 @@ class TestRawDataComparison:
             except AssertionError:
                 with open(diagnosis_file, "a", encoding="utf-8") as f:
                     f.write(f"{mismatches.shape[0]} Inconsistent 'nplaca' sample(s) found in {old_df_name}:\n")
-                    f.write(mismatches.to_string(index=False))
+                    f.write(mismatches[:10].to_string(index=False))
                     f.write("\n" + "-"*80 + "\n\n")
-
 
     def test_real_identificator_consistency(self, ovitraps_data, old_ovitraps_data):
         """
         Test consistency of ('narmad', 'dtcol', 'dtinstal') between old and new ovitraps files.
         If the tuple value is present in both files, it must have the same 'novos'.
+
+        Dilermando said it's uncommon but possible that the dataset are corrected after some time, 
+        so new 'novos' may appear.
         """
-        key_fields = ["dtinstal", "dtcol", "narmad"]
+        key_fields = ["dtinstal", "narmad"]
 
         for old_df_name, old_df in old_ovitraps_data.items():
             # Ensure both DataFrames have 'nplaca'
@@ -139,17 +142,18 @@ class TestRawDataComparison:
             assert all([field in old_df.columns for field in key_fields]), "some column missing in old ovitraps data"
 
             # Keep only relevant columns
-            new = ovitraps_data[key_fields + ["novos"]].dropna(subset=key_fields)
-            old = old_df[key_fields + ["novos"]].dropna(subset=key_fields)
+            new = ovitraps_data[key_fields + ["dtcol", "novos"]].dropna(subset=key_fields)
+            old = old_df[key_fields + ["dtcol", "novos"]].dropna(subset=key_fields)
 
             # Inner join on nplaca
             merged = new.merge(old, on=key_fields, suffixes=("_new", "_old"))
 
             # Find mismatches in any key field
             mismatches = merged[
-                (merged[["novos" + "_new"]].astype(str).values !=
-                merged[["novos" + "_old"]].astype(str).values).any(axis=1)
+                merged["novos_new"].astype(str).ne(merged["novos_old"].astype(str)) |
+                merged["dtcol_new"].astype(str).ne(merged["dtcol_old"].astype(str))
             ]
+
 
             try:
                 assert mismatches.empty, f"Inconsistent 'novos' sample(s)"
@@ -161,9 +165,9 @@ class TestRawDataComparison:
 
     def test_real_identificator_presence(self, ovitraps_data, old_ovitraps_data):
         """
-        Test existence of ('narmad', 'dtcol', 'dtinstal') in both old and new ovitraps files.
+        Test existence of ('narmad', 'dtinstal') in both old and new ovitraps files.
         """
-        key_fields = ["dtinstal", "dtcol", "narmad"]
+        key_fields = ["dtinstal", "narmad"]
 
         for old_df_name, old_df in old_ovitraps_data.items():
             # Ensure both DataFrames have 'nplaca'
@@ -171,19 +175,23 @@ class TestRawDataComparison:
             assert all([field in old_df.columns for field in key_fields]), "some column missing in old ovitraps data"
 
             # Keep only relevant columns
-            new = set(ovitraps_data[key_fields])
-            old = set(old_df[key_fields])
+            new = set(map(tuple, ovitraps_data[key_fields].values.tolist()))
+            old = set(map(tuple, old_df[key_fields].values.tolist()))
             try:
-                assert new - old == 0, f"Sample(s) in new ovitraps not present in old ovitraps"
+                assert len(new - old) == 0, f"Sample(s) in new ovitraps not present in old ovitraps"
             except AssertionError:
                 with open(diagnosis_file, "a", encoding="utf-8") as f:
-                    f.write(f"{len(new - old)} sample(s) found in new ovitraps not present in {old_df_name}:\n")
-                    f.write("\n".join([str(s) for s in new - old]) + "\n")
-                    f.write("\n" + "-"*80 + "\n\n")
+                    diff = list(new - old)   # convert set to list
+                    diff.sort(key=lambda x: x[0])
+                    f.write(f"{len(diff)} sample(s) found in new ovitraps not present in {old_df_name}:\n")
+                    f.write("\n".join([str(s) for s in diff]) + "\n")
+                    f.write("\n" + "-"*80 + "\n\n") 
             try:
-                assert old - new == 0, f"Sample(s) in old ovitraps not present in new ovitraps"
+                assert len(old - new) == 0, f"Sample(s) in old ovitraps not present in new ovitraps"
             except AssertionError:
                 with open(diagnosis_file, "a", encoding="utf-8") as f:
-                    f.write(f"{len(old - new)} sample(s) found in {old_df_name} not present in new ovitraps:\n")
-                    f.write("\n".join([str(s) for s in old - new]) + "\n")
+                    diff = list(old - new)   # convert set to list
+                    diff.sort(key=lambda x: x[0])
+                    f.write(f"{len(diff)} sample(s) found in {old_df_name} not present in new ovitraps:\n")
+                    f.write("\n".join([str(s) for s in diff]) + "\n")
                     f.write("\n" + "-"*80 + "\n\n")

@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import generic
 import matplotlib.pyplot as plt
+from typing import List, Tuple
 
 from pyproj import Transformer
 
@@ -144,10 +145,12 @@ def get_daily_dengue(
 
 def load_ovitraps_data(file_path):
     """Load ovitraps data from CSV."""
-    return pd.read_csv(
-        file_path,
-        parse_dates=["dt_col", "dt_instal"],
-    )
+    ovitraps_data = pd.read_csv(file_path, parse_dates=['dt_col', 'dt_instal'])
+    
+    assert ovitraps_data['dt_col'].notnull().all(), "'dt_col' must not contain null values"
+    assert ovitraps_data['dt_instal'].notnull().all(), "'dt_instal' must not contain null values"
+
+    return ovitraps_data
 
 def get_biweekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     """
@@ -299,12 +302,13 @@ def get_daily_ovitraps(
         ovitraps_data["novos"].dropna(),
     ), "'novos' column must be numeric or NaN"
     
-    assert (
-        ovitraps_data["dt_col"] >= ovitraps_data["dt_instal"]
-    ).all(), "'dt_col' must be greater than or equal to 'dt_instal'"
-    
-    assert ovitraps_data["narmad"].notnull().all(), "'narmad' must not contain null values"
-    assert ovitraps_data["novos"].notnull().all(), "'novos' must not contain null values"
+    assert not (
+        ovitraps_data["dt_col"] < ovitraps_data["dt_instal"]
+    ).any(), "'dt_col' must be greater than or equal to 'dt_instal'"
+
+    assert ovitraps_data[["dt_instal", "dt_col", "narmad", "novos"]].notnull(        
+    ).all().all(), "'dt_instal', 'dt_col', 'narmad', and 'novos' must not contain null values"
+
     assert (
         ovitraps_data["novos"] >= 0
     ).all(), "'novos' must be non-negative"
@@ -312,7 +316,7 @@ def get_daily_ovitraps(
     ovitraps_data = ovitraps_data.copy()
 
     # Pre-calculate days for each row (vectorized)
-    ovitraps_data['days'] = (ovitraps_data['dt_col'] - ovitraps_data['dt_instal']).dt.days
+    ovitraps_data['days'] = (ovitraps_data['dt_col'] - ovitraps_data['dt_instal']).dt.days.astype(int)
     ovitraps_data['daily_novos'] = ovitraps_data['novos'] / (ovitraps_data['days'])
     
     # Create lists to store expanded data
@@ -366,21 +370,70 @@ def get_daily_ovitraps(
         daily_ovitraps.index
     ), "Output DataFrame index must be of datetime type"
 
-    assert (all([pd.api.types.is_numeric_dtype(daily_ovitraps[col].dropna())
-            for col in daily_ovitraps.columns]),
-            "Output DataFrame must contain numeric values")
+    assert all([pd.api.types.is_numeric_dtype(daily_ovitraps[col].dropna()) 
+                for col in daily_ovitraps.columns]
+                ), "Output DataFrame must contain numeric values"
 
-    assert (all([((daily_ovitraps[col].dropna() >= 0).all())
-            for col in daily_ovitraps.columns]),
-            "Output DataFrame must contain non-negative values")
+    assert all([((daily_ovitraps[col].dropna() >= 0).all()) 
+                for col in daily_ovitraps.columns]
+                ),"Output DataFrame must contain non-negative values"
 
-    assert(daily_ovitraps.index.min() == ovitraps_data["dt_instal"].min(),
-        "Output DataFrame index min must match input 'dt_instal' min")
-    
-    assert(daily_ovitraps.index.max() == ovitraps_data["dt_col"].max() - pd.Timedelta(days=1),
-        "Output DataFrame index max must match input 'dt_col' max")
-
+    assert daily_ovitraps.index.min() == ovitraps_data["dt_instal"].min(), "Output DataFrame index min must match input 'dt_instal' min"
+    assert daily_ovitraps.index.max() == ovitraps_data["dt_col"].max() - pd.Timedelta(days=1), "Output DataFrame index max must match input 'dt_col' max"
     return daily_ovitraps
+
+def get_overlapped_samples(ovitraps_data:pd.DataFrame, processed_name:bool=False)-> List[Tuple[str,str]]:
+    """
+    Get list of tuples with nplaca samples with overlapping periods
+
+    Parameters
+    ----------
+    - ovitrap_data(pd.DataFrame): DataFrame with ovitraps data
+    - processed_name(bool): If True, use processed column names (dt_instal, dt_col, narmad, nplaca).
+        If False, use original column names (dtinstal, dtcol, narmad, nplaca).
+
+    Returns
+    -------
+    - final_list (List[Tuple[str,str]]): List of tuples with nplaca of the samples with overlapping
+      periods
+     
+    """
+    # Input validation
+    if processed_name:
+        dtcol = "dt_col"
+        dtinstal = "dt_instal"
+    else:
+        dtcol = "dtcol"
+        dtinstal = "dtinstal"
+    columns = ['narmad', dtinstal, dtcol, 'nplaca']
+    assert isinstance(ovitraps_data, pd.DataFrame), "Input must be a DataFrame"
+    assert ovitraps_data.empty is False, "Input DataFrame must not be empty"
+    assert all(col in ovitraps_data.columns for col in columns), "Input DataFrame must contain required columns"
+    assert ovitraps_data[columns].notnull().all().all(), "Input DataFrame must not contain null values in required columns"
+
+    final_list = []
+    ovitraps_sorted = ovitraps_data.sort_values(['narmad', dtinstal])      
+    for trap_id in ovitraps_data['narmad'].unique():
+        trap_data = ovitraps_sorted[ovitraps_sorted['narmad'] == trap_id]
+        if len(trap_data) > 1:
+            trap_installs = pd.to_datetime(trap_data[dtinstal]).values
+            trap_collections = pd.to_datetime(trap_data[dtcol]).values
+            # Check for overlapping periods 
+            for i in range(len(trap_installs) - 1):
+                # Current period: install[i] to collect[i]
+                # Next period: install[i+1] to collect[i+1]
+                # They should not overlap 
+                current_end = pd.to_datetime(trap_collections[i])
+                next_start = pd.to_datetime(trap_installs[i + 1])
+                overlap_days = (current_end - next_start).days
+                if overlap_days >= 0:
+                    final_list.append((trap_data.iloc[i].nplaca, trap_data.iloc[i+1].nplaca))
+    
+    # Ouput validation
+    assert isinstance(final_list, list), "Output must be a list"
+    assert all(isinstance(tup, tuple) and len(tup) == 2 for tup in final_list), "Output must be a list of tuples with two elements each"
+    return final_list
+
 ################# Epidemiological Functions #################
 
 

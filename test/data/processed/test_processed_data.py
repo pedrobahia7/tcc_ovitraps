@@ -5,6 +5,10 @@ import numpy as np
 import os
 from datetime import datetime
 import yaml
+import sys
+sys.path.append("utils")
+import project_utils
+
 params = yaml.safe_load(open("params.yaml"))
 
 def epidemic_date_valid(s):
@@ -176,11 +180,8 @@ class TestProcessedData:
             assert pd.api.types.is_numeric_dtype(ovitraps_data[col]), f"{col} should be numeric"
         
         # Check date columns can be parsed
-        try:
-            pd.to_datetime(ovitraps_data['dt_col'])
-            pd.to_datetime(ovitraps_data['dt_instal'])
-        except:
-            pytest.fail("Date columns should be parseable as datetime")
+        pd.to_datetime(ovitraps_data['dt_col'], errors="raise")
+        pd.to_datetime(ovitraps_data['dt_instal'], errors="raise")
 
         # Check epidemic_date format
         ovitraps_data["valid"] = ovitraps_data["epidemic_date"].apply(epidemic_date_valid)
@@ -198,11 +199,18 @@ class TestProcessedData:
         assert (ovitraps_data['novos'] >= 0).all(), "novos should be non-negative"
         
         # Check that days_expo is reasonable (not negative, not too large)
-        assert (ovitraps_data['days_expo'] > 0).all(), "days_expo should be positive"
-        assert (ovitraps_data['days_expo'] <= 30).all(), "days_expo should be <= 30 days (filter should remove longer expositions)"
+        assert (ovitraps_data['days_expo'] >= 4).all(), "days_expo should be greater than 4 days (filter should remove shorter expositions)"
+        assert (ovitraps_data['days_expo'] <= 21).all(), "days_expo should be <= 21 days (filter should remove longer expositions)"
 
         # Check for duplicates
-        assert ovitraps_data.duplicated().sum() == 0, "Ovitraps data should not have duplicates"
+        assert ovitraps_data[critical_columns].duplicated().sum() == 0, "Ovitraps data should not have duplicates"
+
+        # Check if manually corrected records are present
+        corrected_record = ovitraps_data[
+            (ovitraps_data["narmad"] == 906071) & (ovitraps_data["dt_col"] == "2022-08-18")
+        ]
+        assert not corrected_record.empty, "Corrected record should be present"
+        assert corrected_record.iloc[0]['novos'] == 50, "Corrected record should have novos == 50"
 
     def test_ovitraps_date_logic(self, ovitraps_data):
         """Test ovitraps date logic and calculations."""
@@ -220,6 +228,20 @@ class TestProcessedData:
                  "eggs_per_day calculation should be correct")
             
 
+    @pytest.mark.slow
+    def test_ovitrap_overlapping_installations(self, ovitraps_data):
+        """Comprehensive data integrity test (marked as slow)."""
+        
+        # Check that installation date is before collection date
+        assert ((ovitraps_data['dt_instal'] < ovitraps_data['dt_col']).all(),
+            "Installation date should be before collection date for all records")
+        
+        # For ovitraps: same trap shouldn't have overlapping installation periods
+        # (this is complex but important)
+        
+        overlapped_traps = project_utils.get_overlapped_samples(ovitraps_data, processed_name=True)
+        assert len(overlapped_traps) == 0, f"Trap has overlapping periods"
+
     # Cross-dataset Tests
     def test_health_center_consistency(self, dengue_data, ovitraps_data, health_centers_data):
         """Test that health center assignments are consistent across datasets."""
@@ -234,32 +256,3 @@ class TestProcessedData:
         
         assert len(invalid_dengue) == 0, f"Dengue data has invalid health centers: {invalid_dengue}"
         assert len(invalid_ovitraps) == 0, f"Ovitraps data has invalid health centers: {invalid_ovitraps}"
-
-    @pytest.mark.slow
-    def test_ovitrap_overlapping_installations(self, ovitraps_data):
-        """Comprehensive data integrity test (marked as slow)."""
-        
-        # Check that installation date is before collection date
-        assert ((ovitraps_data['dt_instal'] < ovitraps_data['dt_col']).all(),
-            "Installation date should be before collection date for all records")
-        
-        # For ovitraps: same trap shouldn't have overlapping installation periods
-        # (this is complex but important)
-        ovitraps_sorted = ovitraps_data.sort_values(['narmad', 'dt_instal'])        
-        for trap_id in ovitraps_data['narmad'].unique():
-            trap_data = ovitraps_sorted[ovitraps_sorted['narmad'] == trap_id]
-            if len(trap_data) > 1:
-                trap_installs = pd.to_datetime(trap_data['dt_instal']).values
-                trap_collections = pd.to_datetime(trap_data['dt_col']).values
-                
-                # Check for overlapping periods 
-                for i in range(len(trap_installs) - 1):
-                    # Current period: install[i] to collect[i]
-                    # Next period: install[i+1] to collect[i+1]
-                    # They should not overlap significantly
-                    current_end = pd.to_datetime(trap_collections[i])
-                    next_start = pd.to_datetime(trap_installs[i + 1])
-                    
-                    # Allow for same-day transitions
-                    overlap_days = (current_end - next_start).days
-                    assert overlap_days <= 1, f"Trap {trap_id} has overlapping periods > 1 day"

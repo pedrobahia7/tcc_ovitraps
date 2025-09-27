@@ -43,32 +43,46 @@ stages:
       hash: md5
       md5: b5df7ac3ff6a3298b4d442fabee86486
       size: 203030067
-    - path: data/raw/MasterDataExtend062025.csv
+    - path: data/raw/MasterDataExtend062025_v2.csv
       hash: md5
       md5: df499ee47b140f9b8f8973a1fbe4bc55
       size: 241625327
     - path: src/process_data_slow.py
       hash: md5
-      md5: c9f27e644aa7f759a7052d567b96700d
-      size: 1887
+      md5: 1e7d597a9956fd78b1caa55e27a71294
+      size: 2078
     outs:
-    - path: data/processed/slow/
+    - path: data/processed/slow/dengue_data.csv
       hash: md5
-      md5: bc87ab4436523ff17b1cb57a60b48c45.dir
-      size: 517724800
-      nfiles: 3
+      md5: 165f691d761e1afad0aec807eb572901
+      size: 243910593
+    - path: data/processed/slow/health_centers.csv
+      hash: md5
+      md5: 88d0536056166b2560c6f260de716162
+      size: 8640
+    - path: data/processed/slow/ovitraps_data.csv
+      hash: md5
+      md5: 1c387e4fc3c755ab2a03ba9f89c7d8a4
+      size: 273805567
   fast_processing:
     cmd: python src/process_data_fast.py
     deps:
-    - path: data/processed/slow/
+    - path: data/processed/slow/dengue_data.csv
       hash: md5
-      md5: bc87ab4436523ff17b1cb57a60b48c45.dir
-      size: 517724800
-      nfiles: 3
+      md5: 165f691d761e1afad0aec807eb572901
+      size: 243910593
+    - path: data/processed/slow/health_centers.csv
+      hash: md5
+      md5: 88d0536056166b2560c6f260de716162
+      size: 8640
+    - path: data/processed/slow/ovitraps_data.csv
+      hash: md5
+      md5: 1c387e4fc3c755ab2a03ba9f89c7d8a4
+      size: 273805567
     - path: src/process_data_fast.py
       hash: md5
-      md5: 3d4308f85777fd2f83a3803f9cd2015f
-      size: 4299
+      md5: 959fb1ce0bfc9837928dadbb223db8d7
+      size: 6200
     outs:
     - path: data/processed/dengue_data.csv
       hash: md5
@@ -80,5 +94,93 @@ stages:
       size: 8640
     - path: data/processed/ovitraps_data.csv
       hash: md5
-      md5: aab953f0eb3abd1203718a4e59f8e987
-      size: 284863213
+      md5: 75d3c549781ad6d96b7a1ac420a456a5
+      size: 284897581
+  raw_data_test:
+    cmd:
+    - pytest test/data/raw/test_raw_data.py
+    - pytest test/data/raw/test_raw_data_comparison.py
+    deps:
+    - path: data/raw/CENTRO_SAUDE_new.csv
+      hash: md5
+      md5: 0add8a3c30d9513847be9ce7e252f6ff
+      size: 8643
+    - path: data/raw/Dengue2007_2025.csv
+      hash: md5
+      md5: b5df7ac3ff6a3298b4d442fabee86486
+      size: 203030067
+    - path: data/raw/MasterDataExtend062025_v2.csv
+      hash: md5
+      md5: df499ee47b140f9b8f8973a1fbe4bc55
+      size: 241625327
+    - path: test/data/raw/test_raw_data.py
+      hash: md5
+      md5: 424277b0a894fd1d02627bff30ac8c40
+      size: 12038
+    - path: test/data/raw/test_raw_data_comparison.py
+      hash: md5
+      md5: 35e6c72a4e8ebc1bdcdb2ff4a3810ad6
+      size: 9379
+    outs:
+    - path: test/data/raw/diagnosis_raw_comparison.txt
+      hash: md5
+      md5: 32f8299b2851f80f03d4dc99102e146c
+      size: 2029192
+    - path: test/data/raw/diagnosis_raw_data.txt
+      hash: md5
+      md5: c4f26c58f986b81aef4593c8540c1ee6
+      size: 284952
+  daily_ovitraps:
+    cmd: python src/daily_ovitraps.py
+    deps:
+    - path: data/processed/ovitraps_data.csv
+      hash: md5
+      md5: 75d3c549781ad6d96b7a1ac420a456a5
+      size: 284897581
+    - path: src/daily_ovitraps.py
+      hash: md5
+      md5: ec7a1a58de9dffa6135ee246f5064ee4
+      size: 529
+    outs:
+    - path: data/processed/daily_ovitraps_data.csv
+      hash: md5
+      md5: 98d7887c41e136f9b4aba8b58915d5e8
+      size: 44743104
+  process_data_test:
+    cmd: pytest test/data/processed/test_processed_data.py
+    deps:
+    - path: data/processed/daily_ovitraps_data.csv
+      hash: md5
+      md5: 98d7887c41e136f9b4aba8b58915d5e8
+      size: 44743104
+    - path: data/processed/dengue_data.csv
+      hash: md5
+      md5: b998c2b6176b4c144c7b0a1bbd500201
+      size: 176798996
+    - path: data/processed/health_centers.csv
+      hash: md5
+      md5: 88d0536056166b2560c6f260de716162
+      size: 8640
+    - path: data/processed/ovitraps_data.csv
+      hash: md5
+      md5: 75d3c549781ad6d96b7a1ac420a456a5
+      size: 284897581
+    - path: test/data/processed/test_processed_data.py
+      hash: md5
+      md5: e5bafac545fa9381671c79da7ba4097f
+      size: 13052
+  libraries_tests:
+    cmd: pytest test/utils/test_project_utils.py
+    deps:
+    - path: test/utils/test_project_utils.py
+      hash: md5
+      md5: db8901c036aae5b1d9d55893837486bb
+      size: 34534
+    - path: utils/generic.py
+      hash: md5
+      md5: fc3c4aa7b6d0d04017473f34b17fb37d
+      size: 27740
+    - path: utils/project_utils.py
+      hash: md5
+      md5: 8bc9064ad558cfe138b0382218961d06
+      size: 30161

@@ -17,6 +17,9 @@ import numpy as np
 import os
 from datetime import datetime
 import yaml
+import sys 
+sys.path.append("utils")    
+import project_utils
 params = yaml.safe_load(open("params.yaml"))
 
 diagnosis_file = params["all"]["paths"]["test"]["data"]["raw"]["diagnosis_raw_data"]
@@ -177,9 +180,14 @@ class TestRawData:
         except:
             pytest.fail("Date columns should be parseable as datetime")
 
-
     def test_ovitraps_data_quality(self, ovitraps_data):
         """Test ovitraps data quality."""
+        # Check if 'nplaca' is unique
+        assert ovitraps_data['nplaca'].is_unique, "'nplaca' should be unique"
+
+        # Check if 'narmad','dtinstal' is unique
+        assert ovitraps_data[['narmad','dtinstal']].drop_duplicates().shape[0] == ovitraps_data.shape[0], "'narmad' and 'dtinstal' combination should be unique"
+        
         # Check for missing values in critical columns
         critical_columns = ['dtcol', 'dtinstal', 'narmad', 'novos']
         for col in critical_columns:
@@ -227,32 +235,18 @@ class TestRawData:
         
         # For ovitraps: same trap shouldn't have overlapping installation periods
         # (this is complex but important)
-        ovitraps_sorted = ovitraps_data.sort_values(['narmad', 'dtinstal'])      
-        counter = 0
-        final_list = []  
-        for trap_id in ovitraps_data['narmad'].unique():
-            trap_data = ovitraps_sorted[ovitraps_sorted['narmad'] == trap_id]
-            if len(trap_data) > 1:
-                trap_installs = pd.to_datetime(trap_data['dtinstal']).values
-                trap_collections = pd.to_datetime(trap_data['dtcol']).values
-                
-                # Check for overlapping periods 
-                for i in range(len(trap_installs) - 1):
-                    # Current period: install[i] to collect[i]
-                    # Next period: install[i+1] to collect[i+1]
-                    # They should not overlap significantly
-                    current_end = pd.to_datetime(trap_collections[i])
-                    next_start = pd.to_datetime(trap_installs[i + 1])
-                    
-                    # Allow for same-day transitions
-                    overlap_days = (current_end - next_start).days
-                    try:
-                        assert overlap_days <= 1, f"Trap {trap_id} has overlapping periods > 1 day"
-                    except AssertionError:
-                        counter += 1
-                        final_list.append(trap_data[['narmad', 'dtinstal', 'dtcol','novos']].iloc[i:i+2].to_string(index=False))
-                    
-        with open(diagnosis_file, "a") as f:
-            f.write(f"{counter} Overlapping installation periods found \n\n")
-            f.write("\n".join(final_list) + "\n")
+        overlapping_traps = project_utils.get_overlapped_samples(ovitraps_data)
+        try:
+            assert len(overlapping_traps) == 0, f"Traps have overlapping periods > 1 day"
+        except AssertionError:
+            with open(diagnosis_file, "a") as f:
+                f.write(f"{len(overlapping_traps)} Overlapping installation periods found \n\n")
+                final_list = [
+                    ovitraps_data[ovitraps_data['nplaca'].isin(pair)][
+                        ['narmad', 'nplaca', 'dtinstal', 'dtcol', 'novos']
+                    ].to_string(index=False)
+                    for pair in overlapping_traps
+                ]
+
+                f.write("\n".join(final_list) + "\n")
                         

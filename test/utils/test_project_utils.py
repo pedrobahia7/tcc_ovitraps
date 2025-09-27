@@ -3,10 +3,159 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import sys
+import os
+import inspect
+import time
+from openpyxl import load_workbook
+import typing
+
 
 # Add the parent directory to the path to import the module
 sys.path.append('utils')
 import project_utils 
+
+class SharedTestUtils:
+    """
+    Shared utilities to reduce test redundancy across all test classes.
+
+    """
+
+    @staticmethod
+    def test_function_signature_and_return(
+        func,
+        expected_params,
+        expected_return_type,
+    ):
+        """
+        Reusable function signature test.
+
+        """
+        sig = inspect.signature(func)
+        real_params = list(sig.parameters.keys())
+
+        for param in expected_params:
+            assert param in real_params, (
+                f"Function should have '{param}' parameter"
+            )
+
+        real_return_type = sig.return_annotation
+        assert real_return_type == expected_return_type, (
+            f"Function should return '{expected_return_type}', "
+            f"but returned '{real_return_type}'"
+        )
+
+    @staticmethod
+    def test_data_integrity(original_data, data_after_function):
+        """
+        Reusable data integrity test.
+
+        """
+
+        if isinstance(original_data, pd.DataFrame):
+            pd.testing.assert_frame_equal(
+                original_data,
+                data_after_function,
+            )
+
+        elif isinstance(original_data, pd.Series):
+            pd.testing.assert_series_equal(
+                original_data,
+                data_after_function,
+            )
+
+        elif isinstance(original_data, np.ndarray):
+            np.testing.assert_array_equal(
+                original_data,
+                data_after_function,
+            )
+
+    @staticmethod
+    def test_docstring_exists(func, required_keywords=None):
+        """
+        Reusable docstring validation.
+
+        """
+        assert func.__doc__ is not None, "Function should have a docstring"
+        if required_keywords:
+            docstring_lower = func.__doc__.lower()
+            for keyword in required_keywords:
+                assert keyword in docstring_lower, (
+                    f"Docstring should mention '{keyword}'"
+                )
+
+    @staticmethod
+    def test_performance_timing(
+        func,
+        args,
+        max_time=1.0,
+        description="Function",
+    ):
+        """
+        Reusable performance testing.
+        """
+        start_time = time.perf_counter()
+        result = func(*args)
+        end_time = time.perf_counter()
+        execution_time = end_time - start_time
+
+        assert execution_time < max_time, (
+            f"{description} should complete in <{max_time} seconds, "
+            f"took {execution_time:.3f} seconds"
+        )
+        return result
+
+    @staticmethod
+    def test_file_integrity(func, file_path):
+        """
+        Reusable file integrity test.
+
+        """
+        # Test data integrity by checking file exists and is readable after execution
+        original_mod_time = os.path.getmtime(file_path)
+
+        # Execute the function
+        func(file_path)
+
+        # Verify file was modified (shows function actually ran)
+        new_mod_time = os.path.getmtime(file_path)
+        assert new_mod_time >= original_mod_time, (
+            "File should be modified or timestamp unchanged"
+        )
+
+        # Verify file is still readable (data integrity concept)
+        wb = load_workbook(file_path)
+        assert wb is not None, (
+            "File should remain readable after formatting"
+        )
+
+    @staticmethod
+    def test_function_determinism(func, *args):
+        """
+        Test that the function produces the same output for the same input.
+
+        """
+
+        output1 = func(*args)
+        output2 = func(*args)
+
+        def check_equality_comprehensive(output1, output2):
+            if isinstance(output1, pd.DataFrame):
+                pd.testing.assert_frame_equal(output1, output2)
+            elif isinstance(output1, pd.Series):
+                pd.testing.assert_series_equal(output1, output2)
+            elif isinstance(output1, np.ndarray):
+                np.testing.assert_array_equal(output1, output2)
+            else:
+                assert output1 == output2, "Outputs should be identical"
+
+        if isinstance(output1, (tuple, list)):
+            assert len(output1) == len(output2), (
+                "Output tuples should have the same length"
+            )
+            for item1, item2 in zip(output1, output2):
+                check_equality_comprehensive(item1, item2)
+        else:
+            check_equality_comprehensive(output1, output2)
 
 
 class TestGetDailyOvitraps:
@@ -463,3 +612,304 @@ class TestGetDailyOvitraps:
         result = project_utils.get_daily_ovitraps(future_data)
         assert isinstance(result, pd.DataFrame)
         assert result.loc[datetime(2025, 1, 1), 'A'] == 5/2
+
+class TestGetOverlappedSamples:
+    """Test cases for the project_utils.get_overlapped_samples function using pytest."""
+    
+    @pytest.fixture
+    def basic_overlapping_data(self):
+        """Fixture providing basic overlapping data."""
+        return pd.DataFrame({
+            'narmad': [1, 1, 2, 2],
+            'dtinstal': ['2023-01-01', '2023-01-02', '2023-02-01', '2023-02-03'],
+            'dtcol': ['2023-01-03', '2023-01-04', '2023-02-03', '2023-02-05'],
+            'nplaca': ['A001', 'A002', 'B001', 'B002'],
+            'novos': [5, 3, 8, 4]
+        })
+    
+    @pytest.fixture
+    def non_overlapping_data(self):
+        """Fixture providing non-overlapping data."""
+        return pd.DataFrame({
+            'narmad': [1, 1, 2],
+            'dtinstal': ['2023-01-01', '2023-01-05', '2023-02-01'],
+            'dtcol': ['2023-01-03', '2023-01-07', '2023-02-03'],
+            'nplaca': ['A001', 'A002', 'B001'],
+            'novos': [5, 3, 8]
+        })
+    
+    def test_shared_test_utils(self, basic_overlapping_data):
+        """Test using SharedTestUtils methods."""
+        # Test function signature and return type
+        SharedTestUtils.test_function_signature_and_return(
+            project_utils.get_overlapped_samples,
+            ['ovitraps_data'],
+            typing.List[typing.Tuple[str, str]]
+        )
+        
+        # Test docstring exists
+        SharedTestUtils.test_docstring_exists(
+            project_utils.get_overlapped_samples,
+            ['overlapping', 'nplaca', 'periods']
+        )
+        
+        # Test data integrity (original data should not be modified)
+        original_data = basic_overlapping_data.copy()
+        project_utils.get_overlapped_samples(basic_overlapping_data)
+        SharedTestUtils.test_data_integrity(original_data, basic_overlapping_data)
+        
+        # Test function determinism
+        SharedTestUtils.test_function_determinism(
+            project_utils.get_overlapped_samples, 
+            basic_overlapping_data
+        )
+        
+        # Test performance timing
+        result = SharedTestUtils.test_performance_timing(
+            project_utils.get_overlapped_samples,
+            (basic_overlapping_data,),
+            max_time=2.0,
+            description="get_overlapped_samples function"
+        )
+        assert isinstance(result, list)
+
+    @pytest.mark.parametrize(
+        "test_case,expected_overlaps", [
+        # Basic overlapping case - same trap, overlapping periods (≤1 day gap)
+        (
+            pd.DataFrame({
+                'narmad': [1, 1],
+                'dtinstal': ['2023-01-01', '2023-01-02'],
+                'dtcol': ['2023-01-03', '2023-01-04'],
+                'nplaca': ['A001', 'A002']
+            }),
+            [('A001', 'A002')]
+        ),
+        # Same day collection and installation (0 day gap)
+        (
+            pd.DataFrame({
+                'narmad': [1, 1],
+                'dtinstal': ['2023-01-01', '2023-01-03'],
+                'dtcol': ['2023-01-03', '2023-01-05'],
+                'nplaca': ['A001', 'A002']
+            }),
+            [('A001', 'A002')]
+        ),
+        # Exactly 1 day gap (should not be included)
+        (
+            pd.DataFrame({
+                'narmad': [1, 1],
+                'dtinstal': ['2023-01-01', '2023-01-04'],
+                'dtcol': ['2023-01-03', '2023-01-06'],
+                'nplaca': ['A001', 'A002']
+            }),
+            []
+        ),
+        # Multiple traps with overlaps
+        (
+            pd.DataFrame({
+                'narmad': [1, 1, 2, 2, 2],
+                'dtinstal': ['2023-01-01', '2023-01-02', '2023-02-01', '2023-02-02', '2023-03-01'],
+                'dtcol': ['2023-01-03', '2023-01-04', '2023-02-03', '2023-02-04', '2023-03-03'],
+                'nplaca': ['A001', 'A002', 'B001', 'B002', 'B003']
+            }),
+            [('A001', 'A002'), ('B001', 'B002')]
+        ),
+        # Multiple overlaps for same trap (3 consecutive periods)
+        (
+            pd.DataFrame({
+                'narmad': [1, 1, 1],
+                'dtinstal': ['2023-01-01', '2023-01-02', '2023-01-03'],
+                'dtcol': ['2023-01-02', '2023-01-03', '2023-01-04'],
+                'nplaca': ['A001', 'A002', 'A003']
+            }),
+            [('A001', 'A002'), ('A002', 'A003')]
+        ),
+        # No overlaps - gap > 1 day
+        (
+            pd.DataFrame({
+                'narmad': [1, 1],
+                'dtinstal': ['2023-01-01', '2023-01-05'],
+                'dtcol': ['2023-01-03', '2023-01-07'],
+                'nplaca': ['A001', 'A002']
+            }),
+            []
+        ),
+        # Single trap (no overlaps possible)
+        (
+            pd.DataFrame({
+                'narmad': [1],
+                'dtinstal': ['2023-01-01'],
+                'dtcol': ['2023-01-03'],
+                'nplaca': ['A001']
+            }),
+            []
+        ),
+        # Different traps (no overlaps)
+        (
+            pd.DataFrame({
+                'narmad': [1, 2, 3],
+                'dtinstal': ['2023-01-01', '2023-01-01', '2023-01-01'],
+                'dtcol': ['2023-01-03', '2023-01-03', '2023-01-03'],
+                'nplaca': ['A001', 'B001', 'C001']
+            }),
+            []
+        ),
+        # Same trap with non-overlapping periods interspersed
+        (
+            pd.DataFrame({
+                'narmad': [1, 1, 1],
+                'dtinstal': ['2023-01-01', '2023-01-10', '2023-01-05'],
+                'dtcol': ['2023-01-03', '2023-01-12', '2023-01-07'],
+                'nplaca': ['A001', 'A002', 'A003']
+            }),
+            []  # After sorting: A001 (1-3), A003 (5-7), A002 (10-12) - no overlaps
+        ),
+        # Numeric nplaca values
+        (
+            pd.DataFrame({
+                'narmad': [1, 1],
+                'dtinstal': ['2023-01-01', '2023-01-02'],
+                'dtcol': ['2023-01-03', '2023-01-04'],
+                'nplaca': [1001, 1002]
+            }),
+            [(1001, 1002)]
+        ),
+        # Complex scenario with multiple traps and mixed overlaps
+        (
+            pd.DataFrame({
+                'narmad': [1, 1, 1, 2, 2, 3],
+                'dtinstal': ['2023-01-01', '2023-01-02', '2023-01-10', '2023-02-01', '2023-02-05', '2023-03-01'],
+                'dtcol': ['2023-01-03', '2023-01-04', '2023-01-12', '2023-02-03', '2023-02-07', '2023-03-03'],
+                'nplaca': ['A001', 'A002', 'A003', 'B001', 'B002', 'C001']
+            }),
+            [('A001', 'A002')]  # Only first pair overlaps, others don't
+        )
+    ])
+    def test_valid_cases_parametrized(self, test_case, expected_overlaps):
+        """
+        Test valid cases with expected results using parametrization.
+        
+        """
+        result = project_utils.get_overlapped_samples(test_case)
+        
+        # Basic type and structure assertions
+        assert isinstance(result, list), "Result should be a list"
+        assert all(isinstance(item, tuple) for item in result), "All items should be tuples"
+        assert all(len(item) == 2 for item in result), "All tuples should have length 2"
+        
+        # Content assertions
+        assert len(result) == len(expected_overlaps), f"Expected {len(expected_overlaps)} overlaps, got {len(result)}"
+        
+        # Sort both lists to handle order differences
+        result_sorted = sorted(result)
+        expected_sorted = sorted(expected_overlaps)
+        
+        assert result_sorted == expected_sorted, f"Expected overlaps {expected_sorted}, got {result_sorted}"
+        
+        # Additional property assertions
+        all_nplaca_in_result = [item for sublist in result for item in sublist]
+        if not test_case.empty:
+            available_nplaca = set(test_case['nplaca'].values)
+            assert all(nplaca in available_nplaca for nplaca in all_nplaca_in_result), \
+                "All nplaca values in result should exist in input data"
+        
+        # Verify no duplicate pairs
+        assert len(result) == len(set(result)), "Result should not contain duplicate pairs"
+        
+        # If no overlaps expected, ensure empty result
+        if len(expected_overlaps) == 0:
+            assert result == [], "Should return empty list when no overlaps exist"
+
+    @pytest.mark.parametrize(
+        "invalid_input,expected_error_pattern", [
+        # Non-DataFrame inputs
+        ("not a dataframe", ".*"),
+        (None, ".*"),
+        ([1, 2, 3], ".*"),
+        (123, ".*"),
+        (12.5, ".*"),
+        (True, ".*"),
+        ({'key': 'value'}, ".*"),
+        (set([1, 2, 3]), ".*"),
+        # Missing required columns
+        (
+            pd.DataFrame({'narmad': [1], 'dtinstal': ['2023-01-01'], 'nplaca': ['A001']}), # Missing dtcol
+            ".*"
+        ),
+        (
+            pd.DataFrame({'dtinstal': ['2023-01-01'], 'dtcol': ['2023-01-03'], 'nplaca': ['A001']}), # Missing narmad
+            ".*"
+        ),
+        (
+            pd.DataFrame({'narmad': [1], 'dtcol': ['2023-01-03'], 'nplaca': ['A001']}), # Missing dtinstal
+            ".*"
+        ),
+        (
+            pd.DataFrame({'narmad': [1], 'dtinstal': ['2023-01-01'], 'dtcol': ['2023-01-03']}), # Missing nplaca
+            ".*"
+        ),
+        # Invalid date formats that cause parsing errors
+        (
+            pd.DataFrame({
+                'narmad': [1, 1],
+                'dtinstal': ['invalid-date', '2023-01-02'],
+                'dtcol': ['2023-01-03', '2023-01-04'],
+                'nplaca': ['A001', 'A002']
+            }),
+            ".*"
+        ),
+        (
+            pd.DataFrame({
+                'narmad': [1, 1],
+                'dtinstal': ['2023-01-01', '2023-01-02'],
+                'dtcol': ['invalid-date', '2023-01-04'],
+                'nplaca': ['A001', 'A002']
+            }),
+            ".*"
+        ),
+        # NaN/None values in critical columns
+        (
+            pd.DataFrame({
+                'narmad': [1, None],
+                'dtinstal': ['2023-01-01', '2023-01-02'],
+                'dtcol': ['2023-01-03', '2023-01-04'],
+                'nplaca': ['A001', 'A002']
+            }),
+            ".*"
+        ),
+        (
+            pd.DataFrame({
+                'narmad': [1, 1],
+                'dtinstal': [None, '2023-01-02'],
+                'dtcol': ['2023-01-03', '2023-01-04'],
+                'nplaca': ['A001', 'A002']
+            }),
+            ".*"
+        ),
+        (
+            pd.DataFrame({
+                'narmad': [1, 1],
+                'dtinstal': ['2023-01-01', '2023-01-02'],
+                'dtcol': ['2023-01-03', None],
+                'nplaca': ['A001', 'A002']
+            }),
+            ".*"
+        ),
+        (
+            pd.DataFrame({
+                'narmad': [1, 1],
+                'dtinstal': ['2023-01-01', '2023-01-02'],
+                'dtcol': ['2023-01-03', '2023-01-04'],
+                'nplaca': ['A001', None]
+            }),
+            ".*"
+        )
+    ])
+    def test_invalid_cases_parametrized(self, invalid_input, expected_error_pattern):
+        """
+        Test invalid cases that should raise errors using parametrization.
+        
+        """
+        with pytest.raises((AssertionError, AttributeError, KeyError, ValueError, TypeError)):
+            project_utils.get_overlapped_samples(invalid_input)

@@ -62,7 +62,7 @@ dengue_data["closest_health_center"] = project_utils.closest_health_center(
     dengue_data, health_centers
 )
 
-dengue_data.to_csv(params['all']['paths']['data']['processed']['slow']['dengue_data'], index=False)
+dengue_data.to_csv(params['all']['paths']['data']['processed']['slow']['dengue'], index=False)
 
 
 # %% Ovitraps data
@@ -74,5 +74,5 @@ ovitraps_data["closest_health_center"] = (
 )
 
 ovitraps_data.to_csv(
-    params['all']['paths']['data']['processed']['slow']['ovitraps_data'], index=False
+    params['all']['paths']['data']['processed']['slow']['ovitraps'], index=False
 )
