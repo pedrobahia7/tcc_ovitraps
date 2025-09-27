@@ -17,8 +17,10 @@ import pandas as pd
 import numpy as np
 import os
 from datetime import datetime
+import yaml
+params = yaml.safe_load(open("params.yaml"))
 
-diagnosis_file = os.path.join(os.path.dirname(__file__), "diagnosis_raw_comparison.txt")
+diagnosis_file = params["all"]["paths"]["test"]["data"]["raw"]["diagnosis_raw_data_comparison"]
 with open(diagnosis_file, "w", encoding="utf-8") as f:
     pass
 
@@ -28,9 +30,9 @@ class TestRawDataComparison:
     def data_paths(self):
         """Fixture providing paths to processed data files."""
         return {
-            'dengue': 'data/raw/Dengue2007_2025.csv',
-            'ovitraps': 'data/raw/MasterDataExtend062025.csv',
-            'health_centers': 'data/raw/CENTRO_SAUDE_new.csv',
+            'dengue': params["all"]["paths"]["data"]["raw"]["dengue_csv"],
+            'ovitraps': params["all"]["paths"]["data"]["raw"]["ovitraps_csv"],
+            'health_centers': params["all"]["paths"]["data"]["raw"]["health_centers_csv"],
             'old_ovitraps': ["data/final_data.csv"]
         }
     

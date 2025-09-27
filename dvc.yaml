@@ -3,38 +3,72 @@ stages:
     cmd: python src/convert_to_csv.py
     deps:
       - src/convert_to_csv.py
-      - data/raw/CENTRO_SAUDE_new.xlsx
-      - data/raw/Dengue2007_2025.xlsx
-      - data/raw/MasterDataExtend062025.xlsx
+      - ${all.paths.data.raw.health_centers}
+      - ${all.paths.data.raw.dengue}
+      - ${all.paths.data.raw.ovitraps}
     outs:
-      - data/raw/CENTRO_SAUDE_new.csv
-      - data/raw/Dengue2007_2025.csv
-      - data/raw/MasterDataExtend062025.csv
+      - ${all.paths.data.raw.health_centers_csv}:
+          persist: true
+      - ${all.paths.data.raw.dengue_csv}:
+          persist: true
+      - ${all.paths.data.raw.ovitraps_csv}:
+          persist: true
+  raw_data_test:
+    cmd: 
+      - pytest test/src/test_raw_data.py
+      - pytest test/src/test_raw_data_comparison.py
+    deps:
+      - test/src/test_raw_data.py
+      - test/src/test_raw_data_comparison.py
+      - ${all.paths.data.raw.ovitraps_csv}
+      - ${all.paths.data.raw.dengue_csv}
+      - ${all.paths.data.raw.health_centers_csv}
+    outs:
+      - ${all.paths.test.data.raw.diagnosis_raw_comparison}:
+          persist: true
+      - ${all.paths.test.data.raw.diagnosis_raw_data}:
+          persist: true
 
   slow_processing:
     cmd: python src/process_data_slow.py
     deps:
       - src/process_data_slow.py
-      - data/raw/CENTRO_SAUDE_new.csv
-      - data/raw/Dengue2007_2025.csv
-      - data/raw/MasterDataExtend062025.csv
+      - ${all.paths.data.raw.health_centers_csv}
+      - ${all.paths.data.raw.dengue_csv}
+      - ${all.paths.data.raw.ovitraps_csv}
     outs:
-      - data/processed/slow/
+      - ${all.paths.data.processed.slow.health_centers}
   
   fast_processing:
     cmd: python src/process_data_fast.py
     deps:
       - src/process_data_fast.py
-      - data/processed/slow/
+      - ${all.paths.data.processed.slow.folder}
     outs:
-      - data/processed/ovitraps_data.csv
-      - data/processed/health_centers.csv
-      - data/processed/dengue_data.csv
+      - ${all.paths.data.processed.health_centers}
+      - ${all.paths.data.processed.dengue}
+      - ${all.paths.data.processed.ovitraps}
       
   daily_ovitraps:
     cmd: python src/daily_ovitraps.py
     deps:
       - src/daily_ovitraps.py
-      - data/processed/ovitraps_data.csv
+      - ${all.paths.data.processed.ovitraps}
     outs:
-      - data/processed/daily_ovitraps_data.csv
+      - ${all.paths.data.processed.daily_ovitraps}
+
+  process_data_test:
+    cmd: pytest test/data/processed/test_processed_data.py
+    deps:
+      - test/src/test_processed_data.py
+      - ${all.paths.data.processed.health_centers}
+      - ${all.paths.data.processed.dengue}
+      - ${all.paths.data.processed.ovitraps}
+      - ${all.paths.data.processed.daily_ovitraps}
+
+  libraries_tests:
+    cmd: pytest test/utils/test_project_utils.py
+    deps:
+      - test/utils/test_project_utils.py
+      - src/project_utils.py
+      - src/generic_utils.py

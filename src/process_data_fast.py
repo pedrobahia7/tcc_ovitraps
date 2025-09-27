@@ -2,25 +2,27 @@
 import os
 import pandas as pd
 import sys
+import yaml
 
 sys.path.append("utils")
 import project_utils
 
+params = yaml.safe_load(open("params.yaml"))
 # %% Load all data
 print("Loading data")
-dengue_data = pd.read_csv("data/processed/slow/dengue_data_slow.csv")
-ovitraps_data = pd.read_csv("data/processed/slow/ovitraps_data_slow.csv")
-health_centers = pd.read_csv("data/processed/slow/health_centers_slow.csv")
+dengue_data = pd.read_csv(params['all']['paths']['data']['processed']['slow']['dengue_data'])
+ovitraps_data = pd.read_csv(params['all']['paths']['data']['processed']['slow']['ovitraps_data'])
+health_centers = pd.read_csv(params['all']['paths']['data']['processed']['slow']['health_centers'])
 
 # %% Prepare folders
-os.makedirs("data/processed/", exist_ok=True)
+os.makedirs(params['all']['paths']['data']['processed']['folder'], exist_ok=True)
 
 
 # %% Health Centers data
 # Load
 
 # Save
-health_centers.to_csv("data/processed/health_centers.csv", index=False)
+health_centers.to_csv(params['all']['paths']['data']['processed']['health_centers'], index=False)
 
 # %% Dengue data
 # Process
@@ -67,7 +69,7 @@ dengue_data.reset_index(drop=True, inplace=True)
 dengue_data["epidemic_date"] = project_utils.get_epidemic_date(dengue_data)
 
 # Save
-dengue_data.to_csv("data/processed/dengue_data.csv", index=False)
+dengue_data.to_csv(params['all']['paths']['data']['processed']['dengue_data'], index=False)
 
 
 # %% Ovitraps data
@@ -170,4 +172,4 @@ ovitraps_data["epidemic_date"] = project_utils.get_epidemic_date(
     ovitraps_data
 )
 # Save Data
-ovitraps_data.to_csv("data/processed/ovitraps_data.csv", index=False)
+ovitraps_data.to_csv(params['all']['paths']['data']['processed']['ovitraps_data'], index=False)

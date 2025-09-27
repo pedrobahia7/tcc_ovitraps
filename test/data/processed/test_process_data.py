@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 import os
 from datetime import datetime
+import yaml
+params = yaml.safe_load(open("params.yaml"))
 
 def epidemic_date_valid(s):
     m = re.match(r"^20(\d{2})_(\d{2})W(\d{1,2})$", s)
@@ -19,10 +21,10 @@ class TestProcessedData:
     def data_paths(self):
         """Fixture providing paths to processed data files."""
         return {
-            'dengue': 'data/processed/dengue_data.csv',
-            'ovitraps': 'data/processed/ovitraps_data.csv',
-            'health_centers': 'data/processed/health_centers.csv',
-            'daily_ovitraps': 'data/processed/daily_ovitraps.csv'           
+            'dengue': params["all"]["paths"]["data"]["processed"]["dengue"],
+            'ovitraps': params["all"]["paths"]["data"]["processed"]["ovitraps"],
+            'health_centers': params["all"]["paths"]["data"]["processed"]["health_centers"],
+            'daily_ovitraps': params["all"]["paths"]["data"]["processed"]["daily_ovitraps"]
         }
     
     @pytest.fixture(scope="class")

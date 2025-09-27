@@ -1,19 +1,25 @@
 import pandas as pd
 import os
+import yaml
+params = yaml.safe_load(open("params.yaml"))
 
-if not os.path.exists("data/raw/CENTRO_SAUDE_new.csv"):
+if not os.path.exists(params["all"]["paths"]["data"]["raw"]["health_centers_csv"]):
+    import ipdb; ipdb.set_trace()
     print("Loading health centers from Excel")
-    health_centers = pd.read_excel("data/raw/CENTRO_SAUDE_new.xlsx")
-    health_centers.to_csv("data/raw/CENTRO_SAUDE_new.csv", index=False)
+    health_centers = pd.read_excel(params["all"]["paths"]["data"]["raw"]["health_centers"])
+    health_centers.to_csv(params["all"]["paths"]["data"]["raw"]["health_centers_csv"], index=False)
+else:
+    print("Health centers CSV already exists.")
 
-if not os.path.exists("data/raw/Dengue2007_2025.csv"):
+if not os.path.exists(params["all"]["paths"]["data"]["raw"]["dengue_csv"]):
     print("Loading dengue data from Excel and convert to CSV")
-    dengue_data = pd.read_excel("data/raw/Dengue2007_2025.xlsx")
-    dengue_data.to_csv("data/raw/Dengue2007_2025.csv", index=False)
-
-if not os.path.exists("data/raw/MasterDataExtend062025.csv"):
+    dengue_data = pd.read_excel(params["all"]["paths"]["data"]["raw"]["dengue"])
+    dengue_data.to_csv(params["all"]["paths"]["data"]["raw"]["dengue_csv"], index=False)
+else:
+    print("Dengue data CSV already exists.")
+if not os.path.exists(params["all"]["paths"]["data"]["raw"]["ovitraps_csv"]):
     print("Loading ovitraps data from Excel and convert to CSV")
-    ovitraps_data = pd.read_excel("data/raw/MasterDataExtend062025.xlsx")
-    ovitraps_data.to_csv(
-        "data/raw/MasterDataExtend062025.csv", index=False
-    )
+    ovitraps_data = pd.read_excel(params["all"]["paths"]["data"]["raw"]["ovitraps"])
+    ovitraps_data.to_csv(params["all"]["paths"]["data"]["raw"]["ovitraps_csv"], index=False)
+else:
+    print("Ovitraps data CSV already exists.")
