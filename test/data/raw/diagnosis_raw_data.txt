@@ -5391,7 +5391,7 @@
  909184    NaN 2021-08-11 2021-08-18
  909190    NaN 2024-02-20 2024-02-27
  -------------------------------- 
-Negative or zero values found in 'days_expo':
+24 Negative or zero values found in 'days_expo':
 
  narmad   dtinstal      dtcol  days_expo  novos
  901023 2024-11-13 2024-11-13          0  299.0
@@ -5419,7 +5419,7 @@ Negative or zero values found in 'days_expo':
  909025 2015-12-16 2015-12-16          0    0.0
  909135 2018-08-22 2018-08-22          0    0.0
  -------------------------------- 
-Too large values found in 'days_expo':
+87 Too large values found in 'days_expo':
 
  narmad   dtinstal      dtcol  days_expo  novos
  901009 2018-01-30 2018-03-08         37    0.0
@@ -5510,9 +5510,7 @@ Too large values found in 'days_expo':
  909133 2016-01-15 2016-03-02         47  507.0
  909158 2018-02-20 2018-03-27         35   29.0
  -------------------------------- 
-Overlapping installation periods found for trap 909195
-
-Total problematic traps: 250
+250 Overlapping installation periods found 
 
  narmad   dtinstal      dtcol  novos
  901002 2018-08-13 2018-09-10    0.0

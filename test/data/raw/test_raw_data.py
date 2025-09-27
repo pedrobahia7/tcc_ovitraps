@@ -200,15 +200,15 @@ class TestRawData:
             assert (ovitraps_data['days_expo'] > 0).all(), "days_expo should be positive"
         except AssertionError:
             with open(diagnosis_file, "a") as f:
-                f.write("Negative or zero values found in 'days_expo':\n\n")
                 negative_days = ovitraps_data[ovitraps_data['days_expo'] <= 0]
+                f.write(f"{negative_days.shape[0]} Negative or zero values found in 'days_expo':\n\n")
                 f.write(negative_days[['narmad', 'dtinstal', 'dtcol', 'days_expo', 'novos']].to_string(index=False) + "\n -------------------------------- \n")
         try:
             assert (ovitraps_data['days_expo'] <= 30).all(), "days_expo should be <= 30 days (filter should remove longer expositions)"
         except AssertionError:
             with open(diagnosis_file, "a") as f:
-                f.write("Too large values found in 'days_expo':\n\n")
                 large_days = ovitraps_data[ovitraps_data['days_expo'] > 30]
+                f.write(f"{large_days.shape[0]} Too large values found in 'days_expo':\n\n")
                 f.write(large_days[['narmad', 'dtinstal', 'dtcol', 'days_expo', 'novos']].to_string(index=False) +  "\n -------------------------------- \n")
 
         # Check for duplicates
@@ -251,7 +251,6 @@ class TestRawData:
                         final_list.append(trap_data[['narmad', 'dtinstal', 'dtcol','novos']].iloc[i:i+2].to_string(index=False))
                     
         with open(diagnosis_file, "a") as f:
-            f.write(f"Overlapping installation periods found for trap {trap_id}\n\n")
-            f.write("Total problematic traps: " + str(counter) + "\n\n")
+            f.write(f"{counter} Overlapping installation periods found \n\n")
             f.write("\n".join(final_list) + "\n")
                         
