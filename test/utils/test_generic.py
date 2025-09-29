@@ -7,6 +7,7 @@ import os
 import pandas as pd
 import numpy as np
 from openpyxl import load_workbook
+import matplotlib.pyplot as plt
 
 
 sys.path.append('utils')
@@ -765,3 +766,53 @@ class TestCreateGrid:
 
         with pytest.raises(expected_error_type):
             generic.create_grid(lat_min, lat_max, lon_min, lon_max, spacing_m)
+
+    @pytest.mark.visual
+    def test_visual_grid_output(self):
+        """
+        Visual test to generate and display a grid for manual inspection.
+        This test creates a plot showing the generated grid points.
+        """    
+        # Test São Paulo downtown area
+        lat_min, lat_max = -23.6, -23.5
+        lon_min, lon_max = -46.7, -46.6
+        spacing_m = 500
+        
+        # Generate grid
+        grid = generic.create_grid(lat_min, lat_max, lon_min, lon_max, spacing_m)
+        
+        # Create plot
+        plt.figure(figsize=(10, 8))
+        plt.scatter(grid['longitude'], grid['latitude'], c='blue', alpha=0.6, s=10)
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
+        plt.title(f'Generated Grid - São Paulo Downtown\nSpacing: {spacing_m}m, Points: {len(grid)}')
+        plt.grid(True, alpha=0.3)
+        
+        # Add boundary rectangle
+        plt.plot([lon_min, lon_max, lon_max, lon_min, lon_min], 
+                [lat_min, lat_min, lat_max, lat_max, lat_min], 
+                'r--', linewidth=2, label='Boundary')
+        
+        # Add some reference points (São Paulo landmarks)
+        landmarks = {
+            'Sé Cathedral': (-23.5505, -46.6333),
+            'Municipal Market': (-23.5489, -46.6388),
+            'República Square': (-23.5475, -46.6361)
+        }
+        
+        for name, (lat, lon) in landmarks.items():
+            if lat_min <= lat <= lat_max and lon_min <= lon <= lon_max:
+                plt.plot(lon, lat, 'ro', markersize=8)
+                plt.annotate(name, (lon, lat), xytext=(5, 5), 
+                            textcoords='offset points', fontsize=8)
+        
+        plt.legend()
+        plt.tight_layout()
+        
+        # Show plot and wait for user to close it
+        plt.show(block=True)
+        
+        # Test passes if no exception was raised
+        assert len(grid) > 0, "Grid should contain points"
+        assert isinstance(grid, pd.DataFrame), "Grid should be a DataFrame"
