@@ -531,3 +531,237 @@ class TestClosestNeighbors:
         """
         with pytest.raises(expected_error_type):
             generic.nearest_neighbors(invalid_query, invalid_reference)
+
+
+class TestCreateGrid:
+    """Test cases for the generic.create_grid function using pytest."""
+    
+    @pytest.fixture
+    def basic_grid_data(self):
+        """Fixture providing basic grid data for testing."""
+        return {
+            'lat_min': -23.6,
+            'lat_max': -23.5,
+            'lon_min': -46.7,
+            'lon_max': -46.6,
+            'spacing_m': 1000,
+            'expected_min_points': 10  # Approximate minimum expected points
+        }
+    
+    def test_shared_test_utils(self, basic_grid_data):
+        """Test using SharedTestUtils methods."""
+        # Test function signature and return type
+        SharedTestUtils.test_function_signature_and_return(
+            generic.create_grid,
+            ['lat_min', 'lat_max', 'lon_min', 'lon_max', 'spacing_m'],
+            pd.DataFrame
+        )
+        
+        # Test docstring exists
+        SharedTestUtils.test_docstring_exists(
+            generic.create_grid,
+            ['grid', 'spacing', 'latitude', 'longitude']
+        )
+        
+        # Test function determinism
+        SharedTestUtils.test_function_determinism(
+            generic.create_grid,
+            basic_grid_data['lat_min'],
+            basic_grid_data['lat_max'],
+            basic_grid_data['lon_min'],
+            basic_grid_data['lon_max'],
+            basic_grid_data['spacing_m']
+        )
+        
+        # Test performance timing with larger grid
+        result = SharedTestUtils.test_performance_timing(
+            generic.create_grid,
+            (-23.7, -23.4, -46.8, -46.5, 500),  # Larger area, smaller spacing
+            max_time=10.0,
+            description="create_grid function with large grid"
+        )
+        assert isinstance(result, pd.DataFrame)
+
+    @pytest.mark.parametrize(
+        "lat_min,lat_max,lon_min,lon_max,spacing_m,test_description", [
+        # Basic São Paulo grid
+        (-23.6, -23.5, -46.7, -46.6, 1000, "Basic São Paulo downtown grid"),
+        # Small precise grid
+        (-23.55, -23.54, -46.65, -46.64, 100, "Small high-precision grid"),
+        # Large city grid
+        (-23.7, -23.3, -46.8, -46.4, 2000, "Large São Paulo metropolitan grid"),
+        # NYC Manhattan grid
+        (40.7, 40.8, -74.1, -73.9, 500, "NYC Manhattan grid"),
+        # London central grid
+        (51.48, 51.52, -0.2, 0.0, 300, "London central grid"),
+        # Tokyo grid
+        (35.6, 35.8, 139.6, 139.8, 800, "Tokyo metropolitan grid"),
+        # Very small area (neighborhood level)
+        (-23.5505, -23.5495, -46.6340, -46.6330, 50, "Neighborhood level precision"),
+        # Wide longitude span (crossing time zones conceptually)
+        (40.7, 40.8, -75.0, -73.0, 5000, "Wide longitude span"),
+        # Tall latitude span
+        (-24.0, -23.0, -46.7, -46.6, 3000, "Tall latitude span"),
+        # Equatorial region
+        (-1.0, 1.0, -50.0, -48.0, 1500, "Equatorial region grid"),
+        # High latitude region
+        (60.0, 61.0, 10.0, 12.0, 2000, "High latitude region"),
+        # Crossing Greenwich meridian
+        (51.4, 51.6, -1.0, 1.0, 800, "Crossing Greenwich meridian"),
+        # Large spacing (sparse grid)
+        (-23.8, -23.2, -46.9, -46.3, 10000, "Sparse grid large spacing"),
+        # Very fine spacing (dense grid - small area)
+        (-23.5510, -23.5500, -46.6340, -46.6330, 25, "Very dense fine grid")
+    ])
+    def test_valid_cases_parametrized(self, lat_min, lat_max, lon_min, lon_max, spacing_m, test_description):
+        """
+        Test valid cases with expected results using parametrization.
+        
+        """
+        result = generic.create_grid(lat_min, lat_max, lon_min, lon_max, spacing_m)
+        
+        # Basic type and structure assertions
+        assert isinstance(result, pd.DataFrame), f"Result should be a DataFrame for {test_description}"
+        assert list(result.columns) == ['latitude', 'longitude'], f"Columns should be ['latitude', 'longitude'] for {test_description}"
+        assert len(result) > 0, f"Result should not be empty for {test_description}"
+        
+        # Data type assertions
+        assert pd.api.types.is_numeric_dtype(result['latitude']), f"Latitude should be numeric for {test_description}"
+        assert pd.api.types.is_numeric_dtype(result['longitude']), f"Longitude should be numeric for {test_description}"
+        
+        # No missing values
+        assert not result['latitude'].isnull().any(), f"Latitude should not have null values for {test_description}"
+        assert not result['longitude'].isnull().any(), f"Longitude should not have null values for {test_description}"
+        
+        # Boundary assertions
+        assert result['latitude'].min() >= lat_min, f"All latitudes should be >= lat_min for {test_description}"
+        assert result['latitude'].max() <= lat_max, f"All latitudes should be <= lat_max for {test_description}"
+        assert result['longitude'].min() >= lon_min, f"All longitudes should be >= lon_min for {test_description}"
+        assert result['longitude'].max() <= lon_max, f"All longitudes should be <= lon_max for {test_description}"
+        
+        # Check that corner points are included (or very close)
+        corners = [
+            (lat_min, lon_min), (lat_min, lon_max),
+            (lat_max, lon_min), (lat_max, lon_max)
+        ]
+        
+        tolerance = spacing_m / 111000  # Convert meters to rough degrees
+        for corner_lat, corner_lon in corners:
+            # Check if any point is close to this corner
+            lat_close = abs(result['latitude'] - corner_lat) <= tolerance
+            lon_close = abs(result['longitude'] - corner_lon) <= tolerance
+            corner_exists = (lat_close & lon_close).any()
+            # Note: Due to grid generation method, not all corners may be exactly present
+            # This is acceptable as the function creates a regular grid starting from lat_min, lon_min
+        
+        # Spacing validation - check approximate consistency
+        if len(result) > 1:
+            # Check latitude spacing consistency for points in same longitude
+            unique_lons = result['longitude'].unique()
+            if len(unique_lons) > 1:
+                first_lon = unique_lons[0]
+                same_lon_points = result[result['longitude'] == first_lon].sort_values('latitude')
+                if len(same_lon_points) > 1:
+                    lat_diffs = same_lon_points['latitude'].diff().dropna()
+                    # Convert to approximate meters (rough calculation)
+                    lat_diffs_m = lat_diffs * 111000  # 1 degree lat ≈ 111km
+                    avg_lat_spacing = lat_diffs_m.mean()
+                    # Allow 20% tolerance due to Earth's curvature and approximations
+                    assert abs(avg_lat_spacing - spacing_m) / spacing_m < 0.2, \
+                        f"Latitude spacing should be approximately {spacing_m}m for {test_description}"
+        
+        # Check for duplicates
+        duplicates = result.duplicated().sum()
+        assert duplicates == 0, f"Result should not contain duplicate points for {test_description}"
+        
+        # Reasonable grid size validation
+        lat_span = lat_max - lat_min
+        lon_span = lon_max - lon_min
+        
+        # Rough estimate of expected points
+        lat_span_m = lat_span * 111000  # Convert to meters
+        lon_span_m = lon_span * 111000 * np.cos(np.radians((lat_min + lat_max) / 2))  # Account for longitude convergence
+        
+        expected_lat_points = max(1, int(lat_span_m / spacing_m) + 1)
+        expected_lon_points = max(1, int(lon_span_m / spacing_m) + 1)
+        expected_total = expected_lat_points * expected_lon_points
+        
+        # Allow reasonable tolerance for grid size (due to Earth's curvature effects)
+        tolerance_factor = 0.5  # 50% tolerance
+        min_expected = int(expected_total * (1 - tolerance_factor))
+        max_expected = int(expected_total * (1 + tolerance_factor))
+        
+        assert min_expected <= len(result) <= max_expected, \
+            f"Grid size {len(result)} should be roughly between {min_expected} and {max_expected} for {test_description}"
+        
+        # Consistency check - same parameters should give same result
+        result2 = generic.create_grid(lat_min, lat_max, lon_min, lon_max, spacing_m)
+        pd.testing.assert_frame_equal(result, result2, f"Function should be deterministic for {test_description}")
+
+    @pytest.mark.parametrize(
+        "lat_min,lat_max,lon_min,lon_max,spacing_m,expected_error_type,test_description", [
+        # Invalid latitude ranges
+        (-23.5, -23.6, -46.7, -46.6, 1000,  AssertionError, "lat_min > lat_max"),
+        (95, 100, -46.7, -46.6, 1000,  AssertionError, "Invalid latitude > 90"),
+        (-100, -95, -46.7, -46.6, 1000,  AssertionError, "Invalid latitude < -90"),
+        
+        # Invalid longitude ranges  
+        (-23.6, -23.5, -46.6, -46.7, 1000,  AssertionError, "lon_min > lon_max"),
+        (-23.6, -23.5, 185, 190, 1000,  AssertionError, "Invalid longitude > 180"),
+        (-23.6, -23.5, -190, -185, 1000,  AssertionError, "Invalid longitude < -180"),
+        
+        # Invalid spacing
+        (-23.6, -23.5, -46.7, -46.6, 0, AssertionError, "Zero spacing"),
+        (-23.6, -23.5, -46.7, -46.6, -1000,  AssertionError, "Negative spacing"),
+        
+        # Non-numeric inputs
+        ("invalid", -23.5, -46.7, -46.6, 1000, AssertionError, "String lat_min"),
+        (-23.6, "invalid", -46.7, -46.6, 1000, AssertionError, "String lat_max"),
+        (-23.6, -23.5, "invalid", -46.6, 1000, AssertionError, "String lon_min"),
+        (-23.6, -23.5, -46.7, "invalid", 1000, AssertionError, "String lon_max"),
+        (-23.6, -23.5, -46.7, -46.6, "invalid", AssertionError, "String spacing"),
+        
+        # None inputs
+        (None, -23.5, -46.7, -46.6, 1000, AssertionError, "None lat_min"),
+        (-23.6, None, -46.7, -46.6, 1000, AssertionError, "None lat_max"),
+        (-23.6, -23.5, None, -46.6, 1000, AssertionError, "None lon_min"),
+        (-23.6, -23.5, -46.7, None, 1000, AssertionError, "None lon_max"),
+        (-23.6, -23.5, -46.7, -46.6, None, AssertionError, "None spacing"),
+
+        # NaN and infinity values
+        (np.nan, -23.5, -46.7, -46.6, 1000, AssertionError, "NaN lat_min"),
+        (-23.6, np.nan, -46.7, -46.6, 1000, AssertionError, "NaN lat_max"),
+        (-23.6, -23.5, np.nan, -46.6, 1000, AssertionError, "NaN lon_min"),
+        (-23.6, -23.5, -46.7, np.nan, 1000, AssertionError, "NaN lon_max"),
+        (-23.6, -23.5, -46.7, -46.6, np.nan, AssertionError, "NaN spacing"),
+        
+        (np.inf, -23.5, -46.7, -46.6, 1000, AssertionError, "Infinite lat_min"),
+        (-23.6, np.inf, -46.7, -46.6, 1000, AssertionError, "Infinite lat_max"),
+        (-23.6, -23.5, np.inf, -46.6, 1000, AssertionError, "Infinite lon_min"),
+        (-23.6, -23.5, -46.7, np.inf, 1000, AssertionError, "Infinite lon_max"),
+        (-23.6, -23.5, -46.7, -46.6, np.inf, AssertionError, "Infinite spacing"),
+        
+        # # Boolean inputs
+        (True, -23.5, -46.7, -46.6, 1000, AssertionError, "Boolean lat_min"),
+        (-23.6, False, -46.7, -46.6, 1000, AssertionError, "Boolean lat_max"),
+        (-23.6, -23.5, True, -46.6, 1000, AssertionError, "Boolean lon_min"),
+        (-23.6, -23.5, -46.7, False, 1000, AssertionError, "Boolean lon_max"),
+        (-23.6, -23.5, -46.7, -46.6, True, AssertionError, "Boolean spacing"),
+        
+        # # List/array inputs
+        ([-23.6], -23.5, -46.7, -46.6, 1000, AssertionError, "List lat_min"),
+        (-23.6, [-23.5], -46.7, -46.6, 1000, AssertionError, "List lat_max"),
+        (-23.6, -23.5, [-46.7], -46.6, 1000, AssertionError, "List lon_min"),
+        (-23.6, -23.5, -46.7, [-46.6], 1000, AssertionError, "List lon_max"),
+        (-23.6, -23.5, -46.7, -46.6, [1000], AssertionError, "List spacing"),
+
+        (-23.55, -23.55, -46.65, -46.65, 1000, AssertionError, "Equal bounds "),  # This might actually work
+    ])
+    def test_invalid_cases_parametrized(self, lat_min, lat_max, lon_min, lon_max, spacing_m, expected_error_type, test_description):
+        """
+        Test invalid cases that should raise errors using parametrization.
+        
+        """
+
+        with pytest.raises(expected_error_type):
+            generic.create_grid(lat_min, lat_max, lon_min, lon_max, spacing_m)

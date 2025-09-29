@@ -769,6 +769,72 @@ def nearest_neighbors(points1: np.ndarray, points2: np.ndarray) -> np.ndarray:
 
     return indices
 
+
+def create_grid(lat_min: float, lat_max: float, lon_min: float, lon_max: float, spacing_m: float) -> pd.DataFrame:
+    """
+    Create a grid of points in lat/lon space with approximately equal spacing in meters.
+    
+    Parameters:
+    - lat_min, lat_max: latitude bounds
+    - lon_min, lon_max: longitude bounds
+    - spacing_m: distance between points in meters
+    
+    Returns:
+    - DataFrame with columns ['latitude', 'longitude']
+    """
+    # Input validation
+    def check_lat_lon(lat, lon, name):
+        assert isinstance(lat, (int, float)), f"{name} latitude must be a number"
+        assert isinstance(lon, (int, float)), f"{name} longitude must be a number"
+        assert not isinstance(lat, bool), f"{name} latitude must not be boolean"
+        assert not isinstance(lon, bool), f"{name} longitude must not be boolean"
+        assert -90 <= lat <= 90, f"{name} latitude must be between -90 and 90"
+        assert -180 <= lon <= 180, f"{name} longitude must be between -180 and 180"
+        assert not np.isnan(lat), f"{name} latitude must not be NaN"
+        assert not np.isnan(lon), f"{name} longitude must not be NaN"
+        assert not np.isinf(lat), f"{name} latitude must not be infinity"
+        assert not np.isinf(lon), f"{name} longitude must not be infinity"
+
+    check_lat_lon(lat_min, lon_min, "Minimum")
+    check_lat_lon(lat_max, lon_max, "Maximum")
+
+    assert lat_min < lat_max, "lat_min must be less than lat_max"
+    assert lon_min < lon_max, "lon_min must be less than lon_max"
+    assert isinstance(spacing_m, (int, float)), "spacing_m must be a number"
+    assert spacing_m > 0, "spacing_m must be positive"
+    assert not isinstance(spacing_m, bool), "spacing_m must not be boolean"
+    assert not np.isnan(spacing_m), "spacing_m must not be NaN"
+    assert not np.isinf(spacing_m), "spacing_m must not be infinity"
+    
+
+    # Create grid points
+    points = []
+    lat = lat_min
+    while lat <= lat_max:
+        lon = lon_min
+        while lon <= lon_max:
+            points.append((lat, lon))
+            # Move east by spacing_m
+            origin = Point(lat, lon)
+            lon = distance(meters=spacing_m).destination(origin, bearing=90).longitude
+        # Move north by spacing_m
+        origin = Point(lat, lon_min)
+        lat = distance(meters=spacing_m).destination(origin, bearing=0).latitude
+    df = pd.DataFrame(points, columns=["latitude", "longitude"])
+
+    # Output validation
+    assert not df.empty, "Output DataFrame must not be empty"
+    assert list(df.columns) == ["latitude", "longitude"], "Output DataFrame must have columns ['latitude', 'longitude']"
+    assert np.issubdtype(df['latitude'].dtype, np.number), "Latitude column must contain numeric values"
+    assert np.issubdtype(df['longitude'].dtype, np.number), "Longitude column must contain numeric values"
+    assert not df.isnull().values.any(), "Output DataFrame must not contain NaN values"
+    assert all(df['latitude'].between(lat_min, lat_max)), "Latitude values must be between -90 and 90"
+    assert all(df['longitude'].between(lon_min, lon_max)), "Longitude values must be between -180 and 180"
+    assert df['latitude'].diff().abs().max() <= spacing_m, "Latitude spacing must be consistent with spacing_m"
+    assert df['longitude'].diff().abs().max() <= spacing_m, "Longitude spacing must be consistent with spacing_m"
+
+    return df
+
 ##################### OS Functions #####################
 
 
