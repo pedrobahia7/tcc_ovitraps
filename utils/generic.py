@@ -8,6 +8,8 @@ import os
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 import math
+from scipy.spatial import cKDTree
+
 ############# Music Functions :) #############
 
 
@@ -718,6 +720,51 @@ def smaller_distance_in_df(
     )
     return df.loc[distances.idxmin()]
 
+
+
+def nearest_neighbors(points1: np.ndarray, points2: np.ndarray) -> np.ndarray:
+    """
+    For each point in points1, find the closest point in points2.
+    Returns indices of nearest points in points2.
+
+    Parameters
+    ----------
+    - points1 (np.ndarray): Array of shape (n, d) with n points (latitude, longitude).
+    - points2 (np.ndarray): Array of shape (m, d) with m points (latitude, longitude).
+
+    Returns
+    -------
+    - indices (np.ndarray): Array of shape (n,) with indices of nearest points in points2.
+    
+    """
+    # Input validation
+    def check_array(arr,name):
+        
+        assert isinstance(arr, np.ndarray), f"{name} must be a numpy array"
+        assert not arr.size == 0, f"{name} must not be empty"
+        assert arr.ndim == 2, f"{name} must be 2D arrays"
+        assert np.issubdtype(arr.dtype, np.number), f"{name} must contain numeric values"
+        assert not np.issubdtype(arr.dtype, np.bool_), f"{name} must not be boolean"
+        assert not np.isnan(arr).any(), f"{name} must not contain NaN values"
+        assert not np.isinf(arr).any(), f"{name} must not contain infinity values"
+        
+    check_array(points1,"points1")
+    check_array(points2,"points2")
+    assert points1.shape[1] == points2.shape[1], "points1 and points2 must have the same number of dimensions"
+
+    # Build KDTree for points2 and query for nearest neighbors
+    tree = cKDTree(points2)
+    _, indices = tree.query(points1, k=1)
+
+    # Ouptut validation
+    assert isinstance(indices, np.ndarray), "Output must be a numpy array"
+    assert indices.ndim == 1, "Output must be a 1D array"
+    assert indices.shape[0] == points1.shape[0], "Output length must match points1 length"
+    assert np.issubdtype(indices.dtype, np.integer), "Output must contain integer values"
+    assert not np.isnan(indices).any(), "Output must not contain NaN values"
+    assert not np.isinf(indices).any(), "Output must not contain infinity values"
+
+    return indices
 
 ##################### OS Functions #####################
 
