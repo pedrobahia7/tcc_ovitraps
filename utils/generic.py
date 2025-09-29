@@ -9,7 +9,8 @@ from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 import math
 from scipy.spatial import cKDTree
-
+from geopy.distance import distance
+from geopy import Point
 ############# Music Functions :) #############
 
 
@@ -721,11 +722,13 @@ def smaller_distance_in_df(
     return df.loc[distances.idxmin()]
 
 
-
 def nearest_neighbors(points1: np.ndarray, points2: np.ndarray) -> np.ndarray:
     """
     For each point in points1, find the closest point in points2.
-    Returns indices of nearest points in points2.
+    Returns indices of nearest points in points2. This function uses
+    KDTree for efficient nearest neighbor search and is suitable for
+    large datasets and latitude/longitude coordinates for small distances 
+    (within a city).
 
     Parameters
     ----------
