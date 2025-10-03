@@ -6,6 +6,7 @@ calcular número de armadilhas que deveriam ser colocadas
 
 
 skater para regionalização
+estrutura da vizinhança para avaliar relação entre ovos e casos de dengue
 
 LER: 
     Artigos:
