@@ -1,10 +1,15 @@
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../utils")))
+
+import generic 
+import project_utils
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output, State, no_update
-import utils.generic as generic
-import utils.project_utils as project_utils
+from sklearn.linear_model import LinearRegression
+
 
 
 spacing_m = 200
@@ -193,7 +198,7 @@ app.layout = html.Div([
         ], style={"marginBottom": "20px", "textAlign": "left"}),
         
         dcc.Graph(id="map-selected", figure=base_map_figure(), 
-                 style={"height": "400px", "marginBottom": "50px"}),
+                 style={"height": "800px", "marginBottom": "50px"}),
         
         # Hidden storage
         dcc.Store(id="selected-points-store"),
@@ -265,7 +270,8 @@ def update_grid_data(n_clicks, new_spacing, current_spacing):
 )
 def update_scatter(xcol, ycol, grid_data):
     current_df = pd.DataFrame(grid_data)
-    # Ensure latitude/longitude are attached to every point
+    
+    # Create scatter plot
     fig = px.scatter(
         current_df,
         x=xcol,
@@ -274,6 +280,35 @@ def update_scatter(xcol, ycol, grid_data):
         title=f"Dengue Cases Correlation: {xcol.replace('cases_', '')} vs {ycol.replace('cases_', '')}"
     )
     fig.update_traces(marker=dict(size=8, opacity=0.7))
+    
+    # Add linear regression line
+    x_vals = current_df[xcol].values
+    y_vals = current_df[ycol].values
+    
+    # Remove points where either x or y is 0 for better regression
+    mask = (x_vals > 0) & (y_vals > 0)
+    if np.sum(mask) > 1:  # Need at least 2 points for regression
+        x_reg = x_vals[mask].reshape(-1, 1)
+        y_reg = y_vals[mask]
+        
+        # Fit linear regression
+        reg_model = LinearRegression()
+        reg_model.fit(x_reg, y_reg)
+        
+        # Create regression line points
+        x_min, x_max = x_vals.min(), x_vals.max()
+        x_line = np.linspace(x_min, x_max, 100).reshape(-1, 1)
+        y_line = reg_model.predict(x_line)
+        
+        # Add regression line to plot
+        fig.add_trace(go.Scatter(
+            x=x_line.flatten(),
+            y=y_line,
+            mode='lines',
+            name=f'Linear Regression (R² = {reg_model.score(x_reg, y_reg):.3f})',
+            line=dict(color='red', width=2)
+        ))
+    
     fig.update_layout(dragmode="lasso")
     return fig
 
