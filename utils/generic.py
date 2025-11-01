@@ -515,6 +515,7 @@ def cluster_points(
 def add_clustered_markers_to_map(
     mymap: folium.map,
     cluster_data: pd.DataFrame,
+    scale: float = 0.1,
 ) -> folium.map:
     """
     Add clustered markers to the folium map. It requires a DataFrame
@@ -537,7 +538,7 @@ def add_clustered_markers_to_map(
             continue
         folium.CircleMarker(
             location=[row["latitude"], row["longitude"]],
-            radius=row["count"] ** 0.3,  # scale size
+            radius=np.sqrt(row["count"]) * scale,
             popup=f"Cluster {int(row['cluster'])}, Count: {row['count']}",
             color="blue",
             fill=True,

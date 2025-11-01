@@ -145,11 +145,13 @@ def get_daily_dengue(
 
 def load_ovitraps_data(file_path):
     """Load ovitraps data from CSV."""
-    ovitraps_data = pd.read_csv(file_path, parse_dates=['dt_col', 'dt_instal'])
+    ovitraps_data = pd.read_csv(file_path, parse_dates=['dt_col', 'dt_instal'], dtype={'narmad': str, 'nplaca': str})
     
     assert ovitraps_data['dt_col'].notnull().all(), "'dt_col' must not contain null values"
     assert ovitraps_data['dt_instal'].notnull().all(), "'dt_instal' must not contain null values"
-
+    assert ovitraps_data['narmad'].dtype == object, "'narmad' must be of string type"
+    assert ovitraps_data['nplaca'].dtype == object, "'nplaca' must be of string type"
+    
     return ovitraps_data
 
 def get_biweekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
