@@ -182,6 +182,12 @@ app.layout = html.Div([
                     style={"width": "49%", "display": "inline-block", "marginLeft": "2%"})
         ]),
         
+        # Ratio map
+        html.Div([
+            html.H3("Ratio Comparison Map (First Year / Second Year)"),
+            dcc.Graph(id="map-ratio", style={"height": "500px", "marginTop": "20px"})
+        ], style={"marginTop": "30px"}),
+        
         # Separator
         html.Hr(style={"marginTop": "30px", "marginBottom": "30px"}),
         
@@ -268,16 +274,18 @@ def update_grid_data(n_clicks, new_spacing, current_spacing):
     Input("series-y", "value"),
     Input("grid-data-store", "data")
 )
-def update_scatter(xcol, ycol, grid_data):
+def update_scatter(xcol, ycol, grid_data, log_scale=True):
     current_df = pd.DataFrame(grid_data)
     
-    # Create scatter plot
+    # Create scatter plot in log scale
     fig = px.scatter(
         current_df,
         x=xcol,
         y=ycol,
         custom_data=["latitude", "longitude"], 
-        title=f"Dengue Cases Correlation: {xcol.replace('cases_', '')} vs {ycol.replace('cases_', '')}"
+        title=f"Dengue Cases Correlation: {xcol.replace('cases_', '')} vs {ycol.replace('cases_', '')} (Log Scale)",
+        log_x=log_scale,
+        log_y=log_scale
     )
     fig.update_traces(marker=dict(size=8, opacity=0.7))
     
@@ -434,6 +442,7 @@ def update_map(_, selected_points, grid_data, series_x, series_y):
 @app.callback(
     Output("map-series1", "figure"),
     Output("map-series2", "figure"),
+    Output("map-ratio", "figure"),
     Input("series-x", "value"),
     Input("series-y", "value"),
     Input("grid-data-store", "data"),
@@ -515,7 +524,57 @@ def update_series_maps(series_x, series_y, grid_data, current_spacing):
         )
     )
     
-    return fig1, fig2
+    # Create ratio map
+    # Calculate ratio with protection against division by zero
+    data_ratio = data_to_plot.copy()
+    # Transform zeros to ones for both series to avoid division issues
+    x_values = data_ratio[series_x].replace(0, 1)
+    y_values = data_ratio[series_y].replace(0, 1)
+    # Calculate ratio: first year / second year
+    data_ratio['ratio'] = x_values / y_values
+    
+    # Filter out points where both original values were 0 (no cases in either year)
+    data_ratio = data_ratio[(data_to_plot[series_x] > 0) | (data_to_plot[series_y] > 0)].copy()
+    
+    # Create the ratio map
+    # Use direct ratio values (all will be >= 0)
+    # Color scale: low ratios (second year higher) = blue, high ratios (first year higher) = red
+    fig_ratio = px.scatter_mapbox(
+        data_ratio,
+        lat="latitude", 
+        lon="longitude",
+        color='ratio',
+        color_continuous_scale='Viridis',  # Better for ratios starting from 0
+        title=f"Ratio Map: {series_x.replace('cases_', '')} / {series_y.replace('cases_', '')} (Grid: {current_spacing}m)",
+        custom_data=['ratio', series_x, series_y],
+        range_color=[0, data_ratio['ratio'].quantile(0.95)]  # Scale from 0 to 95th percentile to handle outliers
+    )
+    
+    # Update hover template to show ratio and actual counts
+    year_x = series_x.replace('cases_', '')
+    year_y = series_y.replace('cases_', '')
+    fig_ratio.update_traces(
+        hovertemplate=f"<b>Ratio: %{{customdata[0]:.2f}}</b><br><b>{year_x}: %{{customdata[1]}}</b><br><b>{year_y}: %{{customdata[2]}}</b><extra></extra>"
+    )
+    
+    # Update layout and styling
+    fig_ratio.update_layout(
+        mapbox_style="open-street-map",
+        mapbox_center={"lat": center_lat, "lon": center_lon},
+        mapbox_zoom=zoom_level,
+        margin={"l": 0, "r": 0, "t": 0, "b": 0}
+    )
+    
+    # Make circle size proportional to total cases for better visibility
+    total_cases = data_ratio[series_x] + data_ratio[series_y]
+    fig_ratio.update_traces(
+        marker=dict(
+            size=np.sqrt(total_cases) * grid_scale,
+            opacity=0.8
+        )
+    )
+    
+    return fig1, fig2, fig_ratio
 
 if __name__ == '__main__':
     app.run(debug=True)
