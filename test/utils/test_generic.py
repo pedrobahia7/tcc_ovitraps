@@ -667,8 +667,8 @@ class TestCreateGrid:
                     # Convert to approximate meters (rough calculation)
                     lat_diffs_m = lat_diffs * 111000  # 1 degree lat ≈ 111km
                     avg_lat_spacing = lat_diffs_m.mean()
-                    # Allow 20% tolerance due to Earth's curvature and approximations
-                    assert abs(avg_lat_spacing - spacing_m) / spacing_m < 0.2, \
+                    # Allow 10% tolerance due to Earth's curvature and approximations
+                    assert abs(avg_lat_spacing - spacing_m) / spacing_m < 0.1, \
                         f"Latitude spacing should be approximately {spacing_m}m for {test_description}"
         
         # Check for duplicates

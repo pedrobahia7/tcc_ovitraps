@@ -185,5 +185,10 @@ ovitraps_data['eggs_per_day'] = ovitraps_data['novos'] / ovitraps_data['days_exp
 ovitraps_data["epidemic_date"] = project_utils.get_epidemic_date(
     ovitraps_data
 )
+
+# Convert columns to string
+ovitraps_data['narmad'] = ovitraps_data['narmad'].astype(int).astype(str)
+ovitraps_data['nplaca'] = ovitraps_data['nplaca'].astype(int).astype(str)   
+
 # Save Data
 ovitraps_data.to_csv(params['all']['paths']['data']['processed']['ovitraps'], index=False)
