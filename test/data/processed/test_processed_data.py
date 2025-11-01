@@ -175,10 +175,15 @@ class TestProcessedData:
     def test_ovitraps_data_types(self, ovitraps_data):
         """Test ovitraps data types."""
         # Numeric columns
-        numeric_columns = ['semana', 'narmad', 'novos', 'semepid', 'days_expo', 'eggs_per_day']
+        numeric_columns = ['semana', 'novos', 'semepid', 'days_expo', 'eggs_per_day']
         for col in numeric_columns:
             assert pd.api.types.is_numeric_dtype(ovitraps_data[col]), f"{col} should be numeric"
         
+        # String columns
+        string_columns = ['narmad', 'closest_health_center', 'epidemic_date','anoepid', 'epidemic_date', 'nplaca']
+        for col in string_columns:
+            assert pd.api.types.is_string_dtype(ovitraps_data[col].dropna()), f"{col} should be string"
+
         # Check date columns can be parsed
         pd.to_datetime(ovitraps_data['dt_col'], errors="raise")
         pd.to_datetime(ovitraps_data['dt_instal'], errors="raise")
@@ -256,3 +261,46 @@ class TestProcessedData:
         
         assert len(invalid_dengue) == 0, f"Dengue data has invalid health centers: {invalid_dengue}"
         assert len(invalid_ovitraps) == 0, f"Ovitraps data has invalid health centers: {invalid_ovitraps}"
+
+    def test_daily_ovitraps_data(self, daily_ovitraps_data, ovitraps_data):
+        """Test daily ovitraps data structure and content."""
+        
+        # Check if traps in ovitraps_data and daily_ovitraps_data are consistent
+        ovitraps_traps = ovitraps_data.narmad.unique()
+        daily_traps = daily_ovitraps_data.columns
+        missing_traps = set(ovitraps_traps) - set(daily_traps)
+        assert len(missing_traps) == 0, f"Daily ovitraps data is missing traps: {missing_traps}"
+        missing_traps = set(daily_traps) - set(ovitraps_traps)
+        assert len(missing_traps) == 0, f"Ovitraps data is missing traps: {missing_traps}"
+
+        # Check date range 
+        date_index = pd.to_datetime(daily_ovitraps_data.index, errors="raise")
+        assert date_index.is_monotonic_increasing, "Date index should be sorted"
+        assert len(date_index) == (date_index.max() - date_index.min()).days + 1, "Date index should have no missing dates"
+
+        # Check that all values types and if they are non-negative or NaN
+        assert pd.api.types.is_numeric_dtype(daily_ovitraps_data.fillna(0)), "All values should be numeric"
+        assert (daily_ovitraps_data.fillna(0) >= 0).all().all(), "All values should be non-negative or NaN"
+
+        # Check if sum and mean calculations are correct
+        daily_ovitraps_sum = daily_ovitraps_data.sum(axis=1)
+        # Check date range 
+        date_index = pd.to_datetime(daily_ovitraps_sum.index, errors="raise")
+        assert date_index.is_monotonic_increasing, "Date index should be sorted"
+        assert len(date_index) == (date_index.max() - date_index.min()).days + 1, "Date index should have no missing dates"
+        # Check that all values types and if they are non-negative or NaN
+        assert pd.api.types.is_numeric_dtype(daily_ovitraps_sum.fillna(0)), "All values should be numeric"
+        assert (daily_ovitraps_sum.fillna(0) >= 0).all().all(), "All values should be non-negative or NaN"
+
+
+        daily_ovitraps_mean = daily_ovitraps_data.mean(axis=1)
+        # Check date range 
+        date_index = pd.to_datetime(daily_ovitraps_mean.index, errors="raise")
+        assert date_index.is_monotonic_increasing, "Date index should be sorted"
+        assert len(date_index) == (date_index.max() - date_index.min()).days + 1, "Date index should have no missing dates"
+        # Check that all values types and if they are non-negative or NaN
+        assert pd.api.types.is_numeric_dtype(daily_ovitraps_mean.fillna(0)), "All values should be numeric"
+        assert (daily_ovitraps_mean.fillna(0) >= 0).all().all(), "All values should be non-negative or NaN"
+
+        # Compare with ovitraps_data calculations
+        assert (daily_ovitraps_sum.isna() == daily_ovitraps_mean.isna()).all(), "Sum and mean should have NaN in the same days"
