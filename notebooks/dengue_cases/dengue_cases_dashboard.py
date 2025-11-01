@@ -185,7 +185,19 @@ app.layout = html.Div([
         # Ratio map
         html.Div([
             html.H3("Ratio Comparison Map (First Year / Second Year)"),
-            dcc.Graph(id="map-ratio", style={"height": "500px", "marginTop": "20px"})
+            html.Div([
+                html.Label("Min Cases for Ratio:", style={"fontWeight": "bold", "fontSize": "14px", "marginRight": "10px"}),
+                dcc.Input(
+                    id="min-cases-input",
+                    type="number",
+                    value=1, # default minimum cases
+                    min=0,
+                    step=1,
+                    style={"width": "80px", "fontSize": "12px"}
+                ),
+                html.Span("Filter low case areas", style={"fontSize": "12px", "color": "#666", "marginLeft": "10px"})
+            ], style={"marginBottom": "15px", "display": "flex", "alignItems": "center"}),
+            dcc.Graph(id="map-ratio", style={"height": "500px"})
         ], style={"marginTop": "30px"}),
         
         # Separator
@@ -274,18 +286,16 @@ def update_grid_data(n_clicks, new_spacing, current_spacing):
     Input("series-y", "value"),
     Input("grid-data-store", "data")
 )
-def update_scatter(xcol, ycol, grid_data, log_scale=True):
+def update_scatter(xcol, ycol, grid_data):
     current_df = pd.DataFrame(grid_data)
     
-    # Create scatter plot in log scale
+    # Create scatter plot
     fig = px.scatter(
         current_df,
         x=xcol,
         y=ycol,
         custom_data=["latitude", "longitude"], 
-        title=f"Dengue Cases Correlation: {xcol.replace('cases_', '')} vs {ycol.replace('cases_', '')} (Log Scale)",
-        log_x=log_scale,
-        log_y=log_scale
+        title=f"Dengue Cases Correlation: {xcol.replace('cases_', '')} vs {ycol.replace('cases_', '')}"
     )
     fig.update_traces(marker=dict(size=8, opacity=0.7))
     
@@ -446,9 +456,10 @@ def update_map(_, selected_points, grid_data, series_x, series_y):
     Input("series-x", "value"),
     Input("series-y", "value"),
     Input("grid-data-store", "data"),
-    Input("current-spacing-store", "data")
+    Input("current-spacing-store", "data"),
+    Input("min-cases-input", "value")
 )
-def update_series_maps(series_x, series_y, grid_data, current_spacing):
+def update_series_maps(series_x, series_y, grid_data, current_spacing, min_cases):
     # Always show all data points - static maps not affected by selection
     data_to_plot = pd.DataFrame(grid_data)
     center_lat = -19.922778
@@ -533,8 +544,11 @@ def update_series_maps(series_x, series_y, grid_data, current_spacing):
     # Calculate ratio: first year / second year
     data_ratio['ratio'] = x_values / y_values
     
-    # Filter out points where both original values were 0 (no cases in either year)
-    data_ratio = data_ratio[(data_to_plot[series_x] > 0) | (data_to_plot[series_y] > 0)].copy()
+    # Filter out points where either year has fewer cases than the minimum threshold
+    # This helps focus on meaningful comparisons and avoids noise from areas with very few cases
+    if min_cases is None:
+        min_cases = 1
+    data_ratio = data_ratio[(data_to_plot[series_x] >= min_cases) & (data_to_plot[series_y] >= min_cases)].copy()
     
     # Create the ratio map
     # Use direct ratio values (all will be >= 0)
@@ -545,7 +559,7 @@ def update_series_maps(series_x, series_y, grid_data, current_spacing):
         lon="longitude",
         color='ratio',
         color_continuous_scale='Viridis',  # Better for ratios starting from 0
-        title=f"Ratio Map: {series_x.replace('cases_', '')} / {series_y.replace('cases_', '')} (Grid: {current_spacing}m)",
+        title=f"Ratio Map: {series_x.replace('cases_', '')} / {series_y.replace('cases_', '')} (Grid: {current_spacing}m, Min: {min_cases} cases)",
         custom_data=['ratio', series_x, series_y],
         range_color=[0, data_ratio['ratio'].quantile(0.95)]  # Scale from 0 to 95th percentile to handle outliers
     )
