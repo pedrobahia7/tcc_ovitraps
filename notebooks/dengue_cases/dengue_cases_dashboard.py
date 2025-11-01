@@ -196,7 +196,15 @@ app.layout = html.Div([
                     style={"width": "80px", "fontSize": "12px"}
                 ),
                 html.Span("Filter low case areas", style={"fontSize": "12px", "color": "#666", "marginLeft": "10px"})
-            ], style={"marginBottom": "15px", "display": "flex", "alignItems": "center"}),
+            ], style={"marginBottom": "10px", "display": "flex", "alignItems": "center"}),
+            html.Div([
+                dcc.Checklist(
+                    id="relative-values-checkbox",
+                    options=[{"label": " Use normalized values (z-score)", "value": "relative"}],
+                    value=[],  # Default: use absolute values
+                    style={"fontSize": "14px"}
+                )
+            ], style={"marginBottom": "15px"}),
             dcc.Graph(id="map-ratio", style={"height": "500px"})
         ], style={"marginTop": "30px"}),
         
@@ -457,9 +465,10 @@ def update_map(_, selected_points, grid_data, series_x, series_y):
     Input("series-y", "value"),
     Input("grid-data-store", "data"),
     Input("current-spacing-store", "data"),
-    Input("min-cases-input", "value")
+    Input("min-cases-input", "value"),
+    Input("relative-values-checkbox", "value")
 )
-def update_series_maps(series_x, series_y, grid_data, current_spacing, min_cases):
+def update_series_maps(series_x, series_y, grid_data, current_spacing, min_cases, use_relative):
     # Always show all data points - static maps not affected by selection
     data_to_plot = pd.DataFrame(grid_data)
     center_lat = -19.922778
@@ -538,11 +547,61 @@ def update_series_maps(series_x, series_y, grid_data, current_spacing, min_cases
     # Create ratio map
     # Calculate ratio with protection against division by zero
     data_ratio = data_to_plot.copy()
-    # Transform zeros to ones for both series to avoid division issues
-    x_values = data_ratio[series_x].replace(0, 1)
-    y_values = data_ratio[series_y].replace(0, 1)
+    
+    # Check if relative values should be used
+    is_relative = 'relative' in use_relative if use_relative else False
+    
+    if is_relative:
+        # Calculate relative values using z-score normalization
+        # Normalize each year's values by their own mean and standard deviation
+        
+        # Z-score normalization for series_x (first year)
+        x_raw = data_ratio[series_x]
+        x_mean = x_raw.mean()
+        x_std = x_raw.std()
+        if x_std == 0:  # Handle case where all values are the same
+            x_normalized = np.zeros_like(x_raw)
+        else:
+            x_normalized = (x_raw - x_mean) / x_std
+        
+        # Z-score normalization for series_y (second year)
+        y_raw = data_ratio[series_y]
+        y_mean = y_raw.mean()
+        y_std = y_raw.std()
+        if y_std == 0:  # Handle case where all values are the same
+            y_normalized = np.zeros_like(y_raw)
+        else:
+            y_normalized = (y_raw - y_mean) / y_std
+        
+        # Shift z-scores to positive values for ratio calculation (add 3 to ensure positive values)
+        # Z-scores are typically between -3 and +3, so adding 3 makes them 0 to 6
+        x_values = x_normalized + 3
+        y_values = y_normalized + 3
+        
+        # Replace any remaining zero/negative values to avoid division issues
+        x_values = x_values.replace(0, 0.1)
+        y_values = y_values.replace(0, 0.1)
+        x_values = np.maximum(x_values, 0.1)  # Ensure all values are positive
+        y_values = np.maximum(y_values, 0.1)
+        
+        comparison_type = "normalized"
+    else:
+        # Use absolute values
+        # Transform zeros to ones for both series to avoid division issues
+        x_values = data_ratio[series_x].replace(0, 1)
+        y_values = data_ratio[series_y].replace(0, 1)
+        comparison_type = "absolute"
+    
     # Calculate ratio: first year / second year
     data_ratio['ratio'] = x_values / y_values
+    
+    # Store z-scores for hover display (if using normalized values)
+    if is_relative:
+        data_ratio['zscore_x'] = x_normalized
+        data_ratio['zscore_y'] = y_normalized
+    else:
+        data_ratio['zscore_x'] = np.nan  # Not applicable for absolute values
+        data_ratio['zscore_y'] = np.nan
     
     # Filter out points where either year has fewer cases than the minimum threshold
     # This helps focus on meaningful comparisons and avoids noise from areas with very few cases
@@ -559,17 +618,21 @@ def update_series_maps(series_x, series_y, grid_data, current_spacing, min_cases
         lon="longitude",
         color='ratio',
         color_continuous_scale='Viridis',  # Better for ratios starting from 0
-        title=f"Ratio Map: {series_x.replace('cases_', '')} / {series_y.replace('cases_', '')} (Grid: {current_spacing}m, Min: {min_cases} cases)",
-        custom_data=['ratio', series_x, series_y],
+        title=f"Ratio Map: {series_x.replace('cases_', '')} / {series_y.replace('cases_', '')} ({comparison_type.title()} Values - Grid: {current_spacing}m, Min: {min_cases} cases)",
+        custom_data=['ratio', series_x, series_y, 'zscore_x', 'zscore_y'],
         range_color=[0, data_ratio['ratio'].quantile(0.95)]  # Scale from 0 to 95th percentile to handle outliers
     )
     
     # Update hover template to show ratio and actual counts
     year_x = series_x.replace('cases_', '')
     year_y = series_y.replace('cases_', '')
-    fig_ratio.update_traces(
-        hovertemplate=f"<b>Ratio: %{{customdata[0]:.2f}}</b><br><b>{year_x}: %{{customdata[1]}}</b><br><b>{year_y}: %{{customdata[2]}}</b><extra></extra>"
-    )
+    
+    if is_relative:
+        hover_template = f"<b>{comparison_type.title()} Ratio: %{{customdata[0]:.2f}}</b><br><b>{year_x}: %{{customdata[1]}} cases</b><br><b>{year_y}: %{{customdata[2]}} cases</b><br><i>(Comparing z-score normalized values)</i><extra></extra>"
+    else:
+        hover_template = f"<b>{comparison_type.title()} Ratio: %{{customdata[0]:.2f}}</b><br><b>{year_x}: %{{customdata[1]}} cases</b><br><b>{year_y}: %{{customdata[2]}} cases</b><extra></extra>"
+    
+    fig_ratio.update_traces(hovertemplate=hover_template)
     
     # Update layout and styling
     fig_ratio.update_layout(
