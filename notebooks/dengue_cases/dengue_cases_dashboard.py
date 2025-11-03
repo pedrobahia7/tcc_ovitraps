@@ -45,7 +45,7 @@ dengue_filtered = dengue_filtered[
     (dengue_filtered['longitude'] > -44.1) & 
     (dengue_filtered['longitude'] < -43.87) & 
     (dengue_filtered['latitude'] > -20.03) & 
-    (dengue_filtered['latitude'] < -19.8)
+    (dengue_filtered['latitude'] < -19.85)
 ]
 
 
@@ -213,6 +213,20 @@ app.layout = html.Div([
         
         # Scatter plot and selected points map below
         html.H3("Interactive Point Selection"),
+        html.Div([
+            dcc.Checklist(
+                id="log-x-checkbox",
+                options=[{"label": " Log scale X-axis", "value": "log_x"}],
+                value=[],  # Default: linear scale
+                style={"fontSize": "14px", "marginRight": "20px", "display": "inline-block"}
+            ),
+            dcc.Checklist(
+                id="log-y-checkbox",
+                options=[{"label": " Log scale Y-axis", "value": "log_y"}],
+                value=[],  # Default: linear scale
+                style={"fontSize": "14px", "display": "inline-block"}
+            )
+        ], style={"marginBottom": "15px", "display": "flex", "alignItems": "center"}),
         dcc.Graph(id="scatter-plot", style={"height": "500px", "marginBottom": "20px"}),
         
         # Buttons for map interaction
@@ -292,10 +306,24 @@ def update_grid_data(n_clicks, new_spacing, current_spacing):
     Output("scatter-plot", "figure"),
     Input("series-x", "value"),
     Input("series-y", "value"),
-    Input("grid-data-store", "data")
+    Input("grid-data-store", "data"),
+    Input("log-x-checkbox", "value"),
+    Input("log-y-checkbox", "value")
 )
-def update_scatter(xcol, ycol, grid_data):
+def update_scatter(xcol, ycol, grid_data, log_x_checked, log_y_checked):
     current_df = pd.DataFrame(grid_data)
+    
+    # Check log scale options
+    use_log_x = 'log_x' in log_x_checked if log_x_checked else False
+    use_log_y = 'log_y' in log_y_checked if log_y_checked else False
+    
+    # Create title with log scale indicators
+    title_parts = []
+    if use_log_x:
+        title_parts.append("Log X")
+    if use_log_y:
+        title_parts.append("Log Y")
+    scale_info = f" ({', '.join(title_parts)})" if title_parts else ""
     
     # Create scatter plot
     fig = px.scatter(
@@ -303,7 +331,9 @@ def update_scatter(xcol, ycol, grid_data):
         x=xcol,
         y=ycol,
         custom_data=["latitude", "longitude"], 
-        title=f"Dengue Cases Correlation: {xcol.replace('cases_', '')} vs {ycol.replace('cases_', '')}"
+        title=f"Dengue Cases Correlation: {xcol.replace('cases_', '')} vs {ycol.replace('cases_', '')}{scale_info}",
+        log_x=use_log_x,
+        log_y=use_log_y
     )
     fig.update_traces(marker=dict(size=8, opacity=0.7))
     
@@ -311,8 +341,12 @@ def update_scatter(xcol, ycol, grid_data):
     x_vals = current_df[xcol].values
     y_vals = current_df[ycol].values
     
-    # Remove points where either x or y is 0 for better regression
-    mask = (x_vals > 0) & (y_vals > 0)
+    # Remove points where either x or y is 0 (especially important for log scales)
+    if use_log_x or use_log_y:
+        mask = (x_vals > 0) & (y_vals > 0)
+    else:
+        mask = np.ones(len(x_vals), dtype=bool)  # Include all points for linear scales
+    
     if np.sum(mask) > 1:  # Need at least 2 points for regression
         x_reg = x_vals[mask].reshape(-1, 1)
         y_reg = y_vals[mask]
@@ -322,7 +356,7 @@ def update_scatter(xcol, ycol, grid_data):
         reg_model.fit(x_reg, y_reg)
         
         # Create regression line points
-        x_min, x_max = x_vals.min(), x_vals.max()
+        x_min, x_max = x_vals[mask].min(), x_vals[mask].max()
         x_line = np.linspace(x_min, x_max, 100).reshape(-1, 1)
         y_line = reg_model.predict(x_line)
         
