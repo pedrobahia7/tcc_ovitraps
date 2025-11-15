@@ -41,12 +41,6 @@ dengue_data = pd.read_csv('../../data/processed/dengue_data.csv')
 
 # Filter data with coordinates and within Belo Horizonte bounds
 dengue_filtered = dengue_data[['latitude', 'longitude', 'anoepid']].dropna()
-dengue_filtered = dengue_filtered[
-    (dengue_filtered['longitude'] > -44.1) & 
-    (dengue_filtered['longitude'] < -43.87) & 
-    (dengue_filtered['latitude'] > -20.03) & 
-    (dengue_filtered['latitude'] < -19.85)
-]
 
 
 # Get available years
@@ -132,25 +126,27 @@ app.layout = html.Div([
     # Controls section at the top
     html.Div([
         html.Div([
-            html.Label("First Epidemic Year"),
+            html.Label("First Epidemic Year", style={"fontWeight": "bold", "fontSize": "12px", "marginBottom": "5px", "display": "block"}),
             dcc.Dropdown(
                 id="series-x",
                 options=[{"label": str(year) + mark, "value": f"cases_{year}"} for year, mark in zip(available_years, marks)],
-                value=f"cases_2015_16"
+                value=f"cases_2015_16",
+                style={"fontSize": "11px"}
             ),
-        ], style={"width": "20%", "display": "inline-block", "paddingRight": "20px"}),
+        ], style={"width": "22%", "display": "inline-block", "paddingRight": "2%", "verticalAlign": "top"}),
         
         html.Div([
-            html.Label("Second Epidemic Year"),
+            html.Label("Second Epidemic Year", style={"fontWeight": "bold", "fontSize": "12px", "marginBottom": "5px", "display": "block"}),
             dcc.Dropdown(
                 id="series-y", 
                 options=[{"label": str(year) + mark, "value": f"cases_{year}"} for year, mark in zip(available_years, marks)],
-                value=f"cases_2018_19"
+                value=f"cases_2018_19",
+                style={"fontSize": "11px"}
             ),
-        ], style={"width": "20%", "display": "inline-block", "paddingRight": "20px"}),
+        ], style={"width": "22%", "display": "inline-block", "paddingRight": "2%", "verticalAlign": "top"}),
         
         html.Div([
-            html.Label("Grid Spacing (meters):", style={"fontWeight": "bold", "fontSize": "12px"}),
+            html.Label("Grid Spacing (meters)", style={"fontWeight": "bold", "fontSize": "12px", "marginBottom": "5px", "display": "block"}),
             dcc.Input(
                 id="grid-spacing-input",
                 type="number",
@@ -158,18 +154,19 @@ app.layout = html.Div([
                 min=100,
                 max=5000,
                 step=50,
-                style={"width": "100px", "marginBottom": "10px", "fontSize": "11px"}
+                style={"width": "100%", "fontSize": "11px"}
             ),
-        ], style={"width": "15%", "display": "inline-block", "paddingRight": "20px"}),
+        ], style={"width": "22%", "display": "inline-block", "paddingRight": "2%", "verticalAlign": "top"}),
         
         html.Div([
+            html.Label("Grid Control", style={"fontWeight": "bold", "fontSize": "12px", "marginBottom": "5px", "display": "block"}),
             html.Button("Update Grid", id="update-grid-btn", 
                        style={"backgroundColor": "#28a745", "color": "white", "border": "none", 
-                             "padding": "6px 12px", "borderRadius": "4px", "fontSize": "12px", "marginBottom": "8px"}),
+                             "padding": "6px 12px", "borderRadius": "4px", "fontSize": "11px", "marginBottom": "5px", "display": "block"}),
             html.Div(f"Current: {spacing_m}m", id="current-spacing-display", 
-                    style={"fontSize": "11px", "color": "#666"})
-        ], style={"width": "15%", "display": "inline-block", "paddingRight": "20px"}),
-    ], style={"marginBottom": "30px", "padding": "20px", "backgroundColor": "#f8f9fa", "borderRadius": "5px"}),
+                    style={"fontSize": "10px", "color": "#666"})
+        ], style={"width": "22%", "display": "inline-block", "verticalAlign": "top"}),
+    ], style={"marginBottom": "30px", "padding": "20px", "backgroundColor": "#f8f9fa", "borderRadius": "5px", "display": "flex", "flexWrap": "wrap", "alignItems": "flex-start"}),
 
     # Main content area - full width
     html.Div([
@@ -205,7 +202,7 @@ app.layout = html.Div([
                     style={"fontSize": "14px"}
                 )
             ], style={"marginBottom": "15px"}),
-            dcc.Graph(id="map-ratio", style={"height": "500px"})
+            dcc.Graph(id="map-ratio", style={"height": "900px"})
         ], style={"marginTop": "30px"}),
         
         # Separator
@@ -508,7 +505,7 @@ def update_series_maps(series_x, series_y, grid_data, current_spacing, min_cases
     center_lat = -19.922778
     center_lon = -43.945556
     zoom_level = 10
-    grid_scale = 0.5
+    grid_scale = 0.7
     # Filter out points with zero cases for better visualization
     data_series1 = data_to_plot[data_to_plot[series_x] > 0].copy()
     data_series2 = data_to_plot[data_to_plot[series_y] > 0].copy()
