@@ -81,8 +81,8 @@ stages:
       size: 273805567
     - path: src/process_data_fast.py
       hash: md5
-      md5: 959fb1ce0bfc9837928dadbb223db8d7
-      size: 6200
+      md5: 6ba7284588ec68ac9a968402b515b937
+      size: 6386
     outs:
     - path: data/processed/dengue_data.csv
       hash: md5
@@ -184,3 +184,44 @@ stages:
       hash: md5
       md5: 8bc9064ad558cfe138b0382218961d06
       size: 30161
+  census_equivalence:
+    cmd: python src/census_equivalence_2010_2022.py
+    deps:
+    - path: data/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls
+      hash: md5
+      md5: 08409f75fb0f68e7afd95f847926f292
+      size: 81650176
+    - path: data/IBGE/2010/shapefiles/
+      hash: md5
+      md5: 44ae24924ef2ba197c27d9a73e330d2e.dir
+      size: 36610924
+      nfiles: 234
+    - path: data/IBGE/2022/shapefiles/MG_setores_CD2022.shp
+      hash: md5
+      md5: 107b597bda1188224d05a30e96ab8290
+      size: 155257364
+    - path: src/census_equivalence_2010_2022.py
+      hash: md5
+      md5: 42cc234bcdbb37ef43b369dbc3f6263a
+      size: 13409
+    outs:
+    - path: data/processed/bh_sectors_2010_with_population.geojson
+      hash: md5
+      md5: 70bcf49beff4f717b75e603611a1fc9a
+      size: 7478255
+    - path: data/processed/bh_sectors_2022_with_2010_population.geojson
+      hash: md5
+      md5: b0b99e99ff60e823526a6e08301da01a
+      size: 10810333
+    - path: data/processed/census_equivalence_conversion_log.csv
+      hash: md5
+      md5: 89deacb666f15455c8c8b3378217cede
+      size: 810561
+    - path: data/processed/census_equivalence_sector_linkage.csv
+      hash: md5
+      md5: 300306fa17b124b06d72ae22aef3870c
+      size: 3872750
+    - path: data/processed/population_2010_to_2022_equivalent.csv
+      hash: md5
+      md5: dbb17a87b2fac6c488e348ec8f1226ed
+      size: 181999
