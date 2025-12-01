@@ -111,7 +111,7 @@ class TestProcessedData:
         """Test dengue data structure and required columns."""
         required_columns = [
             'semana', 'ano', 'anoepid', 'semepid', 'dt_notific', 
-            'Dengue', 'closest_health_center', 'epidemic_date'
+            'Dengue', 'closest_health_center', 'epidemic_date', 'population_sector'
         ]
         
         for col in required_columns:
@@ -166,7 +166,7 @@ class TestProcessedData:
         required_columns = [
             'semana', 'dt_col', 'dt_instal', 'narmad', 'novos',
             'semepid', 'anoepid', 'days_expo', 'eggs_per_day',
-            'closest_health_center', 'epidemic_date'
+            'closest_health_center', 'epidemic_date', 'population_sector'
         ]
         
         for col in required_columns:
@@ -304,3 +304,36 @@ class TestProcessedData:
 
         # Compare with ovitraps_data calculations
         assert (daily_ovitraps_sum.isna() == daily_ovitraps_mean.isna()).all(), "Sum and mean should have NaN in the same days"
+
+    def test_population_sector_assignment(self, dengue_data, ovitraps_data):
+        """Test population sector assignment functionality."""
+        
+        # Check that population_sector column exists and has valid format
+        assert 'population_sector' in dengue_data.columns, "Dengue data should have population_sector column"
+        assert 'population_sector' in ovitraps_data.columns, "Ovitraps data should have population_sector column"
+        
+        # Check that population sectors follow expected format for non-null values
+        dengue_valid_sectors = dengue_data['population_sector'].dropna()
+        ovitraps_valid_sectors = ovitraps_data['population_sector'].dropna()
+        
+        if len(dengue_valid_sectors) > 0:
+            # Sector IDs should be strings starting with 3106200 (Belo Horizonte code)
+            dengue_sector_pattern = dengue_valid_sectors.astype(str).str.startswith('3106200')
+            assert dengue_sector_pattern.all(), "All dengue sector IDs should start with 3106200 (Belo Horizonte)"
+            
+        if len(ovitraps_valid_sectors) > 0:
+            # Sector IDs should be strings starting with 3106200 (Belo Horizonte code)
+            ovitraps_sector_pattern = ovitraps_valid_sectors.astype(str).str.startswith('3106200')
+            assert ovitraps_sector_pattern.all(), "All ovitrap sector IDs should start with 3106200 (Belo Horizonte)"
+        
+        # Test coverage - records with coordinates should have higher assignment rates
+        dengue_with_coords = dengue_data[dengue_data['latitude'].notna() & dengue_data['longitude'].notna()]
+        ovitraps_with_coords = ovitraps_data[ovitraps_data['latitude'].notna() & ovitraps_data['longitude'].notna()]
+        
+        if len(dengue_with_coords) > 0:
+            dengue_assignment_rate = dengue_with_coords['population_sector'].notna().mean()
+            assert dengue_assignment_rate >= 0.5, f"Expected at least 50% sector assignment for dengue records with coordinates, got {dengue_assignment_rate:.1%}"
+            
+        if len(ovitraps_with_coords) > 0:
+            ovitraps_assignment_rate = ovitraps_with_coords['population_sector'].notna().mean()
+            assert ovitraps_assignment_rate >= 0.9, f"Expected at least 90% sector assignment for ovitrap records with coordinates, got {ovitraps_assignment_rate:.1%}"

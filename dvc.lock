@@ -81,21 +81,21 @@ stages:
       size: 273805567
     - path: src/process_data_fast.py
       hash: md5
-      md5: 6ba7284588ec68ac9a968402b515b937
-      size: 6386
+      md5: 71c9db296eb8f1dcc41c515af9ab34d6
+      size: 6721
     outs:
-    - path: data/processed/dengue_data.csv
+    - path: data/processed/add_population_sectors/dengue_data.csv
       hash: md5
       md5: b998c2b6176b4c144c7b0a1bbd500201
       size: 176798996
+    - path: data/processed/add_population_sectors/ovitraps_data.csv
+      hash: md5
+      md5: 75d3c549781ad6d96b7a1ac420a456a5
+      size: 284897581
     - path: data/processed/health_centers.csv
       hash: md5
       md5: 88d0536056166b2560c6f260de716162
       size: 8640
-    - path: data/processed/ovitraps_data.csv
-      hash: md5
-      md5: 75d3c549781ad6d96b7a1ac420a456a5
-      size: 284897581
   raw_data_test:
     cmd:
     - pytest test/data/raw/test_raw_data.py
@@ -225,3 +225,60 @@ stages:
       hash: md5
       md5: dbb17a87b2fac6c488e348ec8f1226ed
       size: 181999
+  process_population_data:
+    cmd: python src/census_equivalence_2010_2022.py
+    deps:
+    - path: data/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls
+      hash: md5
+      md5: 08409f75fb0f68e7afd95f847926f292
+      size: 81650176
+    - path: data/IBGE/2010/shapefiles/
+      hash: md5
+      md5: 44ae24924ef2ba197c27d9a73e330d2e.dir
+      size: 36610924
+      nfiles: 234
+    - path: data/IBGE/2022/shapefiles/MG_setores_CD2022.shp
+      hash: md5
+      md5: 107b597bda1188224d05a30e96ab8290
+      size: 155257364
+    - path: src/census_equivalence_2010_2022.py
+      hash: md5
+      md5: dbfe2afa3ff85442c60d0b2e220c1b04
+      size: 15888
+    outs:
+    - path: data/processed/bh_sectors_2022_with_populations.geojson
+      hash: md5
+      md5: 479a5d3f31facc2e3a4127f11a270d08
+      size: 10763766
+    - path: data/processed/sector_population_comparison.csv
+      hash: md5
+      md5: b6df61c69be21092929ca91d2cc17f19
+      size: 128588
+  add_population_sectors:
+    cmd: python src/add_population_sectors.py
+    deps:
+    - path: data/processed/add_population_sectors/dengue_data.csv
+      hash: md5
+      md5: b998c2b6176b4c144c7b0a1bbd500201
+      size: 176798996
+    - path: data/processed/add_population_sectors/ovitraps_data.csv
+      hash: md5
+      md5: 75d3c549781ad6d96b7a1ac420a456a5
+      size: 284897581
+    - path: data/processed/bh_sectors_2022_with_populations.geojson
+      hash: md5
+      md5: 479a5d3f31facc2e3a4127f11a270d08
+      size: 10763766
+    - path: src/add_population_sectors.py
+      hash: md5
+      md5: b87212a6d10fa9f4694c609079a4315f
+      size: 9509
+    outs:
+    - path: data/processed/dengue_data.csv
+      hash: md5
+      md5: 877a66868b6c1b22f8033a71e083e706
+      size: 184717671
+    - path: data/processed/ovitraps_data.csv
+      hash: md5
+      md5: 5ca3eac93e69350476dfd451384d4f92
+      size: 293589421

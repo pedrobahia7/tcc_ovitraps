@@ -44,6 +44,19 @@ stages:
       - ${all.paths.data.processed.slow.ovitraps}:
           persist: true
 
+  process_population_data:
+    cmd: python src/census_equivalence_2010_2022.py
+    deps:
+      - src/census_equivalence_2010_2022.py
+      - data/IBGE/2010/shapefiles/
+      - data/IBGE/2022/shapefiles/MG_setores_CD2022.shp
+      - data/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls
+    outs:
+      - ${all.paths.data.processed.census_equivalence.population_2010_to_2022}:
+          persist: true
+      - ${all.paths.data.processed.census_equivalence.sectors_geojson}:
+          persist: true
+
   fast_processing:
     cmd: python src/process_data_fast.py
     deps:
@@ -53,8 +66,19 @@ stages:
       - ${all.paths.data.processed.slow.ovitraps}
     outs:
       - ${all.paths.data.processed.health_centers}
-      - ${all.paths.data.processed.dengue}
+      - ${all.paths.data.processed.add_population_sectors.dengue}
+      - ${all.paths.data.processed.add_population_sectors.ovitraps}
+
+  add_population_sectors:
+    cmd: python src/add_population_sectors.py
+    deps:
+      - src/add_population_sectors.py
+      - ${all.paths.data.processed.add_population_sectors.ovitraps}
+      - ${all.paths.data.processed.add_population_sectors.dengue}
+      - ${all.paths.data.processed.census_equivalence.sectors_geojson}
+    outs:
       - ${all.paths.data.processed.ovitraps}
+      - ${all.paths.data.processed.dengue}
       
   daily_ovitraps:
     cmd: python src/daily_ovitraps.py
@@ -72,25 +96,6 @@ stages:
       - ${all.paths.data.processed.dengue}
       - ${all.paths.data.processed.ovitraps}
       - ${all.paths.data.processed.daily_ovitraps}
-
-  census_equivalence:
-    cmd: python src/census_equivalence_2010_2022.py
-    deps:
-      - src/census_equivalence_2010_2022.py
-      - data/IBGE/2010/shapefiles/
-      - data/IBGE/2022/shapefiles/MG_setores_CD2022.shp
-      - data/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls
-    outs:
-      - ${all.paths.data.processed.census_equivalence.population_2010_to_2022}:
-          persist: true
-      - ${all.paths.data.processed.census_equivalence.conversion_log}:
-          persist: true
-      - ${all.paths.data.processed.census_equivalence.sector_linkage}:
-          persist: true
-      - ${all.paths.data.processed.census_equivalence.sectors_2022_geojson}:
-          persist: true
-      - ${all.paths.data.processed.census_equivalence.sectors_2010_geojson}:
-          persist: true
 
   libraries_tests:
     cmd: pytest test/utils/test_project_utils.py

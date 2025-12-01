@@ -16,11 +16,11 @@ all:
         health_centers: data/processed/health_centers.csv
         daily_ovitraps: data/processed/daily_ovitraps_data.csv
         census_equivalence:
-          population_2010_to_2022: data/processed/population_2010_to_2022_equivalent.csv
-          conversion_log: data/processed/census_equivalence_conversion_log.csv
-          sector_linkage: data/processed/census_equivalence_sector_linkage.csv
-          sectors_2022_geojson: data/processed/bh_sectors_2022_with_2010_population.geojson
-          sectors_2010_geojson: data/processed/bh_sectors_2010_with_population.geojson
+          population_2010_to_2022: data/processed/sector_population_comparison.csv
+          sectors_geojson: data/processed/bh_sectors_2022_with_populations.geojson
+        add_population_sectors:
+          ovitraps: data/processed/add_population_sectors/ovitraps_data.csv
+          dengue: data/processed/add_population_sectors/dengue_data.csv
         slow:
           folder: data/processed/slow/
           ovitraps: data/processed/slow/ovitraps_data.csv

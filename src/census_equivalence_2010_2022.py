@@ -51,9 +51,10 @@ def load_shapefiles():
     return bh_setores_gdf, bh_sectors_gdf_2022
 
 def load_population_data():
-    """Load 2010 population data."""
-    logger.info("Loading 2010 population data...")
+    """Load 2010 and 2022 population data."""
+    logger.info("Loading population data...")
     
+    # Load 2010 population data
     data_2010_path = Path("data/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls")
     
     if data_2010_path.exists():
@@ -63,12 +64,41 @@ def load_population_data():
     else:
         belo_horizonte_df = None
     
+    # Load 2022 population data
+    data_2022_path = Path("data/IBGE/2022/population/Agregados_por_setores_basico_BR_20250417.csv")
+    pop_2022 = {}
+    
+    if data_2022_path.exists():
+        logger.info("Loading 2022 population data...")
+        try:
+            # Try different encodings for the CSV file
+            for encoding in ['latin-1', 'iso-8859-1', 'cp1252', 'utf-8']:
+                try:
+                    df_2022 = pd.read_csv(data_2022_path, sep=';', encoding=encoding)
+                    logger.info(f"Successfully loaded 2022 data with {encoding} encoding")
+                    break
+                except UnicodeDecodeError:
+                    continue
+            else:
+                raise Exception("Could not read 2022 population file with any encoding")
+            
+            # Filter for Belo Horizonte (municipality code 3106200)
+            bh_2022_df = df_2022[df_2022['CD_MUN'] == 3106200].copy()
+            pop_2022 = dict(zip(bh_2022_df['CD_SETOR'].astype(str), bh_2022_df['v0001']))
+            logger.info(f"2022 population data loaded: {len(pop_2022):,} sectors")
+        except Exception as e:
+            logger.warning(f"Error loading 2022 population data: {e}")
+            pop_2022 = {}
+    else:
+        logger.warning("2022 population data not found")
+        pop_2022 = {}
+    
     if belo_horizonte_df is not None:
         pop_2010 = dict(zip(belo_horizonte_df['Cod_setor'].astype(str), belo_horizonte_df['V014']))
-        logger.info(f"Population mapped for {len(pop_2010):,} sectors")
-        return pop_2010, belo_horizonte_df
+        logger.info(f"Population mapped for {len(pop_2010):,} sectors (2010)")
+        return pop_2010, belo_horizonte_df, pop_2022
     
-    return None, None
+    return None, None, pop_2022
 
 def perform_spatial_intersection(bh_setores_gdf, bh_sectors_gdf_2022):
     """Perform spatial intersection analysis between 2010 and 2022 sectors."""
@@ -107,7 +137,7 @@ def perform_spatial_intersection(bh_setores_gdf, bh_sectors_gdf_2022):
     logger.info(f"All overlaps included: {len(sector_linkage):,}")
     return sector_linkage
 
-def convert_population(sector_linkage, pop_2010):
+def convert_population(sector_linkage, pop_2010, pop_2022):
     """Convert 2010 population to 2022 sector boundaries."""
     logger.info("Applying spatial-based population redistribution algorithm...")
     
@@ -215,11 +245,11 @@ def main():
         bh_setores_gdf, bh_sectors_gdf_2022 = load_shapefiles()
         
         if bh_setores_gdf is not None and bh_sectors_gdf_2022 is not None:
-            pop_2010, belo_horizonte_df = load_population_data()
+            pop_2010, belo_horizonte_df, pop_2022 = load_population_data()
             
             if pop_2010 is not None:
                 sector_linkage = perform_spatial_intersection(bh_setores_gdf, bh_sectors_gdf_2022)
-                equivalent_population_2022, conversion_df, pop_2022_equivalent = convert_population(sector_linkage, pop_2010)
+                equivalent_population_2022, conversion_df, pop_2022_equivalent = convert_population(sector_linkage, pop_2010, pop_2022)
                 
                 # Create output directory
                 output_dir = Path("data/processed")
@@ -228,30 +258,49 @@ def main():
                 # Save results
                 logger.info("Saving conversion results...")
                 
-                # Save equivalent population data
-                equivalent_population_2022.to_csv(output_dir / "population_2010_to_2022_equivalent.csv", index=False)
-                logger.info(f"Saved equivalent population data: {len(equivalent_population_2022):,} sectors")
+                # Create the required CSV with sector ID, 2010 population, and 2022 population
+                logger.info("Creating sector population comparison CSV...")
                 
-                # Save conversion log
-                conversion_df.to_csv(output_dir / "census_equivalence_conversion_log.csv", index=False)
-                logger.info(f"Saved conversion log: {len(conversion_df):,} conversion records")
+                # Get all unique 2022 sectors
+                all_2022_sectors = bh_sectors_gdf_2022['CD_SETOR'].astype(str).tolist()
                 
-                # Save sector linkage
-                sector_linkage.to_csv(output_dir / "census_equivalence_sector_linkage.csv", index=False)
-                logger.info(f"Saved sector linkage: {len(sector_linkage):,} spatial relationships")
+                # Create the output DataFrame
+                sector_comparison = []
+                for sector_id in all_2022_sectors:
+                    pop_2010_equiv = round(pop_2022_equivalent.get(sector_id, 0))  # Round 2010 population to integer
+                    pop_2022_actual = pop_2022.get(sector_id, 0)  # Actual 2022 population (already integer)
+                    
+                    sector_comparison.append({
+                        'sector_id': sector_id,
+                        'population_2010': pop_2010_equiv,
+                        'population_2022': pop_2022_actual
+                    })
                 
-                # Save 2022 sectors with equivalent population (for visualization)
-                bh_sectors_with_pop = bh_sectors_gdf_2022.copy()
-                bh_sectors_with_pop['pop_2010_equivalent'] = bh_sectors_with_pop['CD_SETOR'].astype(str).map(pop_2022_equivalent)
-                bh_sectors_with_pop.to_file(output_dir / "bh_sectors_2022_with_2010_population.geojson", driver="GeoJSON")
-                logger.info(f"Saved 2022 sectors GeoJSON with equivalent population: {len(bh_sectors_with_pop):,} sectors")
+                # Create DataFrame and save CSV
+                sector_comparison_df = pd.DataFrame(sector_comparison)
+                sector_comparison_df.to_csv(output_dir / "population_data.csv", index=False)
+                logger.info(f"Saved sector population comparison CSV: {len(sector_comparison_df):,} sectors")
                 
-                # Save 2010 sectors (for comparison)
-                bh_setores_with_pop = bh_setores_gdf.copy()
-                pop_2010_dict = dict(zip(belo_horizonte_df['Cod_setor'].astype(str), belo_horizonte_df['V014']))
-                bh_setores_with_pop['pop_2010_original'] = bh_setores_with_pop['CD_GEOCODI'].astype(str).map(pop_2010_dict)
-                bh_setores_with_pop.to_file(output_dir / "bh_sectors_2010_with_population.geojson", driver="GeoJSON")
-                logger.info(f"Saved 2010 sectors GeoJSON with population: {len(bh_setores_with_pop):,} sectors")
+                # Save the GeoJSON of 2022 sectors with both populations
+                bh_sectors_with_both_pop = bh_sectors_gdf_2022.copy()
+                bh_sectors_with_both_pop['pop_2010'] = bh_sectors_with_both_pop['CD_SETOR'].astype(str).map(pop_2022_equivalent).fillna(0).round().astype(int)
+                bh_sectors_with_both_pop['pop_2022'] = bh_sectors_with_both_pop['CD_SETOR'].astype(str).map(pop_2022).fillna(0).astype(int)
+                
+                # Save as GeoJSON
+                bh_sectors_with_both_pop.to_file(output_dir / "bh_sectors_2022_with_populations.geojson", driver="GeoJSON")
+                logger.info(f"Saved 2022 sectors GeoJSON with both populations: {len(bh_sectors_with_both_pop):,} sectors")
+                
+                # Print summary statistics
+                total_pop_2010 = sector_comparison_df['population_2010'].sum()
+                total_pop_2022 = sector_comparison_df['population_2022'].sum()
+                sectors_with_2010_data = (sector_comparison_df['population_2010'] > 0).sum()
+                sectors_with_2022_data = (sector_comparison_df['population_2022'] > 0).sum()
+                
+                logger.info(f"Summary statistics:")
+                logger.info(f"  Total 2010 population (equivalent): {total_pop_2010:,}")
+                logger.info(f"  Total 2022 population (actual): {total_pop_2022:,}")
+                logger.info(f"  Sectors with 2010 data: {sectors_with_2010_data:,} / {len(sector_comparison_df):,}")
+                logger.info(f"  Sectors with 2022 data: {sectors_with_2022_data:,} / {len(sector_comparison_df):,}")
                 
                 logger.info("Census equivalence conversion completed successfully!")
                 logger.info(f"Conservation rate: {conversion_df['pop_converted'].sum()/sector_linkage.groupby('code_2010')['pop_2010'].first().sum()*100:.2f}%")

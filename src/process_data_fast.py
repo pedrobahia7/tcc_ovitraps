@@ -68,10 +68,6 @@ dengue_data.reset_index(drop=True, inplace=True)
 # Epidemic date
 dengue_data["epidemic_date"] = project_utils.get_epidemic_date(dengue_data)
 
-# Save
-dengue_data.to_csv(params['all']['paths']['data']['processed']['dengue'], index=False)
-
-
 # %% Ovitraps data
 # Process
 print("Processing ovitraps data")
@@ -190,5 +186,12 @@ ovitraps_data["epidemic_date"] = project_utils.get_epidemic_date(
 ovitraps_data['narmad'] = ovitraps_data['narmad'].astype(int).astype(str)
 ovitraps_data['nplaca'] = ovitraps_data['nplaca'].astype(int).astype(str)   
 
-# Save Data
-ovitraps_data.to_csv(params['all']['paths']['data']['processed']['ovitraps'], index=False)
+# Create intermediate directory
+os.makedirs('data/processed/add_population_sectors', exist_ok=True)
+
+# Save Data to intermediate location and final location
+ovitraps_data.to_csv(params['all']['paths']['data']['processed']['add_population_sectors']['ovitraps'], index=False)
+dengue_data.to_csv(params['all']['paths']['data']['processed']['add_population_sectors']['dengue'], index=False)
+
+# Also save health centers to final location
+health_centers.to_csv(params['all']['paths']['data']['processed']['health_centers'], index=False)
