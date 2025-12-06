@@ -258,6 +258,12 @@ def main():
                 # Save results
                 logger.info("Saving conversion results...")
                 
+                # Save the sector equivalence mapping (2010 → 2022)
+                logger.info("Saving sector equivalence mapping (2010 → 2022)...")
+                equivalence_mapping = sector_linkage[['code_2010', 'code_2022', 'fraction_of_2010', 'fraction_of_2022', 'intersection_area']].copy()
+                equivalence_mapping.to_csv(output_dir / "sector_equivalence_2010_to_2022.csv", index=False)
+                logger.info(f"Saved sector equivalence mapping: {len(equivalence_mapping):,} relationships")
+                
                 # Create the required CSV with sector ID, 2010 population, and 2022 population
                 logger.info("Creating sector population comparison CSV...")
                 
