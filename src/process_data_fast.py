@@ -104,11 +104,13 @@ ovitraps_data.loc[ovitraps_data["dt_col"] == "2032-09-14", "dt_col"] = (
 
 def correct_value(narmad, dt_col, column, new_value):
     assert not ovitraps_data.loc[
-        (ovitraps_data["narmad"] == narmad) & (ovitraps_data["dt_col"] == dt_col),
+        (ovitraps_data["narmad"] == narmad) & (
+        True if dt_col is None else (ovitraps_data["dt_col"] == dt_col)),
         column].empty, f"Value for narmad={narmad}, dt_col={dt_col} does not exist in {column}"
 
     ovitraps_data.loc[
-        (ovitraps_data["narmad"] == narmad) & (ovitraps_data["dt_col"] == dt_col),
+        (ovitraps_data["narmad"] == narmad) & 
+        (True if dt_col is None else (ovitraps_data["dt_col"] == dt_col)),
         column,
     ] = new_value
     
@@ -117,6 +119,25 @@ correct_value(901013, "2017-04-20", "dt_col", "2016-03-08")
 correct_value(901199, "2021-01-27", "dt_col", "2020-04-13") 
 correct_value(909027, "2025-05-08", "dt_col", "2024-05-08")
 correct_value(906071, "2022-08-18", "novos", 50) # Correct wrong novos according to old data frame
+
+# Correct coordinates for traps with overlapping coordinates. Each correction was
+# made based on inspection of original data sheets and explained below:
+
+# CEP of this trap is very far from the original coordinates
+correct_value(904068,None,"latitude", -19.87999615)
+correct_value(904068,None,"longitude", -43.92464141)
+
+# This trap was deactivated in 2016, while the other with same coordinates (908104) is still active
+# Both have the same CEP, so I will slightly change the coordinates
+aux_lat, aux_lon = ovitraps_data[ovitraps_data['narmad']==908104][['latitude','longitude']].unique()[0]
+correct_value(908105,None,"latitude", aux_lat + 0.0002)
+correct_value(908105,None,"longitude", aux_lon + 0.0002)
+
+# This trap and the other with the same coordinates (903151) were deactivated in 2023 and have the same CEP.
+# I will slightly change the coordinates of one of them
+aux_lat, aux_lon = ovitraps_data[ovitraps_data['narmad']==903152][['latitude','longitude']].unique()[0]
+correct_value(903152,None,"latitude", aux_lat - 0.0002)
+correct_value(903152,None,"longitude", aux_lon - 0.0002)
 
 # Convert date columns to datetime format and standardize to YYYY-MM-DD
 ovitraps_data['dt_col'] = pd.to_datetime(ovitraps_data['dt_col'], format="mixed").dt.normalize()
@@ -181,6 +202,11 @@ ovitraps_data['eggs_per_day'] = ovitraps_data['novos'] / ovitraps_data['days_exp
 ovitraps_data["epidemic_date"] = project_utils.get_epidemic_date(
     ovitraps_data
 )
+# Add biweek column
+epi_year = ovitraps_data['epidemic_date'].str.split('W').str[0]
+week_num = ovitraps_data['epidemic_date'].str.split('W').str[1].astype(int)
+biweek_num = ((week_num + 1) // 2) * 2
+ovitraps_data['biweek'] = epi_year + 'W' + biweek_num.astype(str).str.zfill(2)
 
 # Convert columns to string
 ovitraps_data['narmad'] = ovitraps_data['narmad'].astype(int).astype(str)
