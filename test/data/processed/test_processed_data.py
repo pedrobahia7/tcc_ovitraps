@@ -91,8 +91,8 @@ class TestProcessedData:
         assert health_centers_data['longitude'].notnull().all(), "longitude should not have null values"
         
         # Check coordinate ranges (assuming Brazilian coordinates)
-        assert health_centers_data['latitude'].between(-35, 5).all(), "latitude should be in valid range for Brazil"
-        assert health_centers_data['longitude'].between(-75, -30).all(), "longitude should be in valid range for Brazil"
+        assert health_centers_data['latitude'].between(-25, -15).all(), "latitude should be in valid range for Brazil"
+        assert health_centers_data['longitude'].between(-50, -40).all(), "longitude should be in valid range for Brazil"
 
     def test_health_centers_data_quality(self, health_centers_data):
         """Test health centers data quality."""
@@ -232,6 +232,29 @@ class TestProcessedData:
         assert ((np.isclose(actual_eggs_per_day.values, expected_eggs_per_day.values, atol=0.01, equal_nan=True)).all(),
                  "eggs_per_day calculation should be correct")
             
+    def test_ovitraps_coordinates(self, ovitraps_data):
+        """Test ovitraps coordinate validity."""
+
+
+        # Check coordinate ranges (assuming Brazilian coordinates)
+        assert ovitraps_data['latitude'].between(-25, -15).all(), "latitude should be in valid range for Brazil"
+        assert ovitraps_data['longitude'].between(-50, -40).all(), "longitude should be in valid range for Brazil"
+
+
+        # Check for duplicate coordinates within the same narmad
+        same_armad_coord = ovitraps_data.groupby('narmad')[['latitude','longitude']].apply(lambda x: x.drop_duplicates().values.tolist())
+        for key, coord_list in same_armad_coord.items():
+            assert len(coord_list) <= 1, f"narmad {key} has multiple coordinates: {coord_list}"
+
+
+
+
+        
+        # Check for same coordinates across different narmads
+        coord_groups = ovitraps_data.groupby(['latitude', 'longitude'])['narmad'].nunique()
+        overlapping_coords = coord_groups[coord_groups > 1]
+        assert overlapping_coords.empty, f"Coordinates {overlapping_coords.index.tolist()} are shared by multiple narmads"
+
 
     @pytest.mark.slow
     def test_ovitrap_overlapping_installations(self, ovitraps_data):
