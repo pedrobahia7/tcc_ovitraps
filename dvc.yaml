@@ -6,12 +6,21 @@ stages:
       - ${all.paths.data.raw.health_centers}
       - ${all.paths.data.raw.dengue}
       - ${all.paths.data.raw.ovitraps}
+      - ${all.paths.data.raw.ibge_2010_population}
+      - ${all.paths.data.raw.ibge_2022_population}
+      - ${all.paths.data.raw.ibge_sector_history}
     outs:
       - ${all.paths.data.raw.health_centers_csv}:
           persist: true
       - ${all.paths.data.raw.dengue_csv}:
           persist: true
       - ${all.paths.data.raw.ovitraps_csv}:
+          persist: true
+      - ${all.paths.data.raw.ibge_2010_population_csv}:
+          persist: true
+      - ${all.paths.data.raw.ibge_2022_population_csv}:
+          persist: true
+      - ${all.paths.data.raw.ibge_sector_history_csv}:
           persist: true
   raw_data_test:
     cmd: 
@@ -48,6 +57,9 @@ stages:
     cmd: python src/census_equivalence_2010_2022.py
     deps:
       - src/census_equivalence_2010_2022.py
+      - ${all.paths.data.raw.ibge_2010_population_csv}
+      - ${all.paths.data.raw.ibge_2022_population}
+      - ${all.paths.data.raw.ibge_sector_history_csv}
       - data/IBGE/2010/shapefiles/
       - data/IBGE/2022/shapefiles/MG_setores_CD2022.shp
       - data/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls

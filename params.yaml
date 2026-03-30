@@ -9,6 +9,13 @@ all:
         ovitraps_csv: data/raw/MasterDataExtend062025_v2.csv
         dengue_csv: data/raw/Dengue2007_2025.csv
         health_centers_csv: data/raw/CENTRO_SAUDE_new.csv
+        ibge_2010_population: data/raw/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls
+        ibge_2022_population: data/raw/IBGE/2022/population/Agregados_por_setores_basico_BR_20250417.csv
+        ibge_sector_history: data/raw/IBGE/Historico_formacao_Setores_Censitarios_2010_2022.xlsx
+        ibge_2010_population_csv: data/raw/ibge_2010_population.csv
+        ibge_2022_population_csv: data/raw/ibge_2022_population.csv
+        ibge_sector_history_csv: data/raw/ibge_sector_history.csv
+
       processed: 
         folder: data/processed/
         ovitraps: data/processed/ovitraps_data.csv
