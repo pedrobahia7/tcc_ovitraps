@@ -12,7 +12,11 @@ import yaml
 
 
 DEFAULT_PARAMS_PATH = Path("params.yaml")
-REQUIRED_POPULATION_COLUMNS = {"sector_id", "population_2010", "population_2022"}
+REQUIRED_POPULATION_COLUMNS = {
+    "sector_id",
+    "population_2010",
+    "population_2022",
+}
 ID_COLUMNS = ["sector_id", "population_2010", "population_2022"]
 
 
@@ -28,7 +32,9 @@ def resolve_default_paths(
     """Resolve the default population, dengue, and output paths."""
     data_paths = params["all"]["paths"]["data"]
     population_path = Path(
-        data_paths["processed"]["census_equivalence"]["population_2010_to_2022"]
+        data_paths["processed"]["census_equivalence"][
+            "population_2010_to_2022"
+        ]
     )
     dengue_path = Path(data_paths["processed"]["dengue"])
     output_path = Path(data_paths["processed"]["population_interpolated"])
@@ -39,7 +45,9 @@ def load_population_data(file_path: str | Path) -> pd.DataFrame:
     """Load and validate the sector population comparison table."""
     population_data = pd.read_csv(file_path)
 
-    missing_columns = REQUIRED_POPULATION_COLUMNS.difference(population_data.columns)
+    missing_columns = REQUIRED_POPULATION_COLUMNS.difference(
+        population_data.columns
+    )
     if missing_columns:
         raise ValueError(
             f"Population data is missing required columns: {sorted(missing_columns)}"
@@ -47,12 +55,12 @@ def load_population_data(file_path: str | Path) -> pd.DataFrame:
 
     population_data = population_data.copy()
     population_data["sector_id"] = population_data["sector_id"].astype(str)
-    population_data["population_2010"] = population_data["population_2010"].astype(
-        "int64"
-    )
-    population_data["population_2022"] = population_data["population_2022"].astype(
-        "int64"
-    )
+    population_data["population_2010"] = population_data[
+        "population_2010"
+    ].astype("int64")
+    population_data["population_2022"] = population_data[
+        "population_2022"
+    ].astype("int64")
 
     return population_data.sort_values("sector_id").reset_index(drop=True)
 
@@ -74,13 +82,17 @@ def load_epidemic_weeks(file_path: str | Path) -> list[str]:
             )
 
     epidemic_weeks = (
-        pd.Index(dengue_data["epidemic_date"].dropna().astype(str).unique())
+        pd.Index(
+            dengue_data["epidemic_date"].dropna().astype(str).unique()
+        )
         .sort_values()
         .tolist()
     )
 
     if not epidemic_weeks:
-        raise ValueError("No epidemic weeks were found in the dengue dataset")
+        raise ValueError(
+            "No epidemic weeks were found in the dengue dataset"
+        )
 
     return epidemic_weeks
 
@@ -113,22 +125,32 @@ def build_interpolated_population_table(
     if not epidemic_weeks:
         raise ValueError("epidemic_weeks must not be empty")
 
-    missing_columns = REQUIRED_POPULATION_COLUMNS.difference(population_data.columns)
+    missing_columns = REQUIRED_POPULATION_COLUMNS.difference(
+        population_data.columns
+    )
     if missing_columns:
         raise ValueError(
             f"Population data is missing required columns: {sorted(missing_columns)}"
         )
 
     population_frame = population_data.loc[:, ID_COLUMNS].copy()
-    population_frame["sector_id"] = population_frame["sector_id"].astype(str)
+    population_frame["sector_id"] = population_frame["sector_id"].astype(
+        str
+    )
 
-    start_values = population_frame["population_2010"].to_numpy(dtype=np.float64)
-    end_values = population_frame["population_2022"].to_numpy(dtype=np.float64)
+    start_values = population_frame["population_2010"].to_numpy(
+        dtype=np.float64
+    )
+    end_values = population_frame["population_2022"].to_numpy(
+        dtype=np.float64
+    )
     week_fractions = build_week_fractions(len(epidemic_weeks))
 
     interpolated_matrix = start_values[:, None] + (
         (end_values - start_values)[:, None] * week_fractions[None, :]
     )
+    # Clamp negative values to zero (artifact from sectors where 2022 pop < 2010 pop)
+    interpolated_matrix = np.maximum(interpolated_matrix, 0)
     interpolated_matrix = _round_to_int(interpolated_matrix)
 
     weekly_columns = pd.DataFrame(
@@ -138,7 +160,10 @@ def build_interpolated_population_table(
     )
 
     interpolated_population = pd.concat(
-        [population_frame.reset_index(drop=True), weekly_columns.reset_index(drop=True)],
+        [
+            population_frame.reset_index(drop=True),
+            weekly_columns.reset_index(drop=True),
+        ],
         axis=1,
     )
 
@@ -163,7 +188,9 @@ def melt_population_table(population_table: pd.DataFrame) -> pd.DataFrame:
         {week: index for index, week in enumerate(week_columns)}
     )
 
-    return melted_table.sort_values(["sector_id", "week_index"]).reset_index(drop=True)
+    return melted_table.sort_values(
+        ["sector_id", "week_index"]
+    ).reset_index(drop=True)
 
 
 def save_interpolated_population_table(
@@ -199,9 +226,17 @@ def main() -> None:
         resolve_default_paths(params)
     )
 
-    population_path = Path(args.population_path) if args.population_path else default_population_path
-    dengue_path = Path(args.dengue_path) if args.dengue_path else default_dengue_path
-    output_path = Path(args.output_path) if args.output_path else default_output_path
+    population_path = (
+        Path(args.population_path)
+        if args.population_path
+        else default_population_path
+    )
+    dengue_path = (
+        Path(args.dengue_path) if args.dengue_path else default_dengue_path
+    )
+    output_path = (
+        Path(args.output_path) if args.output_path else default_output_path
+    )
 
     population_data = load_population_data(population_path)
     epidemic_weeks = load_epidemic_weeks(dengue_path)
@@ -209,7 +244,9 @@ def main() -> None:
         population_data,
         epidemic_weeks,
     )
-    save_interpolated_population_table(interpolated_population, output_path)
+    save_interpolated_population_table(
+        interpolated_population, output_path
+    )
 
     print(
         "Interpolated population table saved to "
