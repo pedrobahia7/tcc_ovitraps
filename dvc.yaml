@@ -103,6 +103,24 @@ stages:
     outs:
       - ${all.paths.data.processed.daily_ovitraps}
 
+  calculate_dengue_per_capita:
+    cmd: python src/calculate_dengue_per_capita.py
+    deps:
+      - src/calculate_dengue_per_capita.py
+      - ${all.paths.data.processed.dengue}
+      - ${all.paths.data.processed.population_interpolated}
+    outs:
+      - ${all.paths.data.processed.dengue_per_capita}:
+          persist: true
+
+  dengue_per_capita_test:
+    cmd: pytest test/data/processed/test_dengue_per_capita.py
+    deps:
+      - test/data/processed/test_dengue_per_capita.py
+      - ${all.paths.data.processed.dengue_per_capita}
+      - ${all.paths.data.processed.dengue}
+      - ${all.paths.data.processed.population_interpolated}
+
   process_data_test:
     cmd: pytest test/data/processed/test_processed_data.py
     deps:

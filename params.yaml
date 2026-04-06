@@ -26,6 +26,7 @@ all:
           population_2010_to_2022: data/processed/population_data.csv
           sectors_geojson: data/processed/bh_sectors_2022_with_populations.geojson
         population_interpolated: data/processed/interpolated_population_data.csv
+        dengue_per_capita: data/processed/dengue_per_capita.csv
         add_population_sectors:
           ovitraps: data/processed/add_population_sectors/ovitraps_data.csv
           dengue: data/processed/add_population_sectors/dengue_data.csv

@@ -1,0 +1,197 @@
+"""Calculate dengue cases per capita (per 1,000 population) by sector and week.
+
+Aggregates dengue case counts per population sector and epidemic week, then
+joins with the interpolated population data to compute the per-capita rate.
+"""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import yaml
+
+
+DEFAULT_PARAMS_PATH = Path("params.yaml")
+
+PER_CAPITA_MULTIPLIER = 1_000
+
+
+def load_params(params_path: str | Path = DEFAULT_PARAMS_PATH) -> dict:
+    """Load the project parameters from params.yaml."""
+    with open(params_path, "r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
+
+
+def resolve_paths(params: dict) -> tuple[Path, Path, Path]:
+    """Resolve dengue, interpolated population, and output paths from params."""
+    data = params["all"]["paths"]["data"]
+    dengue_path = Path(data["processed"]["dengue"])
+    population_path = Path(data["processed"]["population_interpolated"])
+    output_path = Path(data["processed"]["dengue_per_capita"])
+    return dengue_path, population_path, output_path
+
+
+def load_dengue_cases(dengue_path: str | Path) -> pd.DataFrame:
+    """Load dengue data and aggregate case counts by sector and epidemic week.
+
+    Returns a DataFrame with columns: sector_id, epidemic_date, case_count.
+    """
+    df = pd.read_csv(dengue_path, low_memory=False)
+
+    required = {"population_sector", "epidemic_date"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Dengue data is missing columns: {sorted(missing)}"
+        )
+
+    df = df.dropna(subset=["population_sector", "epidemic_date"]).copy()
+    df["population_sector"] = (
+        df["population_sector"]
+        .astype(str)
+        .str.replace(r"\.0$", "", regex=True)
+    )
+    df["epidemic_date"] = df["epidemic_date"].astype(str)
+
+    case_counts = (
+        df.groupby(["population_sector", "epidemic_date"])
+        .size()
+        .reset_index(name="case_count")
+        .rename(columns={"population_sector": "sector_id"})
+    )
+    return case_counts
+
+
+def load_interpolated_population(
+    population_path: str | Path,
+) -> pd.DataFrame:
+    """Load and melt the wide-format interpolated population table.
+
+    Returns a long-format DataFrame with columns:
+    sector_id, epidemic_date, population.
+    """
+    wide = pd.read_csv(population_path)
+
+    if "sector_id" not in wide.columns:
+        raise ValueError(
+            "Interpolated population data must contain 'sector_id'"
+        )
+
+    id_cols = ["sector_id"]
+    extra_id = [
+        c
+        for c in ("population_2010", "population_2022")
+        if c in wide.columns
+    ]
+    id_cols += extra_id
+
+    week_cols = [c for c in wide.columns if c not in id_cols]
+    if not week_cols:
+        raise ValueError(
+            "No epidemic-week columns found in interpolated population data"
+        )
+
+    wide["sector_id"] = wide["sector_id"].astype(str)
+
+    long = wide.melt(
+        id_vars=["sector_id"],
+        value_vars=week_cols,
+        var_name="epidemic_date",
+        value_name="population",
+    )
+    long["population"] = pd.to_numeric(long["population"], errors="coerce")
+    return long[["sector_id", "epidemic_date", "population"]]
+
+
+def compute_per_capita(
+    case_counts: pd.DataFrame,
+    population_long: pd.DataFrame,
+) -> pd.DataFrame:
+    """Join cases with population and compute per-capita rate.
+
+    Sectors with zero population are assigned NaN for the rate.
+    Sector-weeks with no dengue cases are filled with 0 case_count.
+
+    Returns DataFrame with columns:
+    sector_id, epidemic_date, case_count, population, cases_per_1000.
+    """
+    merged = population_long.merge(
+        case_counts,
+        on=["sector_id", "epidemic_date"],
+        how="left",
+    )
+    merged["case_count"] = merged["case_count"].fillna(0).astype(int)
+
+    # Clamp non-positive population to NaN rate (interpolation artefact)
+    merged["cases_per_1000"] = np.where(
+        merged["population"] > 0,
+        (merged["case_count"] / merged["population"])
+        * PER_CAPITA_MULTIPLIER,
+        0,
+    )
+
+    merged = merged.sort_values(
+        ["sector_id", "epidemic_date"]
+    ).reset_index(drop=True)
+    return merged
+
+
+def save_per_capita(df: pd.DataFrame, output_path: str | Path) -> None:
+    """Persist the per-capita table to CSV."""
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out, index=False)
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Calculate dengue cases per capita by sector and epidemic week."
+    )
+    parser.add_argument("--params-path", default=str(DEFAULT_PARAMS_PATH))
+    parser.add_argument("--dengue-path", default=None)
+    parser.add_argument("--population-path", default=None)
+    parser.add_argument("--output-path", default=None)
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Run the per-capita calculation pipeline."""
+    args = parse_args()
+    params = load_params(args.params_path)
+    default_dengue, default_pop, default_out = resolve_paths(params)
+
+    dengue_path = (
+        Path(args.dengue_path) if args.dengue_path else default_dengue
+    )
+    population_path = (
+        Path(args.population_path) if args.population_path else default_pop
+    )
+    output_path = (
+        Path(args.output_path) if args.output_path else default_out
+    )
+
+    print(f"Loading dengue data from {dengue_path} ...")
+    case_counts = load_dengue_cases(dengue_path)
+    print(f"  {len(case_counts):,} sector-week combinations with cases")
+
+    print(f"Loading interpolated population from {population_path} ...")
+    population_long = load_interpolated_population(population_path)
+    print(f"  {len(population_long):,} sector-week rows")
+
+    print("Computing per-capita rates ...")
+    per_capita = compute_per_capita(case_counts, population_long)
+    print(f"  {len(per_capita):,} rows in output")
+    print(
+        f"  Non-zero case rows: {(per_capita['case_count'] > 0).sum():,}"
+    )
+
+    save_per_capita(per_capita, output_path)
+    print(f"Saved to {output_path}")
+
+
+if __name__ == "__main__":
+    main()
