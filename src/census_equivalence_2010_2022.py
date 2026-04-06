@@ -4,19 +4,154 @@
 
 import pandas as pd
 import geopandas as gpd
+import numpy as np
 from pathlib import Path
 import logging
+import yaml
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+params = yaml.safe_load(open("params.yaml"))
+
+
+def _round_to_int(values: np.ndarray) -> np.ndarray:
+    """Round numeric values to the nearest integer."""
+    return np.floor(values + 0.5).astype(np.int64)
+
+
+def _prepare_dengue_epidemic_columns(dengue_data: pd.DataFrame) -> pd.DataFrame:
+    """Build anoepid/semepid/epidemic_date like process_data_fast."""
+    dengue_data = dengue_data.copy()
+
+    if "dt_notific" not in dengue_data.columns:
+        raise ValueError("Dengue data must include dt_notific to derive epidemic weeks")
+
+    dengue_data["dt_notific"] = pd.to_datetime(
+        dengue_data["dt_notific"],
+        errors="coerce",
+        format="mixed",
+    )
+    dengue_data = dengue_data[dengue_data["dt_notific"].notna()].copy()
+
+    if "Dengue" in dengue_data.columns:
+        dengue_data = dengue_data[dengue_data["Dengue"] != "N"].copy()
+
+    dengue_data.drop_duplicates(inplace=True)
+    dengue_data.reset_index(drop=True, inplace=True)
+
+    dates = dengue_data["dt_notific"]
+    year = np.where(dates.dt.month >= 6, dates.dt.year, dates.dt.year - 1)
+    year = pd.Series(year, index=dengue_data.index)
+
+    june_first = pd.to_datetime(year.astype(str) + "-06-01")
+    offset = (june_first.dt.weekday + 1) % 7
+    epi_year_start = june_first - pd.to_timedelta(offset, unit="D")
+
+    next_june_first = pd.to_datetime((year + 1).astype(str) + "-06-01")
+    next_offset = (next_june_first.dt.weekday + 1) % 7
+    next_epi_year_start = next_june_first - pd.to_timedelta(next_offset, unit="D")
+
+    epi_year = year.copy()
+    epi_year[dates >= next_epi_year_start] += 1
+    dengue_data["anoepid"] = epi_year.astype(str) + "_" + (epi_year + 1).astype(str).str[-2:]
+
+    week_num = ((dates - epi_year_start).dt.days // 7) + 1
+    same_week_as_june1 = (dates >= epi_year_start) & (
+        dates <= epi_year_start + pd.Timedelta(days=6)
+    )
+    week_num[same_week_as_june1] = 1
+    dengue_data["semepid"] = week_num.astype(int)
+
+    dengue_data["epidemic_date"] = dengue_data.apply(
+        lambda row: f"{row['anoepid']}W{int(row['semepid']):02d}",
+        axis=1,
+    )
+
+    return dengue_data
+
+
+def load_epidemic_weeks_from_dengue(dengue_path: str | Path) -> list[str]:
+    """Load the ordered epidemic week sequence from a dengue CSV file."""
+    dengue_path = Path(dengue_path)
+    if not dengue_path.exists():
+        raise FileNotFoundError(
+            f"Could not find dengue CSV required for interpolation: {dengue_path}"
+        )
+
+    dengue_data = pd.read_csv(dengue_path, low_memory=False)
+    if "epidemic_date" not in dengue_data.columns:
+        dengue_data = _prepare_dengue_epidemic_columns(dengue_data)
+
+    epidemic_weeks = (
+        pd.Index(dengue_data["epidemic_date"].dropna().astype(str).unique())
+        .sort_values()
+        .tolist()
+    )
+
+    if not epidemic_weeks:
+        raise ValueError("No epidemic weeks were found in dengue data")
+
+    logger.info(
+        "Loaded %s epidemic weeks from dengue data (%s to %s)",
+        f"{len(epidemic_weeks):,}",
+        epidemic_weeks[0],
+        epidemic_weeks[-1],
+    )
+    return epidemic_weeks
+
+
+def _week_to_ordinal(epidemic_week: str) -> int:
+    """Convert epidemic week format YYYY_YYWww to an ordinal week index."""
+    year_part, week_part = epidemic_week.split("W")
+    start_year = int(year_part.split("_")[0])
+    week_number = int(week_part)
+    return (start_year * 53) + (week_number - 1)
+
+
+def build_extrapolated_population_table(
+    sector_comparison_df: pd.DataFrame,
+    epidemic_weeks: list[str],
+) -> pd.DataFrame:
+    """Build a weekly population table with interpolation and extrapolation.
+
+    The line is anchored at year 2010 (population_2010) and year 2022
+    (population_2022). Weeks before 2010 and after 2022 are linearly
+    extrapolated with the same slope.
+    """
+    if not epidemic_weeks:
+        raise ValueError("epidemic_weeks must not be empty")
+
+    anchor_2010 = _week_to_ordinal("2010_11W01")
+    anchor_2022 = _week_to_ordinal("2022_23W01")
+    if anchor_2022 <= anchor_2010:
+        raise ValueError("Invalid interpolation anchors for 2010 and 2022")
+
+    x_values = np.array([_week_to_ordinal(week) for week in epidemic_weeks], dtype=np.float64)
+    start_values = sector_comparison_df["population_2010"].to_numpy(dtype=np.float64)
+    end_values = sector_comparison_df["population_2022"].to_numpy(dtype=np.float64)
+    slopes = (end_values - start_values) / (anchor_2022 - anchor_2010)
+
+    interpolated_matrix = start_values[:, None] + slopes[:, None] * (
+        x_values[None, :] - anchor_2010
+    )
+    interpolated_matrix = _round_to_int(interpolated_matrix)
+
+    interpolated_df = pd.concat(
+        [
+            sector_comparison_df[["sector_id"]].reset_index(drop=True),
+            pd.DataFrame(interpolated_matrix, columns=epidemic_weeks),
+        ],
+        axis=1,
+    )
+    return interpolated_df
 
 def load_shapefiles():
     """Load 2010 and 2022 shapefiles for Belo Horizonte."""
     logger.info("Loading shapefiles...")
     
     # Load 2010 shapefiles
-    shapefile_dir_2010 = Path("data/IBGE/2010/shapefiles")
+    shapefile_dir_2010 = Path("data/raw/IBGE/2010/shapefiles")
     bh_subdistrito_codes = [31062000562, 31062000563, 31062000564, 31062000565, 31062000567, 
                            31062000568, 31062000569, 31062002561, 31062002567, 31062006064, 
                            31062006066, 31062006068, 31062006069]
@@ -39,7 +174,7 @@ def load_shapefiles():
         logger.info(f"Total 2010 sectors loaded: {len(bh_setores_gdf):,}")
     
     # Load 2022 shapefiles
-    shapefile_2022 = Path("data/IBGE/2022/shapefiles/MG_setores_CD2022.shp")
+    shapefile_2022 = Path("data/raw/IBGE/2022/shapefiles/MG_setores_CD2022.shp")
     if shapefile_2022.exists():
         mg_setores_2022 = gpd.read_file(shapefile_2022)
         bh_sectors_gdf_2022 = mg_setores_2022[mg_setores_2022['CD_MUN'] == '3106200'].copy()
@@ -55,7 +190,7 @@ def load_population_data():
     logger.info("Loading population data...")
     
     # Load 2010 population data
-    data_2010_path = Path("data/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls")
+    data_2010_path = Path("data/raw/IBGE/2010/population/Base_informacoes_setores2010_sinopse_MG.xls")
     
     if data_2010_path.exists():
         df_2010 = pd.read_excel(data_2010_path, sheet_name=0)
@@ -65,7 +200,7 @@ def load_population_data():
         belo_horizonte_df = None
     
     # Load 2022 population data
-    data_2022_path = Path("data/IBGE/2022/population/Agregados_por_setores_basico_BR_20250417.csv")
+    data_2022_path = Path("data/raw/IBGE/2022/population/Agregados_por_setores_basico_BR_20250417.csv")
     pop_2022 = {}
     
     if data_2022_path.exists():
@@ -286,6 +421,22 @@ def main():
                 sector_comparison_df = pd.DataFrame(sector_comparison)
                 sector_comparison_df.to_csv(output_dir / "population_data.csv", index=False)
                 logger.info(f"Saved sector population comparison CSV: {len(sector_comparison_df):,} sectors")
+
+                # Build and save weekly interpolated/extrapolated population table
+                epidemic_weeks = load_epidemic_weeks_from_dengue(dengue_path=params['all']['paths']['data']['processed']['dengue'])
+                interpolated_population_df = build_extrapolated_population_table(
+                    sector_comparison_df,
+                    epidemic_weeks,
+                )
+                interpolated_population_df.to_csv(
+                    output_dir / "interpolated_population_data.csv",
+                    index=False,
+                )
+                logger.info(
+                    "Saved interpolated/extrapolated population CSV: %s sectors x %s weeks",
+                    f"{len(interpolated_population_df):,}",
+                    f"{len(epidemic_weeks):,}",
+                )
                 
                 # Save the GeoJSON of 2022 sectors with both populations
                 bh_sectors_with_both_pop = bh_sectors_gdf_2022.copy()

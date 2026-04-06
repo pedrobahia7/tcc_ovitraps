@@ -60,13 +60,16 @@ stages:
       - ${all.paths.data.raw.ibge_2010_population_csv}
       - ${all.paths.data.raw.ibge_2022_population}
       - ${all.paths.data.raw.ibge_sector_history_csv}
-      - data/IBGE/2010/shapefiles/
-      - data/IBGE/2022/shapefiles/MG_setores_CD2022.shp
-      - data/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls
+      - ${all.paths.data.raw.dengue_csv}
+      - data/raw/IBGE/2010/shapefiles/
+      - data/raw/IBGE/2022/shapefiles/MG_setores_CD2022.shp
+      - data/raw/IBGE/2010/population/Base_informacoes_setores2010_sinopse_MG.xls
     outs:
       - ${all.paths.data.processed.census_equivalence.population_2010_to_2022}:
           persist: true
       - ${all.paths.data.processed.census_equivalence.sectors_geojson}:
+          persist: true
+      - ${all.paths.data.processed.population_interpolated}:
           persist: true
 
   fast_processing:
@@ -91,7 +94,7 @@ stages:
     outs:
       - ${all.paths.data.processed.ovitraps}
       - ${all.paths.data.processed.dengue}
-      
+
   daily_ovitraps:
     cmd: python src/daily_ovitraps.py
     deps:

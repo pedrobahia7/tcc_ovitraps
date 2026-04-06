@@ -187,7 +187,8 @@ stages:
   census_equivalence:
     cmd: python src/census_equivalence_2010_2022.py
     deps:
-    - path: data/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls
+    - path: 
+        data/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls
       hash: md5
       md5: 08409f75fb0f68e7afd95f847926f292
       size: 81650176
@@ -228,32 +229,60 @@ stages:
   process_population_data:
     cmd: python src/census_equivalence_2010_2022.py
     deps:
-    - path: data/IBGE/2010/population/Base_informações_setores2010_sinopse_MG.xls
+    - path: data/raw/Dengue2007_2025.csv
+      hash: md5
+      md5: b5df7ac3ff6a3298b4d442fabee86486
+      size: 203030067
+      isexec: true
+    - path: 
+        data/raw/IBGE/2010/population/Base_informacoes_setores2010_sinopse_MG.xls
       hash: md5
       md5: 08409f75fb0f68e7afd95f847926f292
       size: 81650176
-    - path: data/IBGE/2010/shapefiles/
+      isexec: true
+    - path: data/raw/IBGE/2010/shapefiles/
       hash: md5
       md5: 44ae24924ef2ba197c27d9a73e330d2e.dir
       size: 36610924
       nfiles: 234
-    - path: data/IBGE/2022/shapefiles/MG_setores_CD2022.shp
+    - path: 
+        data/raw/IBGE/2022/population/Agregados_por_setores_basico_BR_20250417.csv
+      hash: md5
+      md5: dbf328d9edf1aa2eae19a0f594d8d808
+      size: 136698956
+      isexec: true
+    - path: data/raw/IBGE/2022/shapefiles/MG_setores_CD2022.shp
       hash: md5
       md5: 107b597bda1188224d05a30e96ab8290
       size: 155257364
+      isexec: true
+    - path: data/raw/ibge_2010_population.csv
+      hash: md5
+      md5: d17cf9b0660370e1b9e48ff58b0748a4
+      size: 20363928
+      isexec: true
+    - path: data/raw/ibge_sector_history.csv
+      hash: md5
+      md5: 17262279dc7121f9fcc6fa6313fdd252
+      size: 166020883
+      isexec: true
     - path: src/census_equivalence_2010_2022.py
       hash: md5
-      md5: dbfe2afa3ff85442c60d0b2e220c1b04
-      size: 15888
+      md5: 14d235c67d7e1ec0dca2c9fc286ea736
+      size: 21817
     outs:
     - path: data/processed/bh_sectors_2022_with_populations.geojson
       hash: md5
       md5: 479a5d3f31facc2e3a4127f11a270d08
       size: 10763766
-    - path: data/processed/sector_population_comparison.csv
+    - path: data/processed/interpolated_population_data.csv
       hash: md5
-      md5: b6df61c69be21092929ca91d2cc17f19
-      size: 128588
+      md5: 7638c3cf17e399d966a1b5d80a8529a2
+      size: 19396503
+    - path: data/processed/population_data.csv
+      hash: md5
+      md5: 458856d97787aa7942155ac2183aee00
+      size: 123421
   add_population_sectors:
     cmd: python src/add_population_sectors.py
     deps:
