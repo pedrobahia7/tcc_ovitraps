@@ -13,12 +13,13 @@ params = yaml.safe_load(open("params.yaml"))
 PER_CAPITA_MULTIPLIER = 1_000
 
 
-def _epidemic_date_valid(s: str) -> bool:
+def _biweek_valid(s: str) -> bool:
+    """Validate biweek format: YYYY_YYWww where ww is even."""
     m = re.match(r"^20(\d{2})_(\d{2})W(\d{1,2})$", str(s))
     if not m:
         return False
     y1, y2, week = map(int, m.groups())
-    return y2 == y1 + 1 and 1 <= week <= 53
+    return y2 == y1 + 1 and 2 <= week <= 54 and week % 2 == 0
 
 
 class TestDenguePerCapita:
@@ -66,7 +67,7 @@ class TestDenguePerCapita:
     def test_required_columns(self, per_capita_df):
         required = {
             "sector_id",
-            "epidemic_date",
+            "biweek",
             "case_count",
             "population",
             "cases_per_1000",
@@ -74,11 +75,11 @@ class TestDenguePerCapita:
         missing = required - set(per_capita_df.columns)
         assert not missing, f"Missing columns: {sorted(missing)}"
 
-    def test_no_duplicate_sector_week(self, per_capita_df):
+    def test_no_duplicate_sector_biweek(self, per_capita_df):
         dupes = per_capita_df.duplicated(
-            subset=["sector_id", "epidemic_date"]
+            subset=["sector_id", "biweek"]
         ).sum()
-        assert dupes == 0, f"Found {dupes} duplicate sector-week rows"
+        assert dupes == 0, f"Found {dupes} duplicate sector-biweek rows"
 
     # ------------------------------------------------------------------
     # Data type tests
@@ -118,13 +119,11 @@ class TestDenguePerCapita:
             "population must be non-negative (interpolation clamps to zero)"
         )
 
-    def test_cases_per_1000_nan_when_population_non_positive(
-        self, per_capita_df
-    ):
-        non_pos = per_capita_df[per_capita_df["population"] <= 0]
-        if not non_pos.empty:
-            assert non_pos["cases_per_1000"].isna().all(), (
-                "cases_per_1000 should be NaN when population is <= 0"
+    def test_cases_per_1000_zero_when_population_zero(self, per_capita_df):
+        zero_pop = per_capita_df[per_capita_df["population"] == 0]
+        if not zero_pop.empty:
+            assert (zero_pop["cases_per_1000"] == 0).all(), (
+                "cases_per_1000 should be 0 when population is 0"
             )
 
     def test_cases_per_1000_non_negative(self, per_capita_df):
@@ -153,13 +152,13 @@ class TestDenguePerCapita:
         )
 
     # ------------------------------------------------------------------
-    # Epidemic date format
+    # Biweek format
     # ------------------------------------------------------------------
 
-    def test_epidemic_dates_valid(self, per_capita_df):
-        valid = per_capita_df["epidemic_date"].apply(_epidemic_date_valid)
+    def test_biweeks_valid(self, per_capita_df):
+        valid = per_capita_df["biweek"].apply(_biweek_valid)
         assert valid.all(), (
-            "All epidemic_date values should match YYYY_YYWww format"
+            "All biweek values should match YYYY_YYWww format with even week number"
         )
 
     # ------------------------------------------------------------------
@@ -208,15 +207,20 @@ class TestDenguePerCapita:
             f"{len(pop_sectors - pc_sectors)} missing"
         )
 
-    def test_week_coverage(self, per_capita_df, population_df):
-        """Per-capita weeks should match the interpolated population weeks."""
-        pop_weeks = set(
+    def test_biweek_coverage(self, per_capita_df, population_df):
+        """Per-capita biweeks should cover all biweeks derived from population weeks."""
+        from src.calculate_dengue_per_capita import epidemic_date_to_biweek
+
+        pop_weeks = [
             c
             for c in population_df.columns
             if c not in ("sector_id", "population_2010", "population_2022")
+        ]
+        pop_biweeks = set(
+            epidemic_date_to_biweek(pd.Series(pop_weeks)).unique()
         )
-        pc_weeks = set(per_capita_df["epidemic_date"].unique())
-        assert pc_weeks == pop_weeks, (
-            f"Week mismatch: {len(pc_weeks - pop_weeks)} extra, "
-            f"{len(pop_weeks - pc_weeks)} missing"
+        pc_biweeks = set(per_capita_df["biweek"].unique())
+        assert pc_biweeks == pop_biweeks, (
+            f"Biweek mismatch: {len(pc_biweeks - pop_biweeks)} extra, "
+            f"{len(pop_biweeks - pc_biweeks)} missing"
         )

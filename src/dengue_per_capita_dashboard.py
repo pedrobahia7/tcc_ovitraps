@@ -55,14 +55,14 @@ BLUE_RED_COLORSCALE = [
 print("Loading dengue per-capita data ...")
 pc_df = pd.read_csv(PER_CAPITA_CSV)
 pc_df["sector_id"] = pc_df["sector_id"].astype(str)
-pc_df["epidemic_date"] = pc_df["epidemic_date"].astype(str)
+pc_df["biweek"] = pc_df["biweek"].astype(str)
 
-# Extract year from epidemic_date for box-plot grouping
-pc_df["epi_year"] = pc_df["epidemic_date"].str.split("W").str[0]
+# Extract year from biweek for box-plot grouping
+pc_df["epi_year"] = pc_df["biweek"].str.split("W").str[0]
 
-# Sorted unique weeks for the slider
-ALL_WEEKS = sorted(pc_df["epidemic_date"].unique())
-WEEK_TO_IDX = {w: i for i, w in enumerate(ALL_WEEKS)}
+# Sorted unique biweeks for the slider
+ALL_BIWEEKS = sorted(pc_df["biweek"].unique())
+BIWEEK_TO_IDX = {w: i for i, w in enumerate(ALL_BIWEEKS)}
 
 print("Loading GeoJSON sectors ...")
 sectors_gdf = gpd.read_file(GEOJSON_PATH)
@@ -70,7 +70,7 @@ sectors_gdf["CD_SETOR"] = sectors_gdf["CD_SETOR"].astype(str)
 GEOJSON_DATA = json.loads(sectors_gdf.to_json())
 
 print(
-    f"  {len(pc_df):,} per-capita rows  |  {len(ALL_WEEKS)} weeks  |  {len(sectors_gdf)} sectors"
+    f"  {len(pc_df):,} per-capita rows  |  {len(ALL_BIWEEKS)} biweeks  |  {len(sectors_gdf)} sectors"
 )
 
 # =============================================================================
@@ -96,7 +96,7 @@ app.layout = html.Div(
             },
         ),
         html.P(
-            f"{len(ALL_WEEKS)} epidemic weeks  ·  {sectors_gdf.shape[0]} census sectors  ·  "
+            f"{len(ALL_BIWEEKS)} biweeks  ·  {sectors_gdf.shape[0]} census sectors  ·  "
             "rate = cases per 1,000 population",
             style={
                 "textAlign": "center",
@@ -105,21 +105,19 @@ app.layout = html.Div(
                 "marginBottom": 15,
             },
         ),
-        # --- Week selector ---
+        # --- Biweek selector ---
         html.Div(
             [
-                html.Label(
-                    "Select Epidemic Week:", style={"fontWeight": "bold"}
-                ),
+                html.Label("Select Biweek:", style={"fontWeight": "bold"}),
                 dcc.Slider(
                     id="week-slider",
                     min=0,
-                    max=len(ALL_WEEKS) - 1,
+                    max=len(ALL_BIWEEKS) - 1,
                     value=0,
                     marks={
                         i: w
-                        for i, w in enumerate(ALL_WEEKS)
-                        if i % max(1, len(ALL_WEEKS) // 15) == 0
+                        for i, w in enumerate(ALL_BIWEEKS)
+                        if i % max(1, len(ALL_BIWEEKS) // 15) == 0
                     },
                     step=1,
                     tooltip={
@@ -317,9 +315,9 @@ app.layout = html.Div(
 # =============================================================================
 
 
-def _week_data(week: str) -> pd.DataFrame:
-    """Return per-capita rows for a single epidemic week."""
-    return pc_df[pc_df["epidemic_date"] == week].copy()
+def _biweek_data(biweek: str) -> pd.DataFrame:
+    """Return per-capita rows for a single biweek."""
+    return pc_df[pc_df["biweek"] == biweek].copy()
 
 
 def _threshold_mask(
@@ -356,8 +354,8 @@ def _threshold_mask(
     Input("threshold-checks", "value"),
 )
 def update_dashboard(slider_idx, thresh_min, thresh_max, thresh_checks):
-    week = ALL_WEEKS[slider_idx]
-    wdf = _week_data(week)
+    biweek = ALL_BIWEEKS[slider_idx]
+    wdf = _biweek_data(biweek)
 
     # ---- Choropleth map ----
     merged = sectors_gdf[["CD_SETOR"]].merge(
@@ -437,7 +435,7 @@ def update_dashboard(slider_idx, thresh_min, thresh_max, thresh_checks):
             zoom=MAP_ZOOM,
         ),
         margin=dict(l=0, r=0, t=30, b=0),
-        title=dict(text=f"Week: {week}", x=0.5, font=dict(size=15)),
+        title=dict(text=f"Biweek: {biweek}", x=0.5, font=dict(size=15)),
         showlegend=True,
         legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.8)"),
         uirevision="constant",
@@ -452,7 +450,7 @@ def update_dashboard(slider_idx, thresh_min, thresh_max, thresh_checks):
     summary = html.Div(
         [
             html.Span(
-                f"Week: {week}",
+                f"Biweek: {biweek}",
                 style={"fontWeight": "bold", "marginRight": 20},
             ),
             html.Span(
@@ -477,7 +475,7 @@ def update_dashboard(slider_idx, thresh_min, thresh_max, thresh_checks):
         wdf[wdf["cases_per_1000"].notna()],
         x="cases_per_1000",
         nbins=50,
-        title=f"Rate Distribution — {week}",
+        title=f"Rate Distribution — {biweek}",
         labels={"cases_per_1000": "Cases per 1,000"},
         color_discrete_sequence=["#2980B9"],
     )
@@ -498,7 +496,7 @@ def update_dashboard(slider_idx, thresh_min, thresh_max, thresh_checks):
         color="cases_per_1000",
         color_continuous_scale="RdBu_r",
         hover_data=["sector_id", "cases_per_1000"],
-        title=f"Cases vs Population — {week}",
+        title=f"Cases vs Population — {biweek}",
         labels={
             "population": "Population",
             "case_count": "Cases",
@@ -536,12 +534,12 @@ def update_boxplot(_):
         yearly,
         x="epi_year",
         y="cases_per_1000",
-        hover_data=["epidemic_date", "sector_id"],
+        hover_data=["biweek", "sector_id"],
         title="Per-Capita Rate Distribution by Year",
         labels={
             "epi_year": "Epidemic Year",
             "cases_per_1000": "Cases per 1,000",
-            "epidemic_date": "Week",
+            "biweek": "Biweek",
         },
         color_discrete_sequence=["#E74C3C"],
     )
@@ -560,6 +558,6 @@ def update_boxplot(_):
 if __name__ == "__main__":
     print("\n" + "=" * 70)
     print("Starting Dengue Per Capita Dashboard")
-    print("Open: http://127.0.0.1:8053/")
+    print("Open: http://127.0.0.1:8054/")
     print("=" * 70 + "\n")
-    app.run(debug=True, port=8053)
+    app.run(debug=True, port=8054)

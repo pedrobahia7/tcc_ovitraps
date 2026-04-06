@@ -1,7 +1,11 @@
-"""Calculate dengue cases per capita (per 1,000 population) by sector and week.
+"""Calculate dengue cases per capita (per 1,000 population) by sector and biweek.
 
-Aggregates dengue case counts per population sector and epidemic week, then
+Aggregates dengue case counts per population sector and biweek, then
 joins with the interpolated population data to compute the per-capita rate.
+
+Biweek grouping follows the project convention:
+    biweek_num = ((week_num + 1) // 2) * 2
+    biweek = epi_year + 'W' + biweek_num (zero-padded)
 """
 
 from __future__ import annotations
@@ -17,6 +21,18 @@ import yaml
 DEFAULT_PARAMS_PATH = Path("params.yaml")
 
 PER_CAPITA_MULTIPLIER = 1_000
+
+
+def epidemic_date_to_biweek(dates: pd.Series) -> pd.Series:
+    """Convert epidemic_date values (e.g. '2018_19W51') to biweek labels.
+
+    Uses the project-wide convention: biweek_num = ((week_num + 1) // 2) * 2.
+    """
+    dates = dates.astype(str)
+    epi_year = dates.str.split("W").str[0]
+    week_num = dates.str.split("W").str[1].astype(int)
+    biweek_num = ((week_num + 1) // 2) * 2
+    return epi_year + "W" + biweek_num.astype(str).str.zfill(2)
 
 
 def load_params(params_path: str | Path = DEFAULT_PARAMS_PATH) -> dict:
@@ -35,9 +51,9 @@ def resolve_paths(params: dict) -> tuple[Path, Path, Path]:
 
 
 def load_dengue_cases(dengue_path: str | Path) -> pd.DataFrame:
-    """Load dengue data and aggregate case counts by sector and epidemic week.
+    """Load dengue data and aggregate case counts by sector and biweek.
 
-    Returns a DataFrame with columns: sector_id, epidemic_date, case_count.
+    Returns a DataFrame with columns: sector_id, biweek, case_count.
     """
     df = pd.read_csv(dengue_path, low_memory=False)
 
@@ -54,10 +70,10 @@ def load_dengue_cases(dengue_path: str | Path) -> pd.DataFrame:
         .astype(str)
         .str.replace(r"\.0$", "", regex=True)
     )
-    df["epidemic_date"] = df["epidemic_date"].astype(str)
+    df["biweek"] = epidemic_date_to_biweek(df["epidemic_date"])
 
     case_counts = (
-        df.groupby(["population_sector", "epidemic_date"])
+        df.groupby(["population_sector", "biweek"])
         .size()
         .reset_index(name="case_count")
         .rename(columns={"population_sector": "sector_id"})
@@ -68,10 +84,10 @@ def load_dengue_cases(dengue_path: str | Path) -> pd.DataFrame:
 def load_interpolated_population(
     population_path: str | Path,
 ) -> pd.DataFrame:
-    """Load and melt the wide-format interpolated population table.
+    """Load the wide-format interpolated population table and aggregate to biweeks.
 
     Returns a long-format DataFrame with columns:
-    sector_id, epidemic_date, population.
+    sector_id, biweek, population  (mean population per biweek).
     """
     wide = pd.read_csv(population_path)
 
@@ -103,29 +119,37 @@ def load_interpolated_population(
         value_name="population",
     )
     long["population"] = pd.to_numeric(long["population"], errors="coerce")
-    return long[["sector_id", "epidemic_date", "population"]]
+
+    # Aggregate weekly population to biweekly (mean of the two weeks)
+    long["biweek"] = epidemic_date_to_biweek(long["epidemic_date"])
+    biweekly = (
+        long.groupby(["sector_id", "biweek"], as_index=False)["population"]
+        .mean()
+        .round(0)
+        .astype({"population": int})
+    )
+    return biweekly[["sector_id", "biweek", "population"]]
 
 
 def compute_per_capita(
     case_counts: pd.DataFrame,
-    population_long: pd.DataFrame,
+    population_biweekly: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Join cases with population and compute per-capita rate.
+    """Join biweekly cases with population and compute per-capita rate.
 
-    Sectors with zero population are assigned NaN for the rate.
-    Sector-weeks with no dengue cases are filled with 0 case_count.
+    Sectors with zero population get rate = 0.
+    Sector-biweeks with no dengue cases are filled with 0 case_count.
 
     Returns DataFrame with columns:
-    sector_id, epidemic_date, case_count, population, cases_per_1000.
+    sector_id, biweek, case_count, population, cases_per_1000.
     """
-    merged = population_long.merge(
+    merged = population_biweekly.merge(
         case_counts,
-        on=["sector_id", "epidemic_date"],
+        on=["sector_id", "biweek"],
         how="left",
     )
     merged["case_count"] = merged["case_count"].fillna(0).astype(int)
 
-    # Clamp non-positive population to NaN rate (interpolation artefact)
     merged["cases_per_1000"] = np.where(
         merged["population"] > 0,
         (merged["case_count"] / merged["population"])
@@ -133,9 +157,9 @@ def compute_per_capita(
         0,
     )
 
-    merged = merged.sort_values(
-        ["sector_id", "epidemic_date"]
-    ).reset_index(drop=True)
+    merged = merged.sort_values(["sector_id", "biweek"]).reset_index(
+        drop=True
+    )
     return merged
 
 
@@ -176,14 +200,14 @@ def main() -> None:
 
     print(f"Loading dengue data from {dengue_path} ...")
     case_counts = load_dengue_cases(dengue_path)
-    print(f"  {len(case_counts):,} sector-week combinations with cases")
+    print(f"  {len(case_counts):,} sector-biweek combinations with cases")
 
     print(f"Loading interpolated population from {population_path} ...")
-    population_long = load_interpolated_population(population_path)
-    print(f"  {len(population_long):,} sector-week rows")
+    population_biweekly = load_interpolated_population(population_path)
+    print(f"  {len(population_biweekly):,} sector-biweek rows")
 
-    print("Computing per-capita rates ...")
-    per_capita = compute_per_capita(case_counts, population_long)
+    print("Computing biweekly per-capita rates ...")
+    per_capita = compute_per_capita(case_counts, population_biweekly)
     print(f"  {len(per_capita):,} rows in output")
     print(
         f"  Non-zero case rows: {(per_capita['case_count'] > 0).sum():,}"
