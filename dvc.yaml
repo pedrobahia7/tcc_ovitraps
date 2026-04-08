@@ -103,6 +103,27 @@ stages:
     outs:
       - ${all.paths.data.processed.daily_ovitraps}
 
+  associate_ovitraps_and_population:
+    cmd: python src/associate_ovitraps_and_population.py
+    deps:
+      - src/associate_ovitraps_and_population.py
+      - ${all.paths.data.processed.census_equivalence.sectors_geojson}
+      - ${all.paths.data.processed.ovitraps}
+    outs:
+      - ${all.paths.data.processed.centroids}:
+          persist: true
+      - ${all.paths.data.processed.centroids_idw}:
+          persist: true
+
+  centroids_test:
+    cmd: pytest test/data/processed/test_centroids.py
+    deps:
+      - test/data/processed/test_centroids.py
+      - ${all.paths.data.processed.centroids}
+      - ${all.paths.data.processed.centroids_idw}
+      - ${all.paths.data.processed.census_equivalence.sectors_geojson}
+      - ${all.paths.data.processed.ovitraps}
+
   calculate_dengue_per_capita:
     cmd: python src/calculate_dengue_per_capita.py
     deps:

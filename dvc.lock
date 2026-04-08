@@ -364,3 +364,29 @@ stages:
       hash: md5
       md5: 96c59c40ac06a846a5ac0c71bb62f1f6
       size: 183082191
+  associate_ovitraps_and_population:
+    cmd: python src/associate_ovitraps_and_population.py
+    deps:
+    - path: data/processed/bh_sectors_2022_with_populations.geojson
+      hash: md5
+      md5: 479a5d3f31facc2e3a4127f11a270d08
+      size: 10763766
+    - path: data/processed/ovitraps_data.csv
+      hash: md5
+      md5: 615056247ddd458492e0e757917c13f6
+      size: 294678680
+      isexec: true
+    - path: src/associate_ovitraps_and_population.py
+      hash: md5
+      md5: 43627aad8a1cdf1a1dbfbb7e73b3f218
+      size: 13664
+      isexec: true
+    outs:
+    - path: data/processed/bh_sectors_2022_centroids.csv
+      hash: md5
+      md5: 2eca4f577656496b3186b0bec9bfb4e2
+      size: 561709
+    - path: data/processed/sector_centroids_with_idw.csv
+      hash: md5
+      md5: b7c563dbadcaa4330f5f4f2aef152fe4
+      size: 261138419

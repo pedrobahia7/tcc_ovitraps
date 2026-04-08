@@ -11,23 +11,32 @@ from dash import dcc, html, Input, Output
 import plotly.graph_objects as go
 import geopandas as gpd
 import pandas as pd
+import yaml
 
 # Map configuration
 MAP_CENTER_LAT = -19.9167
 MAP_CENTER_LON = -43.9345
 MAP_ZOOM = 11
 
+# Load paths from params.yaml
+with open("params.yaml", "r", encoding="utf-8") as _f:
+    _params = yaml.safe_load(_f)
+_proc = _params["all"]["paths"]["data"]["processed"]
+
+GEOJSON_PATH = _proc["census_equivalence"]["sectors_geojson"]
+CENTROIDS_PATH = _proc["centroids"]
+OVITRAPS_PATH = _proc["ovitraps"]
+IDW_PATH = _proc["centroids_idw"]
+
 # Load data
 print("Loading census sectors data...")
-sectors_gdf = gpd.read_file(
-    "data/processed/bh_sectors_2022_with_populations.geojson"
-)
+sectors_gdf = gpd.read_file(GEOJSON_PATH)
 
 print("Loading centroids data...")
-centroids_df = pd.read_csv("data/processed/bh_sectors_2022_centroids.csv")
+centroids_df = pd.read_csv(CENTROIDS_PATH)
 
 print("Loading ovitraps data...")
-ovitraps_df = pd.read_csv("data/processed/ovitraps_data.csv")
+ovitraps_df = pd.read_csv(OVITRAPS_PATH)
 
 # Remove rows with missing coordinates
 ovitraps_df = ovitraps_df[
@@ -52,7 +61,7 @@ ovitraps_df["biweek"] = (
 biweeks = sorted(ovitraps_df["biweek"].unique())
 
 print("Loading IDW data with trap associations...")
-idw_df = pd.read_csv("data/processed/sector_centroids_with_idw.csv")
+idw_df = pd.read_csv(IDW_PATH)
 
 print(
     f"Loaded {len(sectors_gdf)} sectors, {len(centroids_df)} centroids, "
@@ -218,16 +227,17 @@ app.layout = html.Div(
         ),
         html.Div(
             [
-                html.Label(
-                    "Select Biweek:",
-                    style={"fontWeight": "bold", "marginBottom": "5px"},
-                ),
+                html.Label("Select Biweek:", style={"fontWeight": "bold"}),
                 dcc.Slider(
                     id="biweek-slider",
                     min=0,
                     max=len(biweeks) - 1,
                     value=0,
-                    marks={i: biweek for i, biweek in enumerate(biweeks)},
+                    marks={
+                        i: w
+                        for i, w in enumerate(biweeks)
+                        if i % max(1, len(biweeks) // 15) == 0
+                    },
                     step=1,
                     tooltip={
                         "placement": "bottom",
@@ -235,7 +245,7 @@ app.layout = html.Div(
                     },
                 ),
             ],
-            style={"margin": "20px 50px"},
+            style={"margin": "0 40px 10px 40px"},
         ),
         dcc.Graph(
             id="sectors-map",
@@ -348,5 +358,5 @@ def update_map(slider_value, click_data, current_selected):
 
 if __name__ == "__main__":
     print("\nStarting dashboard server...")
-    print("Open your browser and navigate to: http://127.0.0.1:8052/")
-    app.run(debug=True, port=8052)
+    print("Open your browser and navigate to: http://127.0.0.1:8055/")
+    app.run(debug=True, port=8055)
