@@ -45,7 +45,10 @@ class TestProcessedData:
         """Load ovitraps processed data."""
         if os.path.exists(data_paths['ovitraps']):
             print('Loading ovitraps data from:', data_paths['ovitraps'])
-            return pd.read_csv(data_paths['ovitraps'])
+            return pd.read_csv(
+                data_paths['ovitraps'],
+                dtype={'narmad': str, 'nplaca': str}
+            )
         else:
             pytest.skip(f"Ovitraps data file not found: {data_paths['ovitraps']}")
     
@@ -63,7 +66,7 @@ class TestProcessedData:
         """Load daily ovitraps processed data."""
         if os.path.exists(data_paths['daily_ovitraps']):
             print('Loading daily ovitraps data from:', data_paths['daily_ovitraps'])
-            return pd.read_csv(data_paths['daily_ovitraps'])
+            return pd.read_csv(data_paths['daily_ovitraps'], index_col=0)
         else:
             pytest.skip(f"Daily ovitraps data file not found: {data_paths['daily_ovitraps']}")
 
@@ -212,7 +215,7 @@ class TestProcessedData:
 
         # Check if manually corrected records are present
         corrected_record = ovitraps_data[
-            (ovitraps_data["narmad"] == 906071) & (ovitraps_data["dt_col"] == "2022-08-18")
+            (ovitraps_data["narmad"] == "906071") & (ovitraps_data["dt_col"] == "2022-08-18")
         ]
         assert not corrected_record.empty, "Corrected record should be present"
         assert corrected_record.iloc[0]['novos'] == 50, "Corrected record should have novos == 50"
@@ -302,11 +305,11 @@ class TestProcessedData:
         assert len(date_index) == (date_index.max() - date_index.min()).days + 1, "Date index should have no missing dates"
 
         # Check that all values types and if they are non-negative or NaN
-        assert pd.api.types.is_numeric_dtype(daily_ovitraps_data.fillna(0)), "All values should be numeric"
+        assert daily_ovitraps_data.fillna(0).dtypes.apply(pd.api.types.is_numeric_dtype).all(), "All values should be numeric"
         assert (daily_ovitraps_data.fillna(0) >= 0).all().all(), "All values should be non-negative or NaN"
 
         # Check if sum and mean calculations are correct
-        daily_ovitraps_sum = daily_ovitraps_data.sum(axis=1)
+        daily_ovitraps_sum = daily_ovitraps_data.sum(axis=1, min_count=1)
         # Check date range 
         date_index = pd.to_datetime(daily_ovitraps_sum.index, errors="raise")
         assert date_index.is_monotonic_increasing, "Date index should be sorted"

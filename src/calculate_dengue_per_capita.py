@@ -126,8 +126,9 @@ def load_interpolated_population(
         long.groupby(["sector_id", "biweek"], as_index=False)["population"]
         .mean()
         .round(0)
-        .astype({"population": int})
     )
+    biweekly["population"] = biweekly["population"].clip(lower=0)
+    biweekly = biweekly.astype({"population": int})
     return biweekly[["sector_id", "biweek", "population"]]
 
 

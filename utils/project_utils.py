@@ -149,8 +149,8 @@ def load_ovitraps_data(file_path):
     
     assert ovitraps_data['dt_col'].notnull().all(), "'dt_col' must not contain null values"
     assert ovitraps_data['dt_instal'].notnull().all(), "'dt_instal' must not contain null values"
-    assert ovitraps_data['narmad'].dtype == object, "'narmad' must be of string type"
-    assert ovitraps_data['nplaca'].dtype == object, "'nplaca' must be of string type"
+    assert pd.api.types.is_string_dtype(ovitraps_data['narmad']), "'narmad' must be of string type"
+    assert pd.api.types.is_string_dtype(ovitraps_data['nplaca']), "'nplaca' must be of string type"
     
     return ovitraps_data
 

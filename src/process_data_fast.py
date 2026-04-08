@@ -129,13 +129,25 @@ correct_value(904068,None,"longitude", -43.92464141)
 
 # This trap was deactivated in 2016, while the other with same coordinates (908104) is still active
 # Both have the same CEP, so I will slightly change the coordinates
-aux_lat, aux_lon = ovitraps_data[ovitraps_data['narmad']==908104][['latitude','longitude']].unique()[0]
+aux_lat, aux_lon = (
+    ovitraps_data.loc[
+        ovitraps_data['narmad'] == 908104, ['latitude', 'longitude']
+    ]
+    .drop_duplicates()
+    .iloc[0]
+)
 correct_value(908105,None,"latitude", aux_lat + 0.0002)
 correct_value(908105,None,"longitude", aux_lon + 0.0002)
 
 # This trap and the other with the same coordinates (903151) were deactivated in 2023 and have the same CEP.
 # I will slightly change the coordinates of one of them
-aux_lat, aux_lon = ovitraps_data[ovitraps_data['narmad']==903152][['latitude','longitude']].unique()[0]
+aux_lat, aux_lon = (
+    ovitraps_data.loc[
+        ovitraps_data['narmad'] == 903152, ['latitude', 'longitude']
+    ]
+    .drop_duplicates()
+    .iloc[0]
+)
 correct_value(903152,None,"latitude", aux_lat - 0.0002)
 correct_value(903152,None,"longitude", aux_lon - 0.0002)
 
