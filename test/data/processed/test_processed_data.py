@@ -36,7 +36,7 @@ class TestProcessedData:
         """Load dengue processed data."""
         if os.path.exists(data_paths['dengue']):
             print('Loading dengue data from:', data_paths['dengue'])
-            return pd.read_csv(data_paths['dengue'])
+            return pd.read_csv(data_paths['dengue'], low_memory=False)
         else:
             pytest.skip(f"Dengue data file not found: {data_paths['dengue']}")
     
@@ -232,8 +232,12 @@ class TestProcessedData:
         # Check eggs_per_day calculation (where days_expo > 0)
         expected_eggs_per_day = ovitraps_data.loc[:, 'novos'] / ovitraps_data.loc[:, 'days_expo']
         actual_eggs_per_day = ovitraps_data.loc[:, 'eggs_per_day']
-        assert ((np.isclose(actual_eggs_per_day.values, expected_eggs_per_day.values, atol=0.01, equal_nan=True)).all(),
-                 "eggs_per_day calculation should be correct")
+        assert np.isclose(
+            actual_eggs_per_day.values,
+            expected_eggs_per_day.values,
+            atol=0.01,
+            equal_nan=True,
+        ).all(), "eggs_per_day calculation should be correct"
             
     def test_ovitraps_coordinates(self, ovitraps_data):
         """Test ovitraps coordinate validity."""
@@ -264,8 +268,9 @@ class TestProcessedData:
         """Comprehensive data integrity test (marked as slow)."""
         
         # Check that installation date is before collection date
-        assert ((ovitraps_data['dt_instal'] < ovitraps_data['dt_col']).all(),
-            "Installation date should be before collection date for all records")
+        assert (ovitraps_data['dt_instal'] < ovitraps_data['dt_col']).all(), (
+            "Installation date should be before collection date for all records"
+        )
         
         # For ovitraps: same trap shouldn't have overlapping installation periods
         # (this is complex but important)
