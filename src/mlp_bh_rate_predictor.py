@@ -21,6 +21,9 @@ from sklearn.metrics import (
     mean_squared_error,
     r2_score,
 )
+import utils.project_utils as project_utils
+
+import ipdb
 
 # Epidemic years defined in project_utils.EPIDEMY_YEARS
 EPIDEMY_YEARS = ["2012_13", "2015_16", "2018_19", "2023_24"]
@@ -60,37 +63,86 @@ def load_ovitraps_citywide() -> pd.DataFrame:
 def create_lag_features(
     df: pd.DataFrame, target_col: str, lags: int = 3
 ) -> pd.DataFrame:
-    """Create lag features for the target column."""
-    df = df.copy().sort_values("biweek")
+    """Create lag features for the target column.
 
+    Assumes df is indexed by a complete biweek sequence (no gaps),
+    so shift(1) correctly yields the previous biweek.
+    """
     for lag in range(1, lags + 1):
         df[f"{target_col}_lag{lag}"] = df[target_col].shift(lag)
-
     return df
 
 
 def prepare_features(
     dengue_df: pd.DataFrame, ovitraps_df: pd.DataFrame
 ) -> pd.DataFrame:
-    """Merge data sources and create feature matrix with lags."""
+    """Merge data sources and create feature matrix with lags.
+
+    Reindexes to a complete biweek sequence before creating lags,
+    so missing biweeks (common in ovitraps data) do not corrupt
+    the lag values via positional shift.
+    """
     # Merge dengue and ovitraps on biweek
-    df = dengue_df.merge(ovitraps_df, on="biweek", how="inner")
+    df = dengue_df.merge(ovitraps_df, on="biweek", how="outer")
+    ipdb.set_trace()
 
-    # Create lag features for both rate and eggs
+    # --- Fix gaps: reindex to complete biweek sequence ---
+    all_biweeks = project_utils.generate_all_biweeks(
+        df["biweek"].min(), df["biweek"].max()
+    )
+    df = df.set_index("biweek").reindex(all_biweeks).reset_index()
+    df.rename(columns={"index": "biweek"}, inplace=True)
+
+    # Sort by biweek so shift() is chronological
+    df = df.sort_values("biweek").reset_index(drop=True)
+    assert df.index.is_monotonic_increasing, "Date range must be sorted"
+
+    # Create lag features for dengue rate (3 lags)
     df = create_lag_features(df, "cases_per_1000", lags=3)
-    df = create_lag_features(
-        df, "mean_eggs", lags=5
-    )  # Extended to 5 lags for eggs
 
-    # Drop rows with NaN lags (first 5 rows due to eggs_lag5)
+    # Create lag features for ovitraps eggs (5 lags)
+    df = create_lag_features(df, "mean_eggs", lags=5)
+
+    # Verify if index is still complete
+    assert df.index.values.to_list() == all_biweeks, (
+        "Index should be complete"
+    )
+
+    # Verify lag features on rows where all values are non-NaN
+    # (reindexing introduces NaN for missing biweeks; skip those)
+    valid_mask = (
+        df["cases_per_1000"].notna()
+        & df["mean_eggs"].notna()
+        & df["cases_per_1000_lag1"].notna()
+        & df["mean_eggs_lag1"].notna()
+    )
+    valid_idx = df[valid_mask].index
+
+    np.random.seed(42)
+    check_idx = np.random.choice(valid_idx[5:], size=1, replace=False)[0]
+    row = df.loc[check_idx]
+
+    for lag in range(1, 4):
+        assert np.isclose(
+            row[f"cases_per_1000_lag{lag}"],
+            df.loc[check_idx - lag, "cases_per_1000"],
+        ), f"Dengue lag{lag} mismatch at index {check_idx}"
+
+    for lag in range(1, 6):
+        assert np.isclose(
+            row[f"mean_eggs_lag{lag}"],
+            df.loc[check_idx - lag, "mean_eggs"],
+        ), f"Eggs lag{lag} mismatch at index {check_idx}"
+
+    # Drop rows with NaN lags (first 5 rows due to eggs_lag5 + any gaps)
     df = df.dropna().copy()
 
     # Create target: next biweek rate (shift -1)
-    df = df.sort_values("biweek")
     df["target_rate"] = df["cases_per_1000"].shift(-1)
-
-    # Drop last row (no target available)
     df = df.dropna(subset=["target_rate"]).copy()
+    assert df.isna().sum().sum() == 0, (
+        "DataFrame should not contain NaN values"
+    )
 
     return df
 
@@ -135,7 +187,7 @@ def train_mlp(train_df: pd.DataFrame, test_df: pd.DataFrame) -> tuple:
         "mean_eggs_lag4",
         "mean_eggs_lag5",
     ]
-
+    ipdb.set_trace()
     X_train = train_df[feature_cols].values
     y_train = train_df["target_rate"].values
     X_test = test_df[feature_cols].values
@@ -242,8 +294,67 @@ def save_results(
     print(f"Results saved to {output_dir}")
 
 
+def run_fold(
+    epidemic_df: pd.DataFrame, test_year: str, feature_cols: list
+) -> dict:
+    """Run a single CV fold with given test year."""
+    print(f"\n{'=' * 50}")
+    print(f"Fold: Test on {test_year}")
+    print("=" * 50)
+
+    train_df, test_df = split_by_year(epidemic_df, test_year=test_year)
+    print(
+        f"  Train: {len(train_df)} samples ({train_df['year'].nunique()} years)"
+    )
+    print(
+        f"  Test: {len(test_df)} samples ({test_df['year'].nunique()} year)"
+    )
+
+    print("Training MLP model...")
+    mlp, scaler, mlp_train_pred, mlp_test_pred, y_train, y_test = (
+        train_mlp(train_df, test_df)
+    )
+
+    print("Computing naive baseline...")
+    naive_train_pred, naive_test_pred = naive_predictor(train_df, test_df)
+
+    metrics = {
+        "test_year": test_year,
+        "mlp": {
+            "train": compute_metrics(y_train, mlp_train_pred),
+            "test": compute_metrics(y_test, mlp_test_pred),
+        },
+        "naive": {
+            "train": compute_metrics(y_train, naive_train_pred),
+            "test": compute_metrics(y_test, naive_test_pred),
+        },
+    }
+
+    print(f"  MLP Test RMSE: {metrics['mlp']['test']['rmse']:.4f}")
+    print(f"  Naive Test RMSE: {metrics['naive']['test']['rmse']:.4f}")
+
+    # Compute feature importance
+    X_test_scaled = scaler.transform(test_df[feature_cols].values)
+    importance_df = compute_feature_importance(
+        mlp, X_test_scaled, y_test, feature_cols
+    )
+
+    return {
+        "metrics": metrics,
+        "train_df": train_df,
+        "test_df": test_df,
+        "mlp_train_pred": mlp_train_pred,
+        "mlp_test_pred": mlp_test_pred,
+        "naive_train_pred": naive_train_pred,
+        "naive_test_pred": naive_test_pred,
+        "mlp": mlp,
+        "scaler": scaler,
+        "importance_df": importance_df,
+    }
+
+
 def main() -> None:
-    """Run the MLP prediction pipeline."""
+    """Run 4-fold leave-one-year-out cross validation."""
     print("Loading dengue data...")
     dengue_df = load_dengue_citywide()
     print(f"  {len(dengue_df)} biweeks loaded")
@@ -259,32 +370,7 @@ def main() -> None:
     print("Filtering to epidemic years...")
     epidemic_df = get_epidemic_years(features_df)
     print(f"  {len(epidemic_df)} samples in epidemic years")
-    print(f"  Years: {epidemic_df['year'].unique()}")
-
-    print("Splitting train/test...")
-    train_df, test_df = split_by_year(epidemic_df, test_year="2023_24")
-    print(f"  Train: {len(train_df)} samples")
-    print(f"  Test: {len(test_df)} samples")
-
-    print("Training MLP model...")
-    mlp, scaler, mlp_train_pred, mlp_test_pred, y_train, y_test = (
-        train_mlp(train_df, test_df)
-    )
-
-    print("Computing naive baseline...")
-    naive_train_pred, naive_test_pred = naive_predictor(train_df, test_df)
-
-    print("Computing metrics...")
-    metrics = {
-        "mlp": {
-            "train": compute_metrics(y_train, mlp_train_pred),
-            "test": compute_metrics(y_test, mlp_test_pred),
-        },
-        "naive": {
-            "train": compute_metrics(y_train, naive_train_pred),
-            "test": compute_metrics(y_test, naive_test_pred),
-        },
-    }
+    print(f"  Years: {list(epidemic_df['year'].unique())}")
 
     feature_cols = [
         "cases_per_1000_lag1",
@@ -296,40 +382,58 @@ def main() -> None:
         "mean_eggs_lag4",
         "mean_eggs_lag5",
     ]
-    X_test_scaled = scaler.transform(test_df[feature_cols].values)
 
-    print("Computing feature importance...")
-    importance_df = compute_feature_importance(
-        mlp, X_test_scaled, y_test, feature_cols
+    # Run 4-fold CV
+    all_results = {}
+    for test_year in EPIDEMY_YEARS:
+        fold_results = run_fold(epidemic_df, test_year, feature_cols)
+        all_results[test_year] = fold_results
+
+        # Save fold results
+        output_dir = Path(
+            f"results/mlp_bh_rate_predictor/fold_{test_year}"
+        )
+        save_results(
+            output_dir,
+            fold_results["train_df"],
+            fold_results["test_df"],
+            fold_results["mlp_train_pred"],
+            fold_results["mlp_test_pred"],
+            fold_results["naive_train_pred"],
+            fold_results["naive_test_pred"],
+            fold_results["mlp"],
+            fold_results["scaler"],
+            fold_results["metrics"],
+            fold_results["importance_df"],
+        )
+
+    # Save aggregated CV results
+    cv_metrics = {
+        year: results["metrics"] for year, results in all_results.items()
+    }
+    cv_summary = {
+        "folds": cv_metrics,
+        "mean_mlp_test_rmse": np.mean(
+            [m["mlp"]["test"]["rmse"] for m in cv_metrics.values()]
+        ),
+        "mean_naive_test_rmse": np.mean(
+            [m["naive"]["test"]["rmse"] for m in cv_metrics.values()]
+        ),
+    }
+
+    summary_dir = Path("results/mlp_bh_rate_predictor")
+    summary_dir.mkdir(parents=True, exist_ok=True)
+    with open(summary_dir / "cv_summary.json", "w") as f:
+        json.dump(cv_summary, f, indent=2)
+
+    print("\n" + "=" * 60)
+    print("CROSS-VALIDATION SUMMARY")
+    print("=" * 60)
+    print(f"Mean MLP Test RMSE: {cv_summary['mean_mlp_test_rmse']:.4f}")
+    print(
+        f"Mean Naive Test RMSE: {cv_summary['mean_naive_test_rmse']:.4f}"
     )
-
-    print("\n" + "=" * 50)
-    print("RESULTS")
-    print("=" * 50)
-    print(f"MLP Test RMSE: {metrics['mlp']['test']['rmse']:.4f}")
-    print(f"Naive Test RMSE: {metrics['naive']['test']['rmse']:.4f}")
-    print(f"MLP Test MAE: {metrics['mlp']['test']['mae']:.4f}")
-    print(f"Naive Test MAE: {metrics['naive']['test']['mae']:.4f}")
-    print(f"MLP Test R²: {metrics['mlp']['test']['r2']:.4f}")
-    print(f"Naive Test R²: {metrics['naive']['test']['r2']:.4f}")
-    print("=" * 50)
-
-    # Save results
-    output_dir = Path("results/mlp_bh_rate_predictor")
-    save_results(
-        output_dir,
-        train_df,
-        test_df,
-        mlp_train_pred,
-        mlp_test_pred,
-        naive_train_pred,
-        naive_test_pred,
-        mlp,
-        scaler,
-        metrics,
-        importance_df,
-    )
-
+    print("=" * 60)
     print("\nDone! Run the dashboard script to visualize results:")
     print("  python scripts/mlp_bh_dashboard.py")
 
