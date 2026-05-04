@@ -163,8 +163,8 @@ stages:
     outs:
     - path: test/data/raw/diagnosis_raw_comparison.txt
       hash: md5
-      md5: 6514be39c9041de52239673bfac34486
-      size: 2285768
+      md5: 371d7de9f1b3832737bd9ea79a1928c7
+      size: 1944730
     - path: test/data/raw/diagnosis_raw_data.txt
       hash: md5
       md5: 3212a314b837f1955d39daf70fe58ef0
@@ -206,8 +206,8 @@ stages:
       size: 299060027
     - path: test/data/processed/test_processed_data.py
       hash: md5
-      md5: 0b6aee8a327e3551a1cf9700f9d2a625
-      size: 19873
+      md5: 60b881e58a2bb156f33f7075c3e5678b
+      size: 19944
       isexec: true
   libraries_tests:
     cmd: pytest test/utils/test_project_utils.py
@@ -365,13 +365,13 @@ stages:
       size: 19396503
     - path: src/calculate_dengue_per_capita.py
       hash: md5
-      md5: 15e5199ac2d00365ac1c40237c4fe3e9
-      size: 7154
+      md5: b8e8aad18a7b4c123596862933fce36e
+      size: 8957
     outs:
     - path: data/processed/dengue_per_capita.csv
       hash: md5
-      md5: 4020208e149f7f3685fb430abe760949
-      size: 93221611
+      md5: a86b564b297770c2eee28ae3c461c37c
+      size: 142080187
   associate_ovitraps_and_population:
     cmd: python src/associate_ovitraps_and_population.py
     deps:
@@ -429,13 +429,13 @@ stages:
       size: 184028563
     - path: data/processed/dengue_per_capita.csv
       hash: md5
-      md5: 4020208e149f7f3685fb430abe760949
-      size: 93221611
+      md5: a86b564b297770c2eee28ae3c461c37c
+      size: 142080187
     - path: data/processed/interpolated_population_data.csv
       hash: md5
       md5: 7638c3cf17e399d966a1b5d80a8529a2
       size: 19396503
     - path: test/data/processed/test_dengue_per_capita.py
       hash: md5
-      md5: 74a1e6684e0e64c3942c5c7158466cdd
-      size: 8771
+      md5: 6c71057ce8ac2707a6d504475611cb64
+      size: 11232
