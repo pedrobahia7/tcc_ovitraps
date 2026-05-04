@@ -105,24 +105,65 @@ app.layout = html.Div(
                 "marginBottom": 15,
             },
         ),
-        # --- Biweek selector ---
+        # --- Biweek selector + rate toggle ---
         html.Div(
             [
-                html.Label("Select Biweek:", style={"fontWeight": "bold"}),
-                dcc.Slider(
-                    id="week-slider",
-                    min=0,
-                    max=len(ALL_BIWEEKS) - 1,
-                    value=0,
-                    marks={
-                        i: w
-                        for i, w in enumerate(ALL_BIWEEKS)
-                        if i % max(1, len(ALL_BIWEEKS) // 15) == 0
+                html.Div(
+                    [
+                        html.Label(
+                            "Select Biweek:", style={"fontWeight": "bold"}
+                        ),
+                        dcc.Slider(
+                            id="week-slider",
+                            min=0,
+                            max=len(ALL_BIWEEKS) - 1,
+                            value=0,
+                            marks={
+                                i: w
+                                for i, w in enumerate(ALL_BIWEEKS)
+                                if i % max(1, len(ALL_BIWEEKS) // 15) == 0
+                            },
+                            step=1,
+                            tooltip={
+                                "placement": "bottom",
+                                "always_visible": True,
+                            },
+                        ),
+                    ],
+                    style={
+                        "width": "75%",
+                        "display": "inline-block",
+                        "verticalAlign": "middle",
                     },
-                    step=1,
-                    tooltip={
-                        "placement": "bottom",
-                        "always_visible": True,
+                ),
+                html.Div(
+                    [
+                        html.Label(
+                            "Rate Metric:",
+                            style={"fontWeight": "bold", "marginRight": 8},
+                        ),
+                        dcc.RadioItems(
+                            id="rate-metric",
+                            options=[
+                                {
+                                    "label": " Crude",
+                                    "value": "cases_per_1000",
+                                },
+                                {
+                                    "label": " EB Smoothed",
+                                    "value": "eb_rate_per_1000",
+                                },
+                            ],
+                            value="cases_per_1000",
+                            inline=True,
+                            style={"fontSize": 14},
+                        ),
+                    ],
+                    style={
+                        "width": "20%",
+                        "display": "inline-block",
+                        "verticalAlign": "middle",
+                        "textAlign": "right",
                     },
                 ),
             ],
@@ -231,7 +272,7 @@ app.layout = html.Div(
             dcc.Graph(id="choropleth-map", style={"height": "600px"}),
             style={"margin": "0 20px"},
         ),
-        # --- Distribution explorer ---
+        # --- Distribution explorer (paired rows: Crude | EB) ---
         html.H2(
             "Distribution Explorer",
             style={
@@ -240,46 +281,105 @@ app.layout = html.Div(
                 "color": "#2C3E50",
             },
         ),
+        # Column headers
         html.Div(
             [
-                # Histogram + Box plot side by side
-                html.Div(
-                    dcc.Graph(id="histogram"),
+                html.H3(
+                    "Crude Rate",
                     style={
                         "width": "50%",
                         "display": "inline-block",
-                        "verticalAlign": "top",
+                        "textAlign": "center",
+                        "color": "#E74C3C",
+                        "margin": 0,
                     },
                 ),
-                html.Div(
-                    dcc.Graph(id="boxplot-year"),
+                html.H3(
+                    "EB Smoothed Rate",
                     style={
                         "width": "50%",
                         "display": "inline-block",
-                        "verticalAlign": "top",
+                        "textAlign": "center",
+                        "color": "#2980B9",
+                        "margin": 0,
                     },
                 ),
-            ]
+            ],
         ),
+        # Row 1: Histograms
         html.Div(
             [
-                # Scatter + Edge-cases table side by side
                 html.Div(
-                    dcc.Graph(id="scatter-cases-pop"),
+                    dcc.Graph(id="histogram-crude"),
                     style={
                         "width": "50%",
                         "display": "inline-block",
                         "verticalAlign": "top",
                     },
                 ),
+                html.Div(
+                    dcc.Graph(id="histogram-eb"),
+                    style={
+                        "width": "50%",
+                        "display": "inline-block",
+                        "verticalAlign": "top",
+                    },
+                ),
+            ],
+        ),
+        # Row 2: Box plots by year
+        html.Div(
+            [
+                html.Div(
+                    dcc.Graph(id="boxplot-year-crude"),
+                    style={
+                        "width": "50%",
+                        "display": "inline-block",
+                        "verticalAlign": "top",
+                    },
+                ),
+                html.Div(
+                    dcc.Graph(id="boxplot-year-eb"),
+                    style={
+                        "width": "50%",
+                        "display": "inline-block",
+                        "verticalAlign": "top",
+                    },
+                ),
+            ],
+        ),
+        # Row 3: Scatter plots
+        html.Div(
+            [
+                html.Div(
+                    dcc.Graph(id="scatter-crude"),
+                    style={
+                        "width": "50%",
+                        "display": "inline-block",
+                        "verticalAlign": "top",
+                    },
+                ),
+                html.Div(
+                    dcc.Graph(id="scatter-eb"),
+                    style={
+                        "width": "50%",
+                        "display": "inline-block",
+                        "verticalAlign": "top",
+                    },
+                ),
+            ],
+        ),
+        # Row 4: Edge-case tables (flexbox for reliable side-by-side)
+        html.Div(
+            [
                 html.Div(
                     [
                         html.H4(
-                            "Top 20 Sectors by Incidence Rate",
-                            style={"textAlign": "center"},
+                            "Top 20 Sectors — Crude Rate",
+                            style={"textAlign": "center", "marginTop": 10},
                         ),
                         dash_table.DataTable(
-                            id="edge-table",
+                            id="edge-table-crude",
                             style_table={
                                 "overflowX": "auto",
                                 "maxHeight": "380px",
@@ -298,13 +398,44 @@ app.layout = html.Div(
                         ),
                     ],
                     style={
-                        "width": "50%",
-                        "display": "inline-block",
-                        "verticalAlign": "top",
-                        "padding": "0 20px",
+                        "flex": "1",
+                        "minWidth": 0,
+                        "padding": "0 10px",
                     },
                 ),
-            ]
+                html.Div(
+                    [
+                        html.H4(
+                            "Top 20 Sectors — EB Rate",
+                            style={"textAlign": "center", "marginTop": 10},
+                        ),
+                        dash_table.DataTable(
+                            id="edge-table-eb",
+                            style_table={
+                                "overflowX": "auto",
+                                "maxHeight": "380px",
+                                "overflowY": "auto",
+                            },
+                            style_cell={
+                                "textAlign": "left",
+                                "fontSize": 12,
+                                "padding": "4px 8px",
+                            },
+                            style_header={
+                                "fontWeight": "bold",
+                                "backgroundColor": "#f0f0f0",
+                            },
+                            page_size=20,
+                        ),
+                    ],
+                    style={
+                        "flex": "1",
+                        "minWidth": 0,
+                        "padding": "0 10px",
+                    },
+                ),
+            ],
+            style={"display": "flex", "gap": "10px"},
         ),
     ],
     style={"fontFamily": "Arial, sans-serif", "padding": 10},
@@ -341,50 +472,138 @@ def _threshold_mask(
     return mask
 
 
+def _build_histogram(wdf, col, label, color, biweek):
+    """Build a histogram figure for a single rate column."""
+    fig = px.histogram(
+        wdf[wdf[col].notna()],
+        x=col,
+        nbins=50,
+        title=f"{label} Distribution — {biweek}",
+        labels={col: f"{label} per 1,000"},
+        color_discrete_sequence=[color],
+    )
+    fig.update_layout(
+        yaxis_title="Sector count",
+        margin=dict(l=40, r=20, t=40, b=40),
+        height=350,
+    )
+    return fig
+
+
+def _build_scatter(wdf, col, label, biweek):
+    """Build a cases-vs-population scatter for a single rate column."""
+    sdf = wdf[(wdf["population"] > 0) & (wdf["case_count"] > 0)].copy()
+    fig = px.scatter(
+        sdf,
+        x="population",
+        y="case_count",
+        color=col,
+        color_continuous_scale="RdBu_r",
+        hover_data=["sector_id", col],
+        title=f"Cases vs Population — {biweek}",
+        labels={
+            "population": "Population",
+            "case_count": "Cases",
+            col: label,
+        },
+    )
+    fig.update_layout(
+        margin=dict(l=40, r=20, t=40, b=40),
+        height=350,
+    )
+    return fig
+
+
+def _build_edge_table(wdf, col):
+    """Build top-20 edge-cases table data + columns for a rate column."""
+    edge = wdf[wdf[col].notna()].sort_values(col, ascending=False)
+    top = edge.head(20).copy()
+    top[col] = top[col].round(3)
+    top = top[["sector_id", "case_count", "population", col]]
+    return top.to_dict("records"), [
+        {"name": c, "id": c} for c in top.columns
+    ]
+
+
+def _build_boxplot(col, label, color):
+    """Build a box plot by year for a rate column."""
+    yearly = pc_df[pc_df[col].notna() & (pc_df[col] > 0)].copy()
+    yearly = yearly.sort_values("epi_year")
+    fig = px.box(
+        yearly,
+        x="epi_year",
+        y=col,
+        hover_data=["biweek", "sector_id"],
+        title=f"{label} Distribution by Year",
+        labels={
+            "epi_year": "Epidemic Year",
+            col: f"{label} per 1,000",
+            "biweek": "Biweek",
+        },
+        color_discrete_sequence=[color],
+    )
+    fig.update_layout(
+        margin=dict(l=40, r=20, t=40, b=40),
+        height=350,
+        xaxis_tickangle=-45,
+    )
+    return fig
+
+
 @app.callback(
     Output("choropleth-map", "figure"),
     Output("summary-stats", "children"),
-    Output("histogram", "figure"),
-    Output("scatter-cases-pop", "figure"),
-    Output("edge-table", "data"),
-    Output("edge-table", "columns"),
+    Output("histogram-crude", "figure"),
+    Output("histogram-eb", "figure"),
+    Output("scatter-crude", "figure"),
+    Output("scatter-eb", "figure"),
+    Output("edge-table-crude", "data"),
+    Output("edge-table-crude", "columns"),
+    Output("edge-table-eb", "data"),
+    Output("edge-table-eb", "columns"),
     Input("week-slider", "value"),
+    Input("rate-metric", "value"),
     Input("threshold-min", "value"),
     Input("threshold-max", "value"),
     Input("threshold-checks", "value"),
 )
-def update_dashboard(slider_idx, thresh_min, thresh_max, thresh_checks):
+def update_dashboard(
+    slider_idx, rate_col, thresh_min, thresh_max, thresh_checks
+):
     biweek = ALL_BIWEEKS[slider_idx]
     wdf = _biweek_data(biweek)
 
-    # ---- Choropleth map ----
+    # ---- Choropleth map (uses selected metric) ----
+    rate_label = (
+        "EB Rate" if rate_col == "eb_rate_per_1000" else "Crude Rate"
+    )
     merged = sectors_gdf[["CD_SETOR"]].merge(
-        wdf[["sector_id", "case_count", "population", "cases_per_1000"]],
+        wdf[["sector_id", "case_count", "population", rate_col]],
         left_on="CD_SETOR",
         right_on="sector_id",
         how="left",
     )
-    merged["cases_per_1000"] = merged["cases_per_1000"].fillna(0)
+    merged[rate_col] = merged[rate_col].fillna(0)
     merged["case_count"] = merged["case_count"].fillna(0).astype(int)
     merged["population"] = merged["population"].fillna(0).astype(int)
 
     hover = [
-        f"Sector: {s}<br>Cases: {c}<br>Pop: {p}<br>Rate: {r:.2f} ‰"
+        f"Sector: {s}<br>Cases: {c}<br>Pop: {p}<br>{rate_label}: {r:.2f} ‰"
         for s, c, p, r in zip(
             merged["CD_SETOR"],
             merged["case_count"],
             merged["population"],
-            merged["cases_per_1000"],
+            merged[rate_col],
         )
     ]
 
-    max_rate = max(merged["cases_per_1000"].quantile(0.95), 1)
+    max_rate = max(merged[rate_col].quantile(0.95), 1)
 
     fig_map = go.Figure(
         go.Choroplethmapbox(
             geojson=GEOJSON_DATA,
             locations=merged["CD_SETOR"].tolist(),
-            z=merged["cases_per_1000"].tolist(),
+            z=merged[rate_col].tolist(),
             featureidkey="properties.CD_SETOR",
             colorscale=BLUE_RED_COLORSCALE,
             zmin=0,
@@ -395,7 +614,7 @@ def update_dashboard(slider_idx, thresh_min, thresh_max, thresh_checks):
             },
             hovertext=hover,
             hoverinfo="text",
-            colorbar=dict(title="Cases/1k", thickness=15, len=0.6),
+            colorbar=dict(title=rate_label, thickness=15, len=0.6),
             name="Incidence",
         )
     )
@@ -442,10 +661,9 @@ def update_dashboard(slider_idx, thresh_min, thresh_max, thresh_checks):
     )
 
     # ---- Summary stats ----
-    valid = wdf[wdf["cases_per_1000"].notna()]
     total_cases = int(wdf["case_count"].sum())
-    mean_rate = valid["cases_per_1000"].mean() if len(valid) else 0
-    median_rate = valid["cases_per_1000"].median() if len(valid) else 0
+    crude_valid = wdf[wdf["cases_per_1000"].notna()]
+    eb_valid = wdf[wdf["eb_rate_per_1000"].notna()]
     n_threshold = int(tmask.sum())
     summary = html.Div(
         [
@@ -457,10 +675,11 @@ def update_dashboard(slider_idx, thresh_min, thresh_max, thresh_checks):
                 f"Total cases: {total_cases:,}", style={"marginRight": 20}
             ),
             html.Span(
-                f"Mean rate: {mean_rate:.3f}", style={"marginRight": 20}
+                f"Crude mean: {crude_valid['cases_per_1000'].mean():.3f}",
+                style={"marginRight": 20},
             ),
             html.Span(
-                f"Median rate: {median_rate:.3f}",
+                f"EB mean: {eb_valid['eb_rate_per_1000'].mean():.3f}",
                 style={"marginRight": 20},
             ),
             html.Span(
@@ -470,85 +689,52 @@ def update_dashboard(slider_idx, thresh_min, thresh_max, thresh_checks):
         ]
     )
 
-    # ---- Histogram ----
-    fig_hist = px.histogram(
-        wdf[wdf["cases_per_1000"].notna()],
-        x="cases_per_1000",
-        nbins=50,
-        title=f"Rate Distribution — {biweek}",
-        labels={"cases_per_1000": "Cases per 1,000"},
-        color_discrete_sequence=["#2980B9"],
+    # ---- Distribution charts (both columns) ----
+    fig_hist_crude = _build_histogram(
+        wdf, "cases_per_1000", "Crude Rate", "#E74C3C", biweek
     )
-    fig_hist.update_layout(
-        yaxis_title="Sector count",
-        margin=dict(l=40, r=20, t=40, b=40),
-        height=380,
+    fig_hist_eb = _build_histogram(
+        wdf, "eb_rate_per_1000", "EB Rate", "#2980B9", biweek
     )
 
-    # ---- Scatter: cases vs population ----
-    scatter_df = wdf[
-        (wdf["population"] > 0) & (wdf["case_count"] > 0)
-    ].copy()
-    fig_scatter = px.scatter(
-        scatter_df,
-        x="population",
-        y="case_count",
-        color="cases_per_1000",
-        color_continuous_scale="RdBu_r",
-        hover_data=["sector_id", "cases_per_1000"],
-        title=f"Cases vs Population — {biweek}",
-        labels={
-            "population": "Population",
-            "case_count": "Cases",
-            "cases_per_1000": "Rate",
-        },
+    fig_scatter_crude = _build_scatter(
+        wdf, "cases_per_1000", "Crude Rate", biweek
     )
-    fig_scatter.update_layout(
-        margin=dict(l=40, r=20, t=40, b=40),
-        height=380,
+    fig_scatter_eb = _build_scatter(
+        wdf, "eb_rate_per_1000", "EB Rate", biweek
     )
 
-    # ---- Edge cases table (top sectors only) ----
-    edge = wdf[wdf["cases_per_1000"].notna()].sort_values(
-        "cases_per_1000", ascending=False
+    table_crude_data, table_crude_cols = _build_edge_table(
+        wdf, "cases_per_1000"
     )
-    top = edge.head(20).copy()
-    top["cases_per_1000"] = top["cases_per_1000"].round(3)
-    top = top[["sector_id", "case_count", "population", "cases_per_1000"]]
-    table_data = top.to_dict("records")
-    table_cols = [{"name": c, "id": c} for c in top.columns]
+    table_eb_data, table_eb_cols = _build_edge_table(
+        wdf, "eb_rate_per_1000"
+    )
 
-    return fig_map, summary, fig_hist, fig_scatter, table_data, table_cols
+    return (
+        fig_map,
+        summary,
+        fig_hist_crude,
+        fig_hist_eb,
+        fig_scatter_crude,
+        fig_scatter_eb,
+        table_crude_data,
+        table_crude_cols,
+        table_eb_data,
+        table_eb_cols,
+    )
 
 
-# ---- Box plot by year (independent of week slider) ----
+# ---- Box plots by year (independent of week slider) ----
 @app.callback(
-    Output("boxplot-year", "figure"),
+    Output("boxplot-year-crude", "figure"),
+    Output("boxplot-year-eb", "figure"),
     Input("week-slider", "value"),
 )
-def update_boxplot(_):
-    yearly = pc_df[
-        pc_df["cases_per_1000"].notna() & (pc_df["cases_per_1000"] > 0)
-    ].copy()
-    fig_box = px.box(
-        yearly,
-        x="epi_year",
-        y="cases_per_1000",
-        hover_data=["biweek", "sector_id"],
-        title="Per-Capita Rate Distribution by Year",
-        labels={
-            "epi_year": "Epidemic Year",
-            "cases_per_1000": "Cases per 1,000",
-            "biweek": "Biweek",
-        },
-        color_discrete_sequence=["#E74C3C"],
-    )
-    fig_box.update_layout(
-        margin=dict(l=40, r=20, t=40, b=40),
-        height=380,
-        xaxis_tickangle=-45,
-    )
-    return fig_box
+def update_boxplots(_):
+    fig_crude = _build_boxplot("cases_per_1000", "Crude Rate", "#E74C3C")
+    fig_eb = _build_boxplot("eb_rate_per_1000", "EB Rate", "#2980B9")
+    return fig_crude, fig_eb
 
 
 # =============================================================================

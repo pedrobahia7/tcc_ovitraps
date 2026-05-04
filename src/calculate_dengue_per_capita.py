@@ -2,6 +2,8 @@
 
 Aggregates dengue case counts per population sector and biweek, then
 joins with the interpolated population data to compute the per-capita rate.
+Also applies Empirical Bayes smoothing (Marshall, 1991) to correct for
+variance instability in small-population sectors.
 
 Biweek grouping follows the project convention:
     biweek_num = ((week_num + 1) // 2) * 2
@@ -16,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import yaml
+from esda.smoothing import Empirical_Bayes
 
 
 DEFAULT_PARAMS_PATH = Path("params.yaml")
@@ -158,10 +161,61 @@ def compute_per_capita(
         0,
     )
 
+    merged["eb_rate_per_1000"] = empirical_bayes_rate(
+        merged["case_count"].to_numpy(dtype=np.float64),
+        merged["population"].to_numpy(dtype=np.float64),
+        PER_CAPITA_MULTIPLIER,
+    )
+
     merged = merged.sort_values(["sector_id", "biweek"]).reset_index(
         drop=True
     )
     return merged
+
+
+def empirical_bayes_rate(
+    events: np.ndarray,
+    population: np.ndarray,
+    multiplier: float = 1.0,
+) -> np.ndarray:
+    """Compute Empirical Bayes smoothed rates (Marshall, 1991).
+
+    Wrapper around PySAL's ``esda.smoothing.Empirical_Bayes``.
+    Parameters are estimated once from *all* observations, then each
+    observation's crude rate is shrunk toward the global mean proportionally
+    to its population at risk.
+
+    Parameters
+    ----------
+    events : np.ndarray
+        Event counts (e.g. dengue cases) per observation.
+    population : np.ndarray
+        Population at risk per observation.
+    multiplier : float
+        Scaling factor applied to both crude and smoothed rates
+        (e.g. 1000 for "per 1,000 population").
+
+    Returns
+    -------
+    np.ndarray
+        EB-smoothed rates, same length as *events*.
+    """
+    events = np.asarray(events, dtype=np.float64)
+    population = np.asarray(population, dtype=np.float64)
+
+    valid = population > 0
+    result = np.zeros_like(events, dtype=np.float64)
+
+    if not valid.any():
+        return result
+
+    e = events[valid]
+    b = population[valid]
+
+    eb = Empirical_Bayes(e, b)
+    result[valid] = eb.r.ravel() * multiplier
+
+    return result
 
 
 def save_per_capita(df: pd.DataFrame, output_path: str | Path) -> None:
@@ -207,11 +261,18 @@ def main() -> None:
     population_biweekly = load_interpolated_population(population_path)
     print(f"  {len(population_biweekly):,} sector-biweek rows")
 
-    print("Computing biweekly per-capita rates ...")
+    print(
+        "Computing biweekly per-capita rates (crude + Empirical Bayes) ..."
+    )
     per_capita = compute_per_capita(case_counts, population_biweekly)
     print(f"  {len(per_capita):,} rows in output")
     print(
         f"  Non-zero case rows: {(per_capita['case_count'] > 0).sum():,}"
+    )
+    print(
+        f"  EB rate range: "
+        f"{per_capita['eb_rate_per_1000'].min():.4f} – "
+        f"{per_capita['eb_rate_per_1000'].max():.4f}"
     )
 
     save_per_capita(per_capita, output_path)

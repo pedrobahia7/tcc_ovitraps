@@ -77,6 +77,7 @@ class TestDenguePerCapita:
             "case_count",
             "population",
             "cases_per_1000",
+            "eb_rate_per_1000",
         }
         missing = required - set(per_capita_df.columns)
         assert not missing, f"Missing columns: {sorted(missing)}"
@@ -105,6 +106,11 @@ class TestDenguePerCapita:
         assert pd.api.types.is_numeric_dtype(
             per_capita_df["cases_per_1000"]
         ), "cases_per_1000 should be numeric"
+
+    def test_eb_rate_per_1000_is_numeric(self, per_capita_df):
+        assert pd.api.types.is_numeric_dtype(
+            per_capita_df["eb_rate_per_1000"]
+        ), "eb_rate_per_1000 should be numeric"
 
     # ------------------------------------------------------------------
     # Value validity tests
@@ -145,6 +151,59 @@ class TestDenguePerCapita:
             assert (zero_cases["cases_per_1000"] == 0.0).all(), (
                 "Sectors with zero cases should have rate 0"
             )
+
+    # ------------------------------------------------------------------
+    # Empirical Bayes rate tests
+    # ------------------------------------------------------------------
+
+    def test_eb_rate_non_negative(self, per_capita_df):
+        valid = per_capita_df["eb_rate_per_1000"].dropna()
+        assert (valid >= 0).all(), "eb_rate_per_1000 must be non-negative"
+
+    def test_eb_rate_zero_when_population_zero(self, per_capita_df):
+        zero_pop = per_capita_df[per_capita_df["population"] == 0]
+        if not zero_pop.empty:
+            assert (zero_pop["eb_rate_per_1000"] == 0).all(), (
+                "eb_rate_per_1000 should be 0 when population is 0"
+            )
+
+    def test_eb_shrinks_high_crude_rates(self, per_capita_df):
+        """EB rate should be <= crude rate for the highest crude-rate sectors."""
+        valid = per_capita_df[
+            (per_capita_df["population"] > 0)
+            & (per_capita_df["cases_per_1000"] > 0)
+        ]
+        if valid.empty:
+            pytest.skip("No positive-rate rows to check shrinkage")
+        top_crude = valid.nlargest(100, "cases_per_1000")
+        assert (
+            top_crude["eb_rate_per_1000"]
+            <= top_crude["cases_per_1000"] + 1e-6
+        ).all(), (
+            "EB rate should shrink the highest crude rates toward the mean"
+        )
+
+    def test_eb_stable_for_large_population(self, per_capita_df):
+        """For high-population sectors, EB rate should be close to crude rate."""
+        valid = per_capita_df[
+            (per_capita_df["population"] > 0)
+            & (per_capita_df["case_count"] > 0)
+        ]
+        if valid.empty:
+            pytest.skip("No positive rows to check")
+        large_pop = valid[
+            valid["population"] >= valid["population"].quantile(0.95)
+        ]
+        if large_pop.empty:
+            pytest.skip("No large-population sectors")
+        diff = (
+            large_pop["eb_rate_per_1000"] - large_pop["cases_per_1000"]
+        ).abs()
+        median_diff = diff.median()
+        assert median_diff < 1.0, (
+            f"Median |EB - crude| for large-pop sectors is {median_diff:.3f}, "
+            "expected < 1.0 (EB should barely adjust large-pop sectors)"
+        )
 
     # ------------------------------------------------------------------
     # Sector ID format
