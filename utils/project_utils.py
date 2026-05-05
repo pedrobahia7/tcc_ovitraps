@@ -15,7 +15,7 @@ EPIDEMY_YEARS = ["2012_13", "2015_16", "2018_19", "2023_24"]
 
 def get_weekly_dengue(
     dengue_data: pd.DataFrame,
-    ) -> pd.DataFrame:
+) -> pd.DataFrame:
     """
     Convert processed dengue data to a pivoted format suitable for comparison
     with ovitrap data, with 'epidemic_date' as index. The
@@ -66,7 +66,7 @@ def get_weekly_dengue(
 
 def get_biweekly_dengue(
     dengue_data: pd.DataFrame,
-    ) -> pd.DataFrame:
+) -> pd.DataFrame:
     """
     Convert processed dengue data to a pivoted format suitable for comparison
     with ovitrap data, with 'anoepid' and 'semepid' as index. The
@@ -100,7 +100,7 @@ def get_biweekly_dengue(
 
 def get_daily_dengue(
     dengue_data: pd.DataFrame,
-    ) -> pd.Series:
+) -> pd.Series:
     """
     Convert raw dengue data to a daily time series format suitable for analysis.
     The DataFrame will contain counts of 'novos' cases per day.
@@ -143,16 +143,30 @@ def get_daily_dengue(
 
 ################ Ovitraps Eggs Functions ################
 
+
 def load_ovitraps_data(file_path):
     """Load ovitraps data from CSV."""
-    ovitraps_data = pd.read_csv(file_path, parse_dates=['dt_col', 'dt_instal'], dtype={'narmad': str, 'nplaca': str})
-    
-    assert ovitraps_data['dt_col'].notnull().all(), "'dt_col' must not contain null values"
-    assert ovitraps_data['dt_instal'].notnull().all(), "'dt_instal' must not contain null values"
-    assert pd.api.types.is_string_dtype(ovitraps_data['narmad']), "'narmad' must be of string type"
-    assert pd.api.types.is_string_dtype(ovitraps_data['nplaca']), "'nplaca' must be of string type"
-    
+    ovitraps_data = pd.read_csv(
+        file_path,
+        parse_dates=["dt_col", "dt_instal"],
+        dtype={"narmad": str, "nplaca": str},
+    )
+
+    assert ovitraps_data["dt_col"].notnull().all(), (
+        "'dt_col' must not contain null values"
+    )
+    assert ovitraps_data["dt_instal"].notnull().all(), (
+        "'dt_instal' must not contain null values"
+    )
+    assert pd.api.types.is_string_dtype(ovitraps_data["narmad"]), (
+        "'narmad' must be of string type"
+    )
+    assert pd.api.types.is_string_dtype(ovitraps_data["nplaca"]), (
+        "'nplaca' must be of string type"
+    )
+
     return ovitraps_data
+
 
 def get_biweekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     """
@@ -193,9 +207,11 @@ def get_biweekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
 
     # Create a new datetime column from ano and semepid
     ovitraps_data["date"] = ovitraps_data.apply(
-        lambda row: str(row["anoepid"]) + "W" + str(row["semepid"])
-        if row["semepid"] > 9
-        else str(row["anoepid"]) + "W0" + str(row["semepid"]),
+        lambda row: (
+            str(row["anoepid"]) + "W" + str(row["semepid"])
+            if row["semepid"] > 9
+            else str(row["anoepid"]) + "W0" + str(row["semepid"])
+        ),
         axis=1,
     )
 
@@ -258,9 +274,10 @@ def get_weekly_ovitraps(ovitraps_data: pd.DataFrame) -> pd.DataFrame:
     pivot_data = pivot_data.reindex(all_weeks).sort_index()
     return pivot_data
 
+
 def get_daily_ovitraps(
     ovitraps_data: pd.DataFrame,
-    ) -> pd.DataFrame:
+) -> pd.DataFrame:
     """
     Convert raw ovitraps data to a daily samples by the mean of eggs in a
     sample over the whole period the trap was exposed. This function
@@ -285,63 +302,80 @@ def get_daily_ovitraps(
 
     """
     # Input validation
-    assert isinstance(ovitraps_data, pd.DataFrame), "Input must be a DataFrame"
-    assert ovitraps_data.empty is False, "Input DataFrame must not be empty"
+    assert isinstance(ovitraps_data, pd.DataFrame), (
+        "Input must be a DataFrame"
+    )
+    assert ovitraps_data.empty is False, (
+        "Input DataFrame must not be empty"
+    )
     assert all(
         col in ovitraps_data.columns
         for col in ["dt_instal", "dt_col", "narmad", "novos"]
-    ), "DataFrame must contain 'dt_instal', 'dt_col', 'narmad', and 'novos' columns"
-    
+    ), (
+        "DataFrame must contain 'dt_instal', 'dt_col', 'narmad', and 'novos' columns"
+    )
+
     assert pd.api.types.is_datetime64_any_dtype(
         ovitraps_data["dt_instal"]
     ), "'dt_instal' column must be of datetime type"
-    
-    assert pd.api.types.is_datetime64_any_dtype(
-        ovitraps_data["dt_col"]
-    ), "'dt_col' column must be of datetime type"
-    
+
+    assert pd.api.types.is_datetime64_any_dtype(ovitraps_data["dt_col"]), (
+        "'dt_col' column must be of datetime type"
+    )
+
     assert pd.api.types.is_numeric_dtype(
         ovitraps_data["novos"].dropna(),
     ), "'novos' column must be numeric or NaN"
-    
+
     assert not (
         ovitraps_data["dt_col"] < ovitraps_data["dt_instal"]
     ).any(), "'dt_col' must be greater than or equal to 'dt_instal'"
 
-    assert ovitraps_data[["dt_instal", "dt_col", "narmad", "novos"]].notnull(        
-    ).all().all(), "'dt_instal', 'dt_col', 'narmad', and 'novos' must not contain null values"
-
     assert (
-        ovitraps_data["novos"] >= 0
-    ).all(), "'novos' must be non-negative"
+        ovitraps_data[["dt_instal", "dt_col", "narmad", "novos"]]
+        .notnull()
+        .all()
+        .all()
+    ), (
+        "'dt_instal', 'dt_col', 'narmad', and 'novos' must not contain null values"
+    )
+
+    assert (ovitraps_data["novos"] >= 0).all(), (
+        "'novos' must be non-negative"
+    )
 
     ovitraps_data = ovitraps_data.copy()
 
     # Pre-calculate days for each row (vectorized)
-    ovitraps_data['days'] = (ovitraps_data['dt_col'] - ovitraps_data['dt_instal']).dt.days.astype(int)
-    ovitraps_data['daily_novos'] = ovitraps_data['novos'] / (ovitraps_data['days'])
-    
+    ovitraps_data["days"] = (
+        ovitraps_data["dt_col"] - ovitraps_data["dt_instal"]
+    ).dt.days.astype(int)
+    ovitraps_data["daily_novos"] = (
+        ovitraps_data["novos"] / (ovitraps_data["days"])
+    )
+
     # Create lists to store expanded data
     dates_list = []
     narmad_list = []
     novos_list = []
-    
+
     # Vectorized expansion using numpy
     for _, row in ovitraps_data.iterrows():
-        n_days = row['days']
-        dates = pd.date_range(row['dt_instal'], row['dt_col'] - pd.Timedelta(days=1), freq='D')
-        
-        dates_list.extend(dates)
-        narmad_list.extend([row['narmad']] * n_days )
-        novos_list.extend([row['daily_novos']] * n_days )
-    
-    # Create ovitraps DataFrame 
-    ovitraps_expanded = pd.DataFrame({
-        'date': dates_list,
-        'narmad': narmad_list,
-        'novos': novos_list
-    })
+        n_days = row["days"]
+        dates = pd.date_range(
+            row["dt_instal"],
+            row["dt_col"] - pd.Timedelta(days=1),
+            freq="D",
+        )
 
+        dates_list.extend(dates)
+        narmad_list.extend([row["narmad"]] * n_days)
+        novos_list.extend([row["daily_novos"]] * n_days)
+
+    # Create ovitraps DataFrame
+    ovitraps_expanded = pd.DataFrame(
+        {"date": dates_list, "narmad": narmad_list, "novos": novos_list}
+    )
 
     # Group by date and narmad, summing the 'novos' values
     daily_ovitraps = (
@@ -365,26 +399,42 @@ def get_daily_ovitraps(
     assert isinstance(daily_ovitraps, pd.DataFrame)
     assert daily_ovitraps.empty is False
     assert all(
-        col in daily_ovitraps.columns for col in ovitraps_data["narmad"].unique()
+        col in daily_ovitraps.columns
+        for col in ovitraps_data["narmad"].unique()
     ), "Output DataFrame must contain all 'narmad' columns from input"
-    
-    assert pd.api.types.is_datetime64_any_dtype(
-        daily_ovitraps.index
-    ), "Output DataFrame index must be of datetime type"
 
-    assert all([pd.api.types.is_numeric_dtype(daily_ovitraps[col].dropna()) 
-                for col in daily_ovitraps.columns]
-                ), "Output DataFrame must contain numeric values"
+    assert pd.api.types.is_datetime64_any_dtype(daily_ovitraps.index), (
+        "Output DataFrame index must be of datetime type"
+    )
 
-    assert all([((daily_ovitraps[col].dropna() >= 0).all()) 
-                for col in daily_ovitraps.columns]
-                ),"Output DataFrame must contain non-negative values"
+    assert all(
+        [
+            pd.api.types.is_numeric_dtype(daily_ovitraps[col].dropna())
+            for col in daily_ovitraps.columns
+        ]
+    ), "Output DataFrame must contain numeric values"
 
-    assert daily_ovitraps.index.min() == ovitraps_data["dt_instal"].min(), "Output DataFrame index min must match input 'dt_instal' min"
-    assert daily_ovitraps.index.max() == ovitraps_data["dt_col"].max() - pd.Timedelta(days=1), "Output DataFrame index max must match input 'dt_col' max"
+    assert all(
+        [
+            ((daily_ovitraps[col].dropna() >= 0).all())
+            for col in daily_ovitraps.columns
+        ]
+    ), "Output DataFrame must contain non-negative values"
+
+    assert (
+        daily_ovitraps.index.min() == ovitraps_data["dt_instal"].min()
+    ), "Output DataFrame index min must match input 'dt_instal' min"
+    assert daily_ovitraps.index.max() == ovitraps_data[
+        "dt_col"
+    ].max() - pd.Timedelta(days=1), (
+        "Output DataFrame index max must match input 'dt_col' max"
+    )
     return daily_ovitraps
 
-def get_overlapped_samples(ovitraps_data:pd.DataFrame, processed_name:bool=False)-> List[Tuple[str,str]]:
+
+def get_overlapped_samples(
+    ovitraps_data: pd.DataFrame, processed_name: bool = False
+) -> List[Tuple[str, str]]:
     """
     Get list of tuples with nplaca samples with overlapping periods
 
@@ -398,7 +448,7 @@ def get_overlapped_samples(ovitraps_data:pd.DataFrame, processed_name:bool=False
     -------
     - final_list (List[Tuple[str,str]]): List of tuples with nplaca of the samples with overlapping
       periods
-     
+
     """
     # Input validation
     if processed_name:
@@ -407,34 +457,50 @@ def get_overlapped_samples(ovitraps_data:pd.DataFrame, processed_name:bool=False
     else:
         dtcol = "dtcol"
         dtinstal = "dtinstal"
-    columns = ['narmad', dtinstal, dtcol, 'nplaca']
-    assert isinstance(ovitraps_data, pd.DataFrame), "Input must be a DataFrame"
-    assert ovitraps_data.empty is False, "Input DataFrame must not be empty"
-    assert all(col in ovitraps_data.columns for col in columns), "Input DataFrame must contain required columns"
-    assert ovitraps_data[columns].notnull().all().all(), "Input DataFrame must not contain null values in required columns"
+    columns = ["narmad", dtinstal, dtcol, "nplaca"]
+    assert isinstance(ovitraps_data, pd.DataFrame), (
+        "Input must be a DataFrame"
+    )
+    assert ovitraps_data.empty is False, (
+        "Input DataFrame must not be empty"
+    )
+    assert all(col in ovitraps_data.columns for col in columns), (
+        "Input DataFrame must contain required columns"
+    )
+    assert ovitraps_data[columns].notnull().all().all(), (
+        "Input DataFrame must not contain null values in required columns"
+    )
 
     final_list = []
-    ovitraps_sorted = ovitraps_data.sort_values(['narmad', dtinstal])      
-    for trap_id in ovitraps_data['narmad'].unique():
-        trap_data = ovitraps_sorted[ovitraps_sorted['narmad'] == trap_id]
+    ovitraps_sorted = ovitraps_data.sort_values(["narmad", dtinstal])
+    for trap_id in ovitraps_data["narmad"].unique():
+        trap_data = ovitraps_sorted[ovitraps_sorted["narmad"] == trap_id]
         if len(trap_data) > 1:
             trap_installs = pd.to_datetime(trap_data[dtinstal]).values
             trap_collections = pd.to_datetime(trap_data[dtcol]).values
-            # Check for overlapping periods 
+            # Check for overlapping periods
             for i in range(len(trap_installs) - 1):
                 # Current period: install[i] to collect[i]
                 # Next period: install[i+1] to collect[i+1]
-                # They should not overlap 
+                # They should not overlap
                 current_end = pd.to_datetime(trap_collections[i])
                 next_start = pd.to_datetime(trap_installs[i + 1])
                 overlap_days = (current_end - next_start).days
                 if overlap_days >= 0:
-                    final_list.append((trap_data.iloc[i].nplaca, trap_data.iloc[i+1].nplaca))
-    
+                    final_list.append(
+                        (
+                            trap_data.iloc[i].nplaca,
+                            trap_data.iloc[i + 1].nplaca,
+                        )
+                    )
+
     # Ouput validation
     assert isinstance(final_list, list), "Output must be a list"
-    assert all(isinstance(tup, tuple) and len(tup) == 2 for tup in final_list), "Output must be a list of tuples with two elements each"
+    assert all(
+        isinstance(tup, tuple) and len(tup) == 2 for tup in final_list
+    ), "Output must be a list of tuples with two elements each"
     return final_list
+
 
 ################# Epidemiological Functions #################
 
@@ -473,7 +539,7 @@ def generate_all_weeks(pivot_data: pd.DataFrame) -> list:
 
 def get_epidemic_years_date_ranges_dengue(
     dengue_data: pd.DataFrame,
-    ) -> dict:
+) -> dict:
     """
     Get the date ranges for each epidemic year based on the dengue data.
 
@@ -497,7 +563,7 @@ def get_epidemic_years_date_ranges_dengue(
 
 def get_epidemic_years_date_ranges_ovitraps(  # DO NOT USE THIS. DATES IN OVITRAPS ARE NOT RELIABLE
     ovitrap_data: pd.DataFrame,
-    ) -> dict:
+) -> dict:
     """
     Get the date ranges for each epidemic year based on ovitraps data.
 
@@ -536,9 +602,11 @@ def get_epidemic_date(data: pd.DataFrame) -> pd.Series:
     """
 
     epidemic_date = data.apply(
-        lambda row: str(row["anoepid"]) + "W" + str(row["semepid"])
-        if int(row["semepid"]) > 9
-        else str(row["anoepid"]) + "W0" + str(row["semepid"]),
+        lambda row: (
+            str(row["anoepid"]) + "W" + str(row["semepid"])
+            if int(row["semepid"]) > 9
+            else str(row["anoepid"]) + "W0" + str(row["semepid"])
+        ),
         axis=1,
     )
     return epidemic_date
@@ -683,7 +751,7 @@ def week_days_of_year(year: int) -> pd.DataFrame:
 
 def convert_week_df_to_epidemic_week_and_year(
     df_week: pd.DataFrame,
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Convert a DataFrame with week-days based columns to two DataFrames: one
     with epidemic weeks and another with epidemic years.
@@ -782,7 +850,7 @@ def boxplot_filtered_data(
     title="Boxplot of Filtered Data",
     truncate_plot=True,
     truncation_limit=1000,
-    ):
+):
     """
     Function to create boxplots for separate groups of samples of
     df_to_plot, according to the values of df_filter. Both dataframes must
