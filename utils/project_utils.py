@@ -537,6 +537,23 @@ def generate_all_weeks(pivot_data: pd.DataFrame) -> list:
     return new_tuples
 
 
+def generate_all_biweeks(min_biweek: str, max_biweek: str) -> list:
+    """Generate complete biweek index (even weeks) from min to max."""
+    min_year = int(min_biweek.split("_")[0])
+    max_year = int(max_biweek.split("_")[0])
+
+    all_biweeks = []
+    for year in range(min_year, max_year + 1):
+        suffix = str(year + 1)[-2:]
+        epi_year = f"{year}_{suffix}"
+        for week in range(2, 53, 2):  # even weeks only: 02, 04, ..., 52
+            biweek = f"{epi_year}W{week:02d}"
+            if min_biweek <= biweek <= max_biweek:
+                all_biweeks.append(biweek)
+
+    return all_biweeks
+
+
 def get_epidemic_years_date_ranges_dengue(
     dengue_data: pd.DataFrame,
 ) -> dict:

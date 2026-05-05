@@ -1,8 +1,8 @@
 """MLP model to predict city-wide dengue cases per 1000 population rate.
 
-Predicts the next biweek's rate using:
+Predicts the current biweek's rate using:
 - Last 3 biweek rates (cases_per_1000)
-- Last 3 biweek egg counts (city-wide mean)
+- Last 5 biweek egg counts (city-wide mean)
 
 Trained exclusively on epidemic years with naive baseline comparison.
 """
@@ -21,7 +21,10 @@ from sklearn.metrics import (
     mean_squared_error,
     r2_score,
 )
-import utils.project_utils as project_utils
+import sys
+
+sys.path.append("utils")
+import project_utils
 
 import ipdb
 
@@ -84,7 +87,6 @@ def prepare_features(
     """
     # Merge dengue and ovitraps on biweek
     df = dengue_df.merge(ovitraps_df, on="biweek", how="outer")
-    ipdb.set_trace()
 
     # --- Fix gaps: reindex to complete biweek sequence ---
     all_biweeks = project_utils.generate_all_biweeks(
@@ -103,9 +105,9 @@ def prepare_features(
     # Create lag features for ovitraps eggs (5 lags)
     df = create_lag_features(df, "mean_eggs", lags=5)
 
-    # Verify if index is still complete
-    assert df.index.values.to_list() == all_biweeks, (
-        "Index should be complete"
+    # Verify biweek sequence is complete after reset_index
+    assert df["biweek"].tolist() == all_biweeks, (
+        "Biweek sequence should be complete after reindex"
     )
 
     # Verify lag features on rows where all values are non-NaN
@@ -114,7 +116,13 @@ def prepare_features(
         df["cases_per_1000"].notna()
         & df["mean_eggs"].notna()
         & df["cases_per_1000_lag1"].notna()
+        & df["cases_per_1000_lag2"].notna()
+        & df["cases_per_1000_lag3"].notna()
         & df["mean_eggs_lag1"].notna()
+        & df["mean_eggs_lag2"].notna()
+        & df["mean_eggs_lag3"].notna()
+        & df["mean_eggs_lag4"].notna()
+        & df["mean_eggs_lag5"].notna()
     )
     valid_idx = df[valid_mask].index
 
@@ -134,15 +142,34 @@ def prepare_features(
             df.loc[check_idx - lag, "mean_eggs"],
         ), f"Eggs lag{lag} mismatch at index {check_idx}"
 
+    # Remove current biweek eggs (not available as a feature)
+    df = df.drop(columns=["mean_eggs"]).copy()
+
     # Drop rows with NaN lags (first 5 rows due to eggs_lag5 + any gaps)
     df = df.dropna().copy()
 
-    # Create target: next biweek rate (shift -1)
-    df["target_rate"] = df["cases_per_1000"].shift(-1)
-    df = df.dropna(subset=["target_rate"]).copy()
+    # Target is the current biweek dengue rate (uses only past info via lags)
+    df = df.rename(columns={"cases_per_1000": "target_rate"})
+
     assert df.isna().sum().sum() == 0, (
         "DataFrame should not contain NaN values"
     )
+    # Verify target_rate matches original dengue rate for each biweek
+    merged_check = df.merge(
+        dengue_df[["biweek", "cases_per_1000"]],
+        on="biweek",
+        how="left",
+        suffixes=("", "_original"),
+    )
+    assert np.allclose(
+        merged_check["target_rate"].values,
+        merged_check["cases_per_1000_original"].values,
+        equal_nan=True,
+    ), "target_rate should match original cases_per_1000 for each biweek"
+    assert "cases_per_1000" not in df.columns, (
+        "cases_per_1000 should be renamed to target_rate"
+    )
+    assert "mean_eggs" not in df.columns, "mean_eggs should be removed"
 
     return df
 
