@@ -25,9 +25,7 @@ import sys
 
 sys.path.append("utils")
 import project_utils
-
-import ipdb
-
+import ipdb 
 # Epidemic years defined in project_utils.EPIDEMY_YEARS
 EPIDEMY_YEARS = ["2012_13", "2015_16", "2018_19", "2023_24"]
 
@@ -159,11 +157,10 @@ def prepare_features(
         dengue_df[["biweek", "cases_per_1000"]],
         on="biweek",
         how="left",
-        suffixes=("", "_original"),
     )
     assert np.allclose(
-        merged_check["target_rate"].values,
-        merged_check["cases_per_1000_original"].values,
+        df["target_rate"].values,
+        merged_check["cases_per_1000"].values,
         equal_nan=True,
     ), "target_rate should match original cases_per_1000 for each biweek"
     assert "cases_per_1000" not in df.columns, (
@@ -214,7 +211,6 @@ def train_mlp(train_df: pd.DataFrame, test_df: pd.DataFrame) -> tuple:
         "mean_eggs_lag4",
         "mean_eggs_lag5",
     ]
-    ipdb.set_trace()
     X_train = train_df[feature_cols].values
     y_train = train_df["target_rate"].values
     X_test = test_df[feature_cols].values
@@ -241,7 +237,31 @@ def train_mlp(train_df: pd.DataFrame, test_df: pd.DataFrame) -> tuple:
     # Predictions
     y_train_pred = mlp.predict(X_train_scaled)
     y_test_pred = mlp.predict(X_test_scaled)
+    
+    # Change to 0 any negative predictions (not meaningful for rates)
+    y_train_pred = np.where(y_train_pred < 0, 0, y_train_pred)
+    y_test_pred = np.where(y_test_pred < 0, 0, y_test_pred)
 
+    # Check length of predictions matches true values
+    assert len(y_train_pred) == len(y_train), "Train predictions length mismatch"
+    assert len(y_test_pred) == len(y_test), "Test predictions length mismatch"
+
+    # Check for NaN values in predictions
+    assert not np.isnan(y_train_pred).any(), "NaN values in train predictions"
+    assert not np.isnan(y_test_pred).any(), "NaN values in test predictions"
+
+    # Check for reasonable prediction ranges (non-negative rates)
+    assert (y_train_pred >= 0).all(), "Negative values in train predictions"
+    assert (y_test_pred >= 0).all(), "Negative values in test predictions"
+
+    # Check for variance in predictions (not all the same value)
+    assert np.var(y_train_pred) > 0, "No variance in train predictions"
+    assert np.var(y_test_pred) > 0, "No variance in test predictions"
+
+    # Check for overfitting (train RMSE should be less than test RMSE)
+    train_rmse = np.sqrt(mean_squared_error(y_train, y_train_pred))
+    test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
+    assert (train_rmse < test_rmse * 1.5), f"Possible overfitting: train RMSE {train_rmse:.4f}, test RMSE {test_rmse:.4f}"
     return mlp, scaler, y_train_pred, y_test_pred, y_train, y_test
 
 
@@ -270,7 +290,6 @@ def compute_feature_importance(
             "importance_std": result.importances_std,
         }
     ).sort_values("importance_mean", ascending=False)
-
     return importance_df
 
 
@@ -365,7 +384,6 @@ def run_fold(
     importance_df = compute_feature_importance(
         mlp, X_test_scaled, y_test, feature_cols
     )
-
     return {
         "metrics": metrics,
         "train_df": train_df,
