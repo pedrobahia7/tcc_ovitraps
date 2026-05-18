@@ -61,7 +61,23 @@ DEFAULT_IDW_POWER: float = 2.0
 
 
 def _load_sectors(geojson_path: Path) -> gpd.GeoDataFrame:
-    """Load sectors GeoJSON and ensure a normalised sector_id column exists."""
+    """
+    Load a census sectors GeoJSON file and guarantee a sector_id column.
+
+    If the file already contains a column named ``sector_id`` it is used as-is.
+    Otherwise the first column whose name contains any of the substrings
+    ``sector``, ``setor``, ``cd_``, or ``geocod`` (case-insensitive) is
+    aliased to ``sector_id``.
+
+    Parameters
+    ----------
+    - geojson_path (Path): Path to the GeoJSON file containing sector polygons.
+
+    Returns
+    -------
+    - gdf (gpd.GeoDataFrame): GeoDataFrame with an added or verified
+      ``sector_id`` column.
+    """
     gdf = gpd.read_file(geojson_path)
     if "sector_id" not in gdf.columns:
         candidates = [
@@ -83,7 +99,26 @@ def _assign_sector_ids(
     sectors_gdf: gpd.GeoDataFrame,
     name: str,
 ) -> pd.DataFrame:
-    """Point-in-polygon join to add population_sector to df; unmatched rows get None."""
+    """
+    Assign a census sector ID to every row in df via a point-in-polygon join.
+
+    Rows with missing or zero coordinates are skipped and receive ``None``.
+    The result is written to a new column ``population_sector`` on df.
+
+    Parameters
+    ----------
+    - df (pd.DataFrame): DataFrame containing ``latitude`` and ``longitude``
+      columns.
+    - sectors_gdf (gpd.GeoDataFrame): GeoDataFrame of census sector polygons
+      with a ``sector_id`` column.
+    - name (str): Label used in log messages to identify the dataset
+      (e.g. ``"ovitraps"`` or ``"dengue"``).
+
+    Returns
+    -------
+    - df (pd.DataFrame): Input DataFrame with an added ``population_sector``
+      column; unmatched rows contain ``None``.
+    """
     if "latitude" not in df.columns or "longitude" not in df.columns:
         logger.warning("%s: missing lat/lon — sector IDs skipped", name)
         df["population_sector"] = None
@@ -137,7 +172,23 @@ def _assign_sector_ids(
 
 
 def _aggregate_case_counts(df: pd.DataFrame) -> pd.DataFrame:
-    """Count confirmed dengue cases per (sector_id, biweek)."""
+    """
+    Aggregate confirmed dengue cases by census sector and biweek.
+
+    Rows with a missing ``population_sector`` or ``biweek`` are dropped before
+    aggregation. The ``population_sector`` column is cast to string with
+    trailing ``.0`` removed to normalise float-encoded sector IDs.
+
+    Parameters
+    ----------
+    - df (pd.DataFrame): Dengue DataFrame containing at least
+      ``population_sector`` and ``biweek`` columns.
+
+    Returns
+    -------
+    - case_counts (pd.DataFrame): DataFrame with columns ``sector_id``,
+      ``biweek``, and ``case_count`` (one row per sector-biweek combination).
+    """
     required = {"population_sector", "biweek"}
     missing = required - set(df.columns)
     if missing:
@@ -156,7 +207,26 @@ def _aggregate_case_counts(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _load_population_biweekly(population_path: Path) -> pd.DataFrame:
-    """Pivot wide interpolated population CSV to long (sector_id, biweek, population)."""
+    """
+    Load and reshape the interpolated population CSV from wide to long format.
+
+    The CSV is expected to have a ``sector_id`` column plus one column per
+    epidemic date (e.g. ``2019_20W03``). Each epidemic-date column is melted
+    to a long row, converted to its corresponding biweek label, and averaged
+    across the weeks that fall in that biweek. Population values are clipped
+    at zero and rounded to the nearest integer.
+
+    Parameters
+    ----------
+    - population_path (Path): Path to the wide-format interpolated population
+      CSV file.
+
+    Returns
+    -------
+    - biweekly (pd.DataFrame): Long-format DataFrame with columns
+      ``sector_id``, ``biweek``, and ``population``
+      (one row per sector-biweek combination).
+    """
     wide = pd.read_csv(population_path)
     if "sector_id" not in wide.columns:
         raise ValueError(
@@ -198,7 +268,27 @@ def _empirical_bayes_rate(
     population: np.ndarray,
     multiplier: float = 1.0,
 ) -> np.ndarray:
-    """Return EB-smoothed rate (Marshall 1991); zero-population rows stay zero."""
+    """
+    Compute the Empirical Bayes smoothed incidence rate (Marshall, 1991).
+
+    Rows where ``population`` is zero are excluded from the EB estimation and
+    kept at zero in the output to avoid division errors. The raw rate for
+    included rows is scaled by ``multiplier`` (e.g. 1 000 for per-thousand
+    rates).
+
+    Parameters
+    ----------
+    - events (np.ndarray): Observed event counts (e.g. dengue cases) per area.
+    - population (np.ndarray): At-risk population per area; must be the same
+      length as ``events``.
+    - multiplier (float): Scaling factor applied to the smoothed rate.
+      Default is ``1.0`` (returns a raw rate).
+
+    Returns
+    -------
+    - result (np.ndarray): EB-smoothed rates scaled by ``multiplier``;
+      zero where population is zero.
+    """
     events = np.asarray(events, dtype=np.float64)
     population = np.asarray(population, dtype=np.float64)
     valid = population > 0
@@ -214,10 +304,25 @@ def _empirical_bayes_rate(
 # ================================================================
 
 
-def _calculate_centroids(
-    sectors_gdf: gpd.GeoDataFrame, output_path: Path
-) -> pd.DataFrame:
-    """Project sectors to SIRGAS2000, compute geographic centroids, save CSV."""
+def _calculate_centroids(sectors_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
+    """
+    Compute the geographic centroid of each census sector polygon.
+
+    Sectors are reprojected to SIRGAS 2000 / UTM zone 23S (EPSG:31983) for
+    accurate planar centroid calculation, then back-projected to WGS-84
+    (EPSG:4326) for output. Only the columns listed in ``keep`` are retained;
+    missing columns are silently skipped.
+
+    Parameters
+    ----------
+    - sectors_gdf (gpd.GeoDataFrame): GeoDataFrame of 2022 BH census sector
+      polygons in any CRS (re-projected internally).
+
+    Returns
+    -------
+    - df (pd.DataFrame): DataFrame sorted by ``CD_SETOR`` containing sector
+      attributes plus ``centroid_latitude`` and ``centroid_longitude`` columns.
+    """
     projected = sectors_gdf.to_crs(epsg=31983)
     centroids_geo = projected.geometry.centroid.to_crs(sectors_gdf.crs)
     gdf = sectors_gdf.copy()
@@ -230,20 +335,41 @@ def _calculate_centroids(
         "centroid_latitude", "centroid_longitude",
     ]
     df = gdf[[c for c in keep if c in gdf.columns]].copy()
-    df = df.sort_values("CD_SETOR").reset_index(drop=True)
-    df.to_csv(output_path, index=False)
-    logger.info("Saved centroids → %s (%d sectors)", output_path, len(df))
-    return df
+    return df.sort_values("CD_SETOR").reset_index(drop=True)
 
 
 def _calculate_idw(
     centroids_df: pd.DataFrame,
     ovitraps_df: pd.DataFrame,
-    output_path: Path,
     n_neighbors: int = DEFAULT_N_NEIGHBORS,
     power: float = DEFAULT_IDW_POWER,
 ) -> pd.DataFrame:
-    """Estimate egg count at each sector centroid per biweek via IDW (k=6, p=2)."""
+    """
+    Estimate the egg count at each sector centroid per biweek using IDW.
+
+    For each biweek the ``n_neighbors`` nearest ovitraps (by Euclidean distance
+    in lat/lon space) are selected via a KNN query and their egg counts are
+    combined with an Inverse Distance Weighting scheme (exponent ``power``).
+    If any neighbour lies exactly on the centroid (distance == 0) its value is
+    used directly to avoid division by zero.
+
+    Parameters
+    ----------
+    - centroids_df (pd.DataFrame): DataFrame with columns ``CD_SETOR``,
+      ``centroid_latitude``, and ``centroid_longitude`` (one row per sector).
+    - ovitraps_df (pd.DataFrame): Ovitraps DataFrame with columns ``biweek``,
+      ``narmad``, ``latitude``, ``longitude``, and ``novos``.
+    - n_neighbors (int): Number of nearest traps to use for interpolation.
+      Default is ``DEFAULT_N_NEIGHBORS`` (6).
+    - power (float): Distance decay exponent for IDW. Default is
+      ``DEFAULT_IDW_POWER`` (2.0).
+
+    Returns
+    -------
+    - idw_df (pd.DataFrame): DataFrame with one row per (CD_SETOR, biweek)
+      containing ``idw_egg_value``, centroid coordinates, ``n_traps_used``,
+      ``min_distance_km``, and ``narmads_used``.
+    """
     eggs = ovitraps_df.copy()
     centroid_coords = centroids_df[
         ["centroid_latitude", "centroid_longitude"]
@@ -299,10 +425,6 @@ def _calculate_idw(
         .sort_values(["CD_SETOR", "biweek"])
         .reset_index(drop=True)
     )
-    idw_df.to_csv(output_path, index=False)
-    logger.info(
-        "Saved centroids IDW → %s (%d rows)", output_path, len(idw_df)
-    )
     return idw_df
 
 
@@ -331,32 +453,26 @@ def main() -> None:
     }
     _out["ovitraps"].parent.mkdir(parents=True, exist_ok=True)
 
-    logger.info("=== Step 1: Sector assignment ===")
-
-    # Load
+    # ----------------------------------------------------------------
+    # Load all
+    # ----------------------------------------------------------------
+    logger.info("Loading data...")
     sectors_gdf = _load_sectors(_in["sectors_geojson"])
     ovitraps = pd.read_csv(_in["ovitraps"])
     dengue = pd.read_csv(_in["dengue"])
-
-    # Transform
-    ovitraps = _assign_sector_ids(ovitraps, sectors_gdf, "ovitraps")
-    dengue = _assign_sector_ids(dengue, sectors_gdf, "dengue")
-
-    # Save
-    ovitraps.to_csv(_out["ovitraps"], index=False)
-    dengue.to_csv(_out["dengue"], index=False)
-    logger.info("Saved ovitraps → %s", _out["ovitraps"])
-    logger.info("Saved dengue   → %s", _out["dengue"])
-
-    logger.info("=== Step 2: Dengue per capita ===")
-
-    # Load
-    case_counts = _aggregate_case_counts(dengue)
-    logger.info("  %d sector-biweek combinations with cases", len(case_counts))
     population = _load_population_biweekly(_in["population_interpolated"])
     logger.info("  %d sector-biweek population rows", len(population))
 
+    # ----------------------------------------------------------------
     # Transform
+    # ----------------------------------------------------------------
+    logger.info("=== Step 1: Sector assignment ===")
+    ovitraps = _assign_sector_ids(ovitraps, sectors_gdf, "ovitraps")
+    dengue = _assign_sector_ids(dengue, sectors_gdf, "dengue")
+
+    logger.info("=== Step 2: Dengue per capita ===")
+    case_counts = _aggregate_case_counts(dengue)
+    logger.info("  %d sector-biweek combinations with cases", len(case_counts))
     merged = population.merge(
         case_counts, on=["sector_id", "biweek"], how="left"
     )
@@ -373,22 +489,25 @@ def main() -> None:
     )
     merged = merged.sort_values(["sector_id", "biweek"]).reset_index(drop=True)
 
-    # Save
-    _out["dengue_per_capita"].parent.mkdir(parents=True, exist_ok=True)
-    merged.to_csv(_out["dengue_per_capita"], index=False)
-    logger.info(
-        "Saved dengue per capita → %s (%d rows)",
-        _out["dengue_per_capita"], len(merged),
-    )
-
     logger.info("=== Step 3: Centroids + IDW ===")
+    centroids_df = _calculate_centroids(sectors_gdf)
+    idw_df = _calculate_idw(centroids_df, ovitraps)
 
-    # Load
-    sectors_gdf = _load_sectors(_in["sectors_geojson"])
-
-    # Transform + Save
-    centroids_df = _calculate_centroids(sectors_gdf, _out["centroids"])
-    _calculate_idw(centroids_df, ovitraps, _out["centroids_idw"])
+    # ----------------------------------------------------------------
+    # Save all
+    # ----------------------------------------------------------------
+    logger.info("Saving outputs...")
+    _out["dengue_per_capita"].parent.mkdir(parents=True, exist_ok=True)
+    ovitraps.to_csv(_out["ovitraps"], index=False)
+    dengue.to_csv(_out["dengue"], index=False)
+    merged.to_csv(_out["dengue_per_capita"], index=False)
+    centroids_df.to_csv(_out["centroids"], index=False)
+    idw_df.to_csv(_out["centroids_idw"], index=False)
+    logger.info("Saved ovitraps        → %s", _out["ovitraps"])
+    logger.info("Saved dengue          → %s", _out["dengue"])
+    logger.info("Saved dengue_per_capita → %s (%d rows)", _out["dengue_per_capita"], len(merged))
+    logger.info("Saved centroids       → %s (%d sectors)", _out["centroids"], len(centroids_df))
+    logger.info("Saved centroids_idw   → %s (%d rows)", _out["centroids_idw"], len(idw_df))
 
     logger.info("add_population_info completed successfully.")
 
