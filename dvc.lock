@@ -1,7 +1,7 @@
 schema: '2.0'
 stages:
   convert_to_csv:
-    cmd: python src/convert_to_csv.py
+    cmd: python src/dvc/convert_to_csv.py
     deps:
     - path: data/raw/CENTRO_SAUDE_new.xlsx
       hash: md5
@@ -35,36 +35,36 @@ stages:
       md5: 69e68a7c4dc13d9c4aa97e41b13e6e40
       size: 156595090
       isexec: true
-    - path: src/convert_to_csv.py
+    - path: src/dvc/convert_to_csv.py
       hash: md5
-      md5: e13401ea9ec6f4da77e5f5d0587f96ff
-      size: 3827
+      md5: 540539b0af8e5940985cac869deb05de
+      size: 4232
       isexec: true
     outs:
-    - path: data/raw/CENTRO_SAUDE_new.csv
+    - path: data/dvc/convert_to_csv/dengue.csv
       hash: md5
-      md5: 0add8a3c30d9513847be9ce7e252f6ff
-      size: 8643
-    - path: data/raw/Dengue2007_2025.csv
+      md5: 33a0ec4f20e293d8bba1654e7a2e9e14
+      size: 193394576
+    - path: data/dvc/convert_to_csv/health_centers.csv
       hash: md5
-      md5: b5df7ac3ff6a3298b4d442fabee86486
-      size: 203030067
-    - path: data/raw/MasterDataExtend062025_v2.csv
+      md5: 86468a168c24f2efc046dce120cb4f53
+      size: 8489
+    - path: data/dvc/convert_to_csv/ibge_2010_population.csv
       hash: md5
-      md5: df499ee47b140f9b8f8973a1fbe4bc55
-      size: 241625327
-    - path: data/raw/ibge_2010_population.csv
+      md5: b6bd652db7aeb7a7cd19103275c50baa
+      size: 20331297
+    - path: data/dvc/convert_to_csv/ibge_2022_population.csv
       hash: md5
-      md5: d17cf9b0660370e1b9e48ff58b0748a4
-      size: 20363928
-    - path: data/raw/ibge_2022_population.csv
+      md5: 2c9dd1501f6ccc75d352d8686a17b392
+      size: 106717752
+    - path: data/dvc/convert_to_csv/ibge_sector_history.csv
       hash: md5
-      md5: afd10e18779890f8683ba3ab399880ed
-      size: 107185852
-    - path: data/raw/ibge_sector_history.csv
+      md5: f87bdf45614d018270e2fe7aca2479a3
+      size: 165531147
+    - path: data/dvc/convert_to_csv/ovitraps.csv
       hash: md5
-      md5: 17262279dc7121f9fcc6fa6313fdd252
-      size: 166020883
+      md5: 44ebf046b0bc2cfa92db3f7db96866c6
+      size: 241072427
   slow_processing:
     cmd: python src/process_data_slow.py
     deps:
