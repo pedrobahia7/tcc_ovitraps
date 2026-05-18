@@ -30,9 +30,9 @@ class TestRawDataComparison:
     def data_paths(self):
         """Fixture providing paths to processed data files."""
         return {
-            'dengue': params["all"]["paths"]["data"]["raw"]["dengue_csv"],
-            'ovitraps': params["all"]["paths"]["data"]["raw"]["ovitraps_csv"],
-            'health_centers': params["all"]["paths"]["data"]["raw"]["health_centers_csv"],
+            'dengue': params["all"]["paths"]["data"]["dvc"]["convert_to_csv"]["dengue_csv"],
+            'ovitraps': params["all"]["paths"]["data"]["dvc"]["convert_to_csv"]["ovitraps_csv"],
+            'health_centers': params["all"]["paths"]["data"]["dvc"]["convert_to_csv"]["health_centers_csv"],
             'old_ovitraps': ["data/final_data.csv","data/raw/MasterDataExtend062025_v1.csv"]
         }
     

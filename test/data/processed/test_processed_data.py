@@ -28,8 +28,8 @@ class TestProcessedData:
         return {
             'dengue': dvc["add_population_info"]["dengue"],
             'ovitraps': dvc["add_population_info"]["ovitraps"],
-            'health_centers': dvc["fast_processing"]["health_centers"],
-            'daily_ovitraps': dvc["fast_processing"]["daily_ovitraps"],
+            'health_centers': dvc["process_data"]["health_centers"],
+            'daily_ovitraps': dvc["process_data"]["daily_ovitraps"],
         }
     
     @pytest.fixture(scope="class")

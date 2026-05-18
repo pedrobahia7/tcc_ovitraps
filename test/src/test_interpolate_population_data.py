@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 import sys
-sys.path.append("src")
-from census_equivalence_2010_2022 import build_extrapolated_population_table
+sys.path.append("src/dvc")
+from process_population_data import build_extrapolated_population_table
 
 
 def test_build_extrapolated_population_table_uses_integer_week_values() -> None:

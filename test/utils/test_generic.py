@@ -175,7 +175,7 @@ class TestClosestNeighbors:
         SharedTestUtils.test_function_signature_and_return(
             generic.nearest_neighbors,
             ['points1', 'points2'],
-            np.ndarray
+            tuple[np.ndarray, np.ndarray]
         )
         
         # Test docstring exists
@@ -211,7 +211,7 @@ class TestClosestNeighbors:
             max_time=1.0,
             description="nearest_neighbors function with large dataset"
         )
-        assert isinstance(result, np.ndarray)
+        assert isinstance(result, tuple) and isinstance(result[1], np.ndarray)
 
     @pytest.mark.parametrize(
         "query_points,reference_points,expected_indices,test_description", [
@@ -459,31 +459,33 @@ class TestClosestNeighbors:
         Test valid cases with expected results using parametrization.
         
         """
-        result = generic.nearest_neighbors(query_points, reference_points)
-        
+        _, result = generic.nearest_neighbors(query_points, reference_points)
+        result = result.flatten()
+
         # Basic type and structure assertions
         assert isinstance(result, np.ndarray), f"Result should be a numpy array for {test_description}"
         assert len(result) == len(query_points), f"Result length should match query points length for {test_description}"
         assert result.dtype == np.int64 or result.dtype == np.int32, f"All indices should be integers for {test_description}"
-        
+
         # Range validation
         assert all(0 <= idx < len(reference_points) for idx in result), f"All indices should be valid reference point indices for {test_description}"
-        
+
         # Expected results validation
         np.testing.assert_array_equal(result, expected_indices, f"Expected indices {expected_indices}, got {result} for {test_description}")
-        
+
         # Distance validation - ensure returned points are actually closest
         for i, (query_point, result_idx) in enumerate(zip(query_points, result)):
             result_distance = np.linalg.norm(query_point - reference_points[result_idx])
-            
+
             # Check that no other reference point is closer
             for j, ref_point in enumerate(reference_points):
                 other_distance = np.linalg.norm(query_point - ref_point)
                 assert result_distance <= other_distance or abs(result_distance - other_distance) < 1e-10, \
                     f"Point at index {result_idx} should be closest to query point {i} for {test_description}"
-        
+
         # Consistency check - same query should give same result
-        result2 = generic.nearest_neighbors(query_points, reference_points)
+        _, result2 = generic.nearest_neighbors(query_points, reference_points)
+        result2 = result2.flatten()
         np.testing.assert_array_equal(result, result2, f"Function should be deterministic for {test_description}")
 
     @pytest.mark.parametrize(
@@ -809,10 +811,8 @@ class TestCreateGrid:
         
         plt.legend()
         plt.tight_layout()
-        
-        # Show plot and wait for user to close it
-        plt.show(block=True)
-        
+        plt.close()
+
         # Test passes if no exception was raised
         assert len(grid) > 0, "Grid should contain points"
         assert isinstance(grid, pd.DataFrame), "Grid should be a DataFrame"
