@@ -2,6 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from pathlib import Path
 import sys
 import os
 import inspect
@@ -913,3 +914,63 @@ class TestGetOverlappedSamples:
         """
         with pytest.raises((AssertionError, AttributeError, KeyError, ValueError, TypeError)):
             project_utils.get_overlapped_samples(invalid_input)
+
+
+class TestLoadBhBoundary:
+    """Tests for project_utils.load_bh_boundary."""
+
+    _GEOJSON_PATH = Path(
+        "data/dvc/process_population_data/"
+        "bh_sectors_2022_with_populations.geojson"
+    )
+
+    def test_raises_file_not_found_for_missing_path(self, tmp_path):
+        """FileNotFoundError raised when path does not exist."""
+        with pytest.raises(FileNotFoundError):
+            project_utils.load_bh_boundary(
+                tmp_path / "nonexistent.geojson"
+            )
+
+    @pytest.mark.skipif(
+        not Path(
+            "data/dvc/process_population_data/"
+            "bh_sectors_2022_with_populations.geojson"
+        ).exists(),
+        reason="GeoJSON not present in this environment",
+    )
+    def test_returns_valid_polygon_covering_bh(self):
+        """Boundary must be a non-empty polygon enclosing known BH coords."""
+        from shapely.geometry import Point
+
+        boundary = project_utils.load_bh_boundary(self._GEOJSON_PATH)
+
+        # Must be a non-empty geometry
+        assert not boundary.is_empty
+
+        # Centro de BH (Praça da Liberdade) must be inside
+        centro = Point(-43.9372, -19.9328)
+        assert boundary.contains(centro), (
+            "BH boundary does not contain central BH coordinate"
+        )
+
+    @pytest.mark.skipif(
+        not Path(
+            "data/dvc/process_population_data/"
+            "bh_sectors_2022_with_populations.geojson"
+        ).exists(),
+        reason="GeoJSON not present in this environment",
+    )
+    def test_boundary_crs_is_epsg4326(self):
+        """Returned geometry coordinates must be in EPSG:4326 (lon/lat)."""
+        from shapely.geometry import Point
+
+        boundary = project_utils.load_bh_boundary(self._GEOJSON_PATH)
+        bounds = boundary.bounds  # (minx, miny, maxx, maxy)
+
+        # EPSG:4326 coords for BH are roughly lon ∈ [-44.1, -43.8]
+        assert -44.1 < bounds[0] < -43.8, (
+            f"minx={bounds[0]:.4f} outside expected BH lon range"
+        )
+        assert -44.1 < bounds[2] < -43.8, (
+            f"maxx={bounds[2]:.4f} outside expected BH lon range"
+        )

@@ -184,13 +184,13 @@ def idw_sample(idw_df: pd.DataFrame) -> pd.DataFrame:
 
 
 @pytest.fixture(scope="module")
-def bh_boundary() -> gpd.GeoSeries:
+def bh_boundary():
     """Union of all BH 2022 census sector geometries (EPSG:4326)."""
     path = Path(_dvc["process_population_data"]["sectors_geojson"])
-    if not path.exists():
-        pytest.fail(f"File not found: {path}")
-    gdf = gpd.read_file(path).to_crs("EPSG:4326")
-    return gdf.geometry.union_all()
+    try:
+        return project_utils.load_bh_boundary(path)
+    except FileNotFoundError as exc:
+        pytest.fail(str(exc))
 
 
 # ============================================================

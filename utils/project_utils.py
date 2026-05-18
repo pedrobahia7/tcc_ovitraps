@@ -2,9 +2,12 @@ import pandas as pd
 import numpy as np
 import generic
 import matplotlib.pyplot as plt
+from pathlib import Path
 from typing import List, Tuple
 
+import geopandas as gpd
 from pyproj import Transformer
+from shapely.geometry.base import BaseGeometry
 from sklearn.neighbors import BallTree
 
 
@@ -859,6 +862,36 @@ def closest_health_center(
     result.loc[valid_mask] = names
 
     return result.tolist()
+
+
+def load_bh_boundary(geojson_path: Path) -> BaseGeometry:
+    """Return the dissolved polygon boundary of all BH census sectors.
+
+    Reads the 2022 IBGE census sector GeoJSON, reprojects to EPSG:4326,
+    and dissolves all sector geometries into a single polygon that
+    represents the outer boundary of Belo Horizonte.
+
+    Parameters
+    ----------
+    geojson_path : Path
+        Path to the GeoJSON file containing BH census sector geometries.
+
+    Returns
+    -------
+    BaseGeometry
+        Union of all sector geometries in EPSG:4326.
+
+    Raises
+    ------
+    FileNotFoundError
+        If *geojson_path* does not exist.
+    """
+    if not Path(geojson_path).exists():
+        raise FileNotFoundError(
+            f"GeoJSON not found: {geojson_path}"
+        )
+    gdf = gpd.read_file(geojson_path).to_crs("EPSG:4326")
+    return gdf.geometry.union_all()
 
 
 def convert_qgis_to_latlon(df, x_col="coordx", y_col="coordy"):
