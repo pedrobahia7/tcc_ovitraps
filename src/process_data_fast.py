@@ -92,6 +92,9 @@ dengue_data.reset_index(drop=True, inplace=True)
 ### Add useful columns ###
 # Epidemic date
 dengue_data["epidemic_date"] = project_utils.get_epidemic_date(dengue_data)
+dengue_data["biweek"] = project_utils.epidemic_date_to_biweek(
+    dengue_data["epidemic_date"]
+)
 
 # %% Ovitraps data
 # Process
@@ -239,11 +242,9 @@ ovitraps_data['eggs_per_day'] = ovitraps_data['novos'] / ovitraps_data['days_exp
 ovitraps_data["epidemic_date"] = project_utils.get_epidemic_date(
     ovitraps_data
 )
-# Add biweek column
-epi_year = ovitraps_data['epidemic_date'].str.split('W').str[0]
-week_num = ovitraps_data['epidemic_date'].str.split('W').str[1].astype(int)
-biweek_num = ((week_num + 1) // 2) * 2
-ovitraps_data['biweek'] = epi_year + 'W' + biweek_num.astype(str).str.zfill(2)
+ovitraps_data['biweek'] = project_utils.epidemic_date_to_biweek(
+    ovitraps_data['epidemic_date']
+)
 
 # Convert columns to string
 ovitraps_data['narmad'] = ovitraps_data['narmad'].astype(int).astype(str)

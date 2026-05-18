@@ -174,7 +174,7 @@ def run_sector_assignment(
 
 
 def _aggregate_case_counts(dengue: pd.DataFrame) -> pd.DataFrame:
-    required = {"population_sector", "epidemic_date"}
+    required = {"population_sector", "biweek"}
     missing = required - set(dengue.columns)
     if missing:
         raise ValueError(f"Dengue data missing columns: {sorted(missing)}")
@@ -183,7 +183,6 @@ def _aggregate_case_counts(dengue: pd.DataFrame) -> pd.DataFrame:
     df["population_sector"] = (
         df["population_sector"].astype(str).str.replace(r"\.0$", "", regex=True)
     )
-    df["biweek"] = project_utils.epidemic_date_to_biweek(df["epidemic_date"])
     return (
         df.groupby(["population_sector", "biweek"])
         .size()
@@ -299,8 +298,6 @@ def _calculate_idw(
     power: float = DEFAULT_IDW_POWER,
 ) -> pd.DataFrame:
     eggs = ovitraps.copy()
-    eggs["biweek"] = project_utils.epidemic_date_to_biweek(eggs["epidemic_date"])
-
     centroid_coords = centroids_df[["centroid_latitude", "centroid_longitude"]].values
     sector_codes = centroids_df["CD_SETOR"].values
     biweeks = sorted(eggs["biweek"].unique())
