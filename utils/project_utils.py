@@ -346,36 +346,38 @@ def get_daily_ovitraps(
 
     ovitraps_data = ovitraps_data.copy()
 
-    # Pre-calculate days for each row (vectorized)
-    ovitraps_data["days"] = (
+    # days each trap was exposed; daily share of eggs
+    day_counts = (
         ovitraps_data["dt_col"] - ovitraps_data["dt_instal"]
-    ).dt.days.astype(int)
-    ovitraps_data["daily_novos"] = (
-        ovitraps_data["novos"] / (ovitraps_data["days"])
+    ).dt.days.to_numpy(dtype=np.int64)
+    daily_novos = (
+        ovitraps_data["novos"].to_numpy(dtype=np.float64) / day_counts
     )
 
-    # Create lists to store expanded data
-    dates_list = []
-    narmad_list = []
-    novos_list = []
+    # Expand each input row i into day_counts[i] output rows
+    # row_idx[j] tells which source row produced output row j.
+    #   e.g. day_counts=[3,3] → row_idx=[0,0,0,1,1,1]
+    
+    total = int(day_counts.sum()) # total number of output rows
+    row_idx = np.repeat(np.arange(len(ovitraps_data)), day_counts) 
 
-    # Vectorized expansion using numpy
-    for _, row in ovitraps_data.iterrows():
-        n_days = row["days"]
-        dates = pd.date_range(
-            row["dt_instal"],
-            row["dt_col"] - pd.Timedelta(days=1),
-            freq="D",
-        )
+    # cumsum[i] = index in the flat output where source row i starts.
+    #   e.g. day_counts=[3,3] → cumsum=[0,3]
+    cumsum = np.concatenate([[0], day_counts[:-1].cumsum()])
 
-        dates_list.extend(dates)
-        narmad_list.extend([row["narmad"]] * n_days)
-        novos_list.extend([row["daily_novos"]] * n_days)
+    # offsets[j] = day number within source row's block (0-based).
+    #   e.g. [0,1,2,3,4,5] - repeat([0,3],[3,3]) = [0,1,2,0,1,2]
+    offsets = np.arange(total) - np.repeat(cumsum, day_counts)
 
-    # Create ovitraps DataFrame
-    ovitraps_expanded = pd.DataFrame(
-        {"date": dates_list, "narmad": narmad_list, "novos": novos_list}
-    )
+    # instals[row_idx] + offsets gives dt_instal, dt_instal+1, ..., dt_col-1
+    instals = ovitraps_data["dt_instal"].to_numpy()
+    dates = instals[row_idx] + offsets.astype("timedelta64[D]")
+
+    ovitraps_expanded = pd.DataFrame({
+        "date":   pd.to_datetime(dates),
+        "narmad": ovitraps_data["narmad"].to_numpy()[row_idx],
+        "novos":  daily_novos[row_idx],
+    })
 
     # Group by date and narmad, summing the 'novos' values
     daily_ovitraps = (

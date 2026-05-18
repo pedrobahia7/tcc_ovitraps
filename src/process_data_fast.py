@@ -250,6 +250,15 @@ ovitraps_data['biweek'] = project_utils.epidemic_date_to_biweek(
 ovitraps_data['narmad'] = ovitraps_data['narmad'].astype(int).astype(str)
 ovitraps_data['nplaca'] = ovitraps_data['nplaca'].astype(int).astype(str)   
 
+# Daily ovitraps
+print("Computing daily ovitraps")
+daily_ovitraps = project_utils.get_daily_ovitraps(ovitraps_data)
+daily_ovitraps.to_csv(
+    params['all']['paths']['data']['processed']['daily_ovitraps'],
+    index=True,
+    date_format="%Y-%m-%d",
+)
+
 # Create intermediate directory
 os.makedirs('data/processed/add_population_sectors', exist_ok=True)
 

@@ -178,8 +178,8 @@ stages:
       size: 299060027
     - path: src/daily_ovitraps.py
       hash: md5
-      md5: afba90728aaa09b88829b9e41086bd6f
-      size: 510
+      md5: 503f79d97f665133da3447f247f79910
+      size: 916
     outs:
     - path: data/processed/daily_ovitraps_data.csv
       hash: md5
@@ -340,8 +340,8 @@ stages:
       size: 10763766
     - path: src/add_population_sectors.py
       hash: md5
-      md5: b87212a6d10fa9f4694c609079a4315f
-      size: 9509
+      md5: c8659a3bb1c61a2e7cabb7413d3d8712
+      size: 9739
       isexec: true
     outs:
     - path: data/processed/dengue_data.csv
@@ -365,8 +365,8 @@ stages:
       size: 19396503
     - path: src/calculate_dengue_per_capita.py
       hash: md5
-      md5: b8e8aad18a7b4c123596862933fce36e
-      size: 8957
+      md5: 9285db49dbbbb2f4049d4320f3abce5b
+      size: 9431
     outs:
     - path: data/processed/dengue_per_capita.csv
       hash: md5
@@ -385,8 +385,8 @@ stages:
       size: 299060027
     - path: src/associate_ovitraps_and_population.py
       hash: md5
-      md5: 43627aad8a1cdf1a1dbfbb7e73b3f218
-      size: 13664
+      md5: 143127f7a3f481d9fdbb989c02a06138
+      size: 14337
       isexec: true
     outs:
     - path: data/processed/bh_sectors_2022_centroids.csv

@@ -68,6 +68,7 @@ stages:
       - ${all.paths.data.processed.health_centers}
       - ${all.paths.data.processed.add_population_sectors.dengue}
       - ${all.paths.data.processed.add_population_sectors.ovitraps}
+      - ${all.paths.data.processed.daily_ovitraps}
 
   add_population_info:
     cmd: python src/add_population_info.py
@@ -86,14 +87,6 @@ stages:
           persist: true
       - ${all.paths.data.processed.centroids_idw}:
           persist: true
-
-  daily_ovitraps:
-    cmd: python src/daily_ovitraps.py
-    deps:
-      - src/daily_ovitraps.py
-      - ${all.paths.data.processed.ovitraps}
-    outs:
-      - ${all.paths.data.processed.daily_ovitraps}
 
   run_tests:
     cmd:
