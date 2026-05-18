@@ -31,6 +31,8 @@ _dvc = params["all"]["paths"]["data"]["dvc"]
 N_SAMPLES = 20
 RANDOM_SEED = 42
 _BIWEEK_RE = re.compile(r"^\d{4}_\d{2}W\d{2}$")
+# Keep in sync with add_population_info.DEFAULT_N_NEIGHBORS
+_DEFAULT_N_NEIGHBORS = 6
 
 
 # ============================================================
@@ -63,6 +65,41 @@ def _recompute_biweek(df: pd.DataFrame, date_col: str) -> pd.Series:
     return project_utils.epidemic_date_to_biweek(epidemic_date)
 
 
+def _biweek_date_range(
+    biweek_label: str,
+) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Return the (start, end) calendar dates spanned by *biweek_label*.
+
+    The epidemic year begins on the first Sunday on or before June 1 of the
+    label's starting calendar year. Biweek W{N} covers epidemic weeks N-1
+    and N, so the date range is:
+
+        start = epi_year_start + (N - 2) × 7 days
+        end   = epi_year_start + N × 7 − 1 days  (inclusive)
+
+    Parameters
+    ----------
+    biweek_label : str
+        Biweek label in the format ``{YYYY_YY}W{NN}``, e.g. ``2023_24W18``.
+
+    Returns
+    -------
+    tuple[pd.Timestamp, pd.Timestamp]
+        Inclusive (start, end) calendar dates of the biweek.
+    """
+    epi_year_str, week_str = str(biweek_label).split("W")
+    cal_year = int(epi_year_str.split("_")[0])
+    biweek_num = int(week_str)
+
+    june1 = pd.Timestamp(f"{cal_year}-06-01")
+    offset = (june1.weekday() + 1) % 7  # days to subtract to reach Sunday
+    epi_year_start = june1 - pd.Timedelta(days=offset)
+
+    start = epi_year_start + pd.Timedelta(weeks=biweek_num - 2)
+    end = epi_year_start + pd.Timedelta(weeks=biweek_num) - pd.Timedelta(days=1)
+    return start, end
+
+
 def _biweek_window(biweek_label: str) -> tuple[int, int]:
     """Return the (start_week, end_week) window covered by *biweek_label*.
 
@@ -83,52 +120,74 @@ def _biweek_window(biweek_label: str) -> tuple[int, int]:
 
 
 # ============================================================
+# Module-scoped data fixtures (loaded once per file)
+# ============================================================
+
+
+@pytest.fixture(scope="module")
+def ovitraps() -> pd.DataFrame:
+    """Full ovitraps dataset from add_population_info."""
+    path = Path(_dvc["add_population_info"]["ovitraps"])
+    if not path.exists():
+        pytest.fail(f"File not found: {path}")
+    return pd.read_csv(
+        path,
+        parse_dates=["dt_instal", "dt_col"],
+        dtype={"narmad": str, "nplaca": str},
+    )
+
+
+@pytest.fixture(scope="module")
+def dengue() -> pd.DataFrame:
+    """Full dengue dataset from add_population_info."""
+    path = Path(_dvc["add_population_info"]["dengue"])
+    if not path.exists():
+        pytest.fail(f"File not found: {path}")
+    return pd.read_csv(
+        path, parse_dates=["dt_notific"], low_memory=False
+    )
+
+
+@pytest.fixture(scope="module")
+def idw_df() -> pd.DataFrame:
+    """Full centroids_idw dataset from add_population_info."""
+    path = Path(_dvc["add_population_info"]["centroids_idw"])
+    if not path.exists():
+        pytest.fail(f"File not found: {path}")
+    return pd.read_csv(path)
+
+
+@pytest.fixture(scope="module")
+def ovitraps_sample(ovitraps: pd.DataFrame) -> pd.DataFrame:
+    """20 random ovitraps rows with a reproducible seed."""
+    return ovitraps.sample(
+        n=N_SAMPLES, random_state=RANDOM_SEED
+    ).reset_index(drop=True)
+
+
+@pytest.fixture(scope="module")
+def dengue_sample(dengue: pd.DataFrame) -> pd.DataFrame:
+    """20 random dengue rows with a reproducible seed."""
+    return dengue.sample(
+        n=N_SAMPLES, random_state=RANDOM_SEED
+    ).reset_index(drop=True)
+
+
+@pytest.fixture(scope="module")
+def idw_sample(idw_df: pd.DataFrame) -> pd.DataFrame:
+    """20 random centroids_idw rows with a reproducible seed."""
+    return idw_df.sample(
+        n=N_SAMPLES, random_state=RANDOM_SEED
+    ).reset_index(drop=True)
+
+
+# ============================================================
 # Class 1: Biweek alignment
 # ============================================================
 
 
 class TestBiweekAlignment:
     """Verify biweek derivation and cross-dataset consistency."""
-
-    # ----------------------------------------------------------
-    # Fixtures
-    # ----------------------------------------------------------
-
-    @pytest.fixture(scope="class")
-    def ovitraps(self) -> pd.DataFrame:
-        """Full ovitraps dataset from add_population_info."""
-        path = Path(_dvc["add_population_info"]["ovitraps"])
-        if not path.exists():
-            pytest.fail(f"File not found: {path}")
-        return pd.read_csv(
-            path,
-            parse_dates=["dt_instal", "dt_col"],
-            dtype={"narmad": str, "nplaca": str},
-        )
-
-    @pytest.fixture(scope="class")
-    def dengue(self) -> pd.DataFrame:
-        """Full dengue dataset from add_population_info."""
-        path = Path(_dvc["add_population_info"]["dengue"])
-        if not path.exists():
-            pytest.fail(f"File not found: {path}")
-        return pd.read_csv(
-            path, parse_dates=["dt_notific"], low_memory=False
-        )
-
-    @pytest.fixture(scope="class")
-    def ovitraps_sample(self, ovitraps: pd.DataFrame) -> pd.DataFrame:
-        """20 random ovitraps rows with a reproducible seed."""
-        return ovitraps.sample(
-            n=N_SAMPLES, random_state=RANDOM_SEED
-        ).reset_index(drop=True)
-
-    @pytest.fixture(scope="class")
-    def dengue_sample(self, dengue: pd.DataFrame) -> pd.DataFrame:
-        """20 random dengue rows with a reproducible seed."""
-        return dengue.sample(
-            n=N_SAMPLES, random_state=RANDOM_SEED
-        ).reset_index(drop=True)
 
     # ----------------------------------------------------------
     # Tests: ovitraps biweek ← dt_instal
@@ -242,6 +301,52 @@ class TestBiweekAlignment:
             "Expected ≥ 10 — datasets may use different conventions."
         )
 
+    def test_same_biweek_dt_notific_within_ovitrap_window(
+        self,
+        ovitraps_sample: pd.DataFrame,
+        dengue: pd.DataFrame,
+    ) -> None:
+        """
+        For each of the 20 ovitraps samples, every dengue record sharing the
+        same biweek must have dt_notific within that biweek's calendar date
+        range — the 14-day epidemiological window derived from the biweek
+        label using the same convention as dt_instal and dt_col.
+
+        The biweek for ovitraps is derived from dt_instal; the biweek for
+        dengue is derived from dt_notific. If both share the same label, both
+        dates must fall in the same 14-day window. This cross-dataset check
+        catches label-convention mismatches that single-dataset tests cannot.
+
+        Parameters
+        ----------
+        ovitraps_sample : pd.DataFrame
+            20 random ovitraps rows with dt_instal, dt_col, and biweek.
+        dengue : pd.DataFrame
+            Full dengue dataset with dt_notific and biweek.
+        """
+        dengue_notific = pd.to_datetime(dengue["dt_notific"])
+        failures: list[str] = []
+
+        for _, row in ovitraps_sample.iterrows():
+            biweek = row["biweek"]
+            bw_start, bw_end = _biweek_date_range(biweek)
+
+            same_biweek = dengue["biweek"] == biweek
+            if not same_biweek.any():
+                continue
+
+            notific = dengue_notific[same_biweek]
+            out_of_range = (notific < bw_start) | (notific > bw_end)
+            if out_of_range.any():
+                failures.append(
+                    f"biweek={biweek} | window [{bw_start.date()}, "
+                    f"{bw_end.date()}] | "
+                    f"{out_of_range.sum()} dt_notific outside biweek range "
+                    f"(min={notific.min().date()}, max={notific.max().date()})"
+                )
+
+        assert not failures, "\n".join(failures)
+
 
 # ============================================================
 # Class 2: Centroids IDW biweek validation
@@ -250,37 +355,6 @@ class TestBiweekAlignment:
 
 class TestCentroidsIDWBiweek:
     """Validate biweek convention and structural invariants of centroids_idw."""
-
-    # ----------------------------------------------------------
-    # Fixtures
-    # ----------------------------------------------------------
-
-    @pytest.fixture(scope="class")
-    def idw_df(self) -> pd.DataFrame:
-        """Full centroids_idw dataset from add_population_info."""
-        path = Path(_dvc["add_population_info"]["centroids_idw"])
-        if not path.exists():
-            pytest.fail(f"File not found: {path}")
-        return pd.read_csv(path)
-
-    @pytest.fixture(scope="class")
-    def ovitraps(self) -> pd.DataFrame:
-        """Full ovitraps dataset for cross-reference."""
-        path = Path(_dvc["add_population_info"]["ovitraps"])
-        if not path.exists():
-            pytest.fail(f"File not found: {path}")
-        return pd.read_csv(path, dtype={"narmad": str, "nplaca": str})
-
-    @pytest.fixture(scope="class")
-    def idw_sample(self, idw_df: pd.DataFrame) -> pd.DataFrame:
-        """20 random rows with a reproducible seed."""
-        return idw_df.sample(
-            n=N_SAMPLES, random_state=RANDOM_SEED
-        ).reset_index(drop=True)
-
-    # ----------------------------------------------------------
-    # Tests: biweek format
-    # ----------------------------------------------------------
 
     def test_idw_biweek_format_and_even_parity(
         self, idw_sample: pd.DataFrame
@@ -311,10 +385,6 @@ class TestCentroidsIDWBiweek:
             f"{sorted(extra)[:5]}"
         )
 
-    # ----------------------------------------------------------
-    # Tests: structural invariants
-    # ----------------------------------------------------------
-
     def test_no_duplicate_sector_biweek_pairs(
         self, idw_df: pd.DataFrame
     ) -> None:
@@ -336,14 +406,13 @@ class TestCentroidsIDWBiweek:
     def test_n_traps_used_in_valid_range(
         self, idw_df: pd.DataFrame
     ) -> None:
-        """n_traps_used must be ≥ 1 and ≤ DEFAULT_N_NEIGHBORS (6)."""
-        from src.dvc.add_population_info import DEFAULT_N_NEIGHBORS
+        """n_traps_used must be ≥ 1 and ≤ _DEFAULT_N_NEIGHBORS (6)."""
         bad = idw_df[
             (idw_df["n_traps_used"] < 1)
-            | (idw_df["n_traps_used"] > DEFAULT_N_NEIGHBORS)
+            | (idw_df["n_traps_used"] > _DEFAULT_N_NEIGHBORS)
         ]
         assert bad.empty, (
-            f"{len(bad)} rows have n_traps_used outside [1, {DEFAULT_N_NEIGHBORS}]"
+            f"{len(bad)} rows have n_traps_used outside [1, {_DEFAULT_N_NEIGHBORS}]"
         )
 
     def test_centroid_coordinates_in_bh_range(
@@ -365,22 +434,6 @@ class TestCentroidsIDWBiweek:
 
 class TestSectorNullAttribution:
     """Validate that NaN population_sector is explained by missing coordinates."""
-
-    @pytest.fixture(scope="class")
-    def ovitraps(self) -> pd.DataFrame:
-        """Full ovitraps dataset from add_population_info."""
-        path = Path(_dvc["add_population_info"]["ovitraps"])
-        if not path.exists():
-            pytest.fail(f"File not found: {path}")
-        return pd.read_csv(path)
-
-    @pytest.fixture(scope="class")
-    def dengue(self) -> pd.DataFrame:
-        """Full dengue dataset from add_population_info."""
-        path = Path(_dvc["add_population_info"]["dengue"])
-        if not path.exists():
-            pytest.fail(f"File not found: {path}")
-        return pd.read_csv(path, low_memory=False)
 
     @pytest.mark.xfail(
         strict=False,
