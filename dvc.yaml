@@ -23,19 +23,21 @@ stages:
       - ${all.paths.data.dvc.convert_to_csv.ibge_sector_history_csv}:
           persist: true
 
-  slow_processing:
-    cmd: python src/dvc/process_data_slow.py
+  process_data:
+    cmd: python src/dvc/process_data.py
     deps:
-      - src/dvc/process_data_slow.py
+      - src/dvc/process_data.py
       - ${all.paths.data.dvc.convert_to_csv.health_centers_csv}
       - ${all.paths.data.dvc.convert_to_csv.dengue_csv}
       - ${all.paths.data.dvc.convert_to_csv.ovitraps_csv}
     outs:
-      - ${all.paths.data.dvc.slow_processing.health_centers}:
+      - ${all.paths.data.dvc.process_data.health_centers}:
           persist: true
-      - ${all.paths.data.dvc.slow_processing.dengue}:
+      - ${all.paths.data.dvc.process_data.dengue}:
           persist: true
-      - ${all.paths.data.dvc.slow_processing.ovitraps}:
+      - ${all.paths.data.dvc.process_data.ovitraps}:
+          persist: true
+      - ${all.paths.data.dvc.process_data.daily_ovitraps}:
           persist: true
 
   process_population_data:
@@ -57,25 +59,12 @@ stages:
       - ${all.paths.data.dvc.process_population_data.population_interpolated}:
           persist: true
 
-  fast_processing:
-    cmd: python src/dvc/process_data_fast.py
-    deps:
-      - src/dvc/process_data_fast.py
-      - ${all.paths.data.dvc.slow_processing.health_centers}
-      - ${all.paths.data.dvc.slow_processing.dengue}
-      - ${all.paths.data.dvc.slow_processing.ovitraps}
-    outs:
-      - ${all.paths.data.dvc.fast_processing.health_centers}
-      - ${all.paths.data.dvc.fast_processing.dengue}
-      - ${all.paths.data.dvc.fast_processing.ovitraps}
-      - ${all.paths.data.dvc.fast_processing.daily_ovitraps}
-
   add_population_info:
     cmd: python src/dvc/add_population_info.py
     deps:
       - src/dvc/add_population_info.py
-      - ${all.paths.data.dvc.fast_processing.ovitraps}
-      - ${all.paths.data.dvc.fast_processing.dengue}
+      - ${all.paths.data.dvc.process_data.ovitraps}
+      - ${all.paths.data.dvc.process_data.dengue}
       - ${all.paths.data.dvc.process_population_data.sectors_geojson}
       - ${all.paths.data.dvc.process_population_data.population_interpolated}
     outs:
