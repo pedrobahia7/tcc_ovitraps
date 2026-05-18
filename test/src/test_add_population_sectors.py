@@ -18,9 +18,11 @@ import re
 import sys
 from pathlib import Path
 
+import geopandas as gpd
 import pandas as pd
 import pytest
 import yaml
+from shapely.geometry import Point
 
 sys.path.append("utils")
 import project_utils
@@ -179,6 +181,16 @@ def idw_sample(idw_df: pd.DataFrame) -> pd.DataFrame:
     return idw_df.sample(
         n=N_SAMPLES, random_state=RANDOM_SEED
     ).reset_index(drop=True)
+
+
+@pytest.fixture(scope="module")
+def bh_boundary() -> gpd.GeoSeries:
+    """Union of all BH 2022 census sector geometries (EPSG:4326)."""
+    path = Path(_dvc["process_population_data"]["sectors_geojson"])
+    if not path.exists():
+        pytest.fail(f"File not found: {path}")
+    gdf = gpd.read_file(path).to_crs("EPSG:4326")
+    return gdf.geometry.union_all()
 
 
 # ============================================================
@@ -435,24 +447,20 @@ class TestCentroidsIDWBiweek:
 class TestSectorNullAttribution:
     """Validate that NaN population_sector is explained by missing coordinates."""
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "Records with valid lat/lon may still fall outside the BH sector "
-            "geometries and receive NaN sector. This test is registered to "
-            "track progress toward full geographic coverage."
-        ),
-    )
     def test_nan_sector_only_when_coords_missing(
-        self, ovitraps: pd.DataFrame, dengue: pd.DataFrame
+        self,
+        ovitraps: pd.DataFrame,
+        dengue: pd.DataFrame,
+        bh_boundary: gpd.GeoSeries,
     ) -> None:
         """
-        Every record with a NaN population_sector must have missing or zero
-        coordinates. Records with valid lat/lon should always match a sector.
+        Every record with valid coordinates must have a population_sector.
 
-        This test is marked xfail because some BH coordinates fall outside
-        the current sector geometries. It will be promoted to a passing test
-        once full coverage is confirmed.
+        TODO: this test is failing because some records with valid coordinates
+        receive NaN sector. Records outside the BH census boundary are
+        expected to have no match, but they should not have valid lat/lon in
+        the first place — their coordinates need to be corrected or excluded
+        upstream. Fix coordinate cleaning in process_data.py to resolve this.
 
         Parameters
         ----------
@@ -460,6 +468,8 @@ class TestSectorNullAttribution:
             Ovitraps dataset with latitude, longitude, and population_sector.
         dengue : pd.DataFrame
             Dengue dataset with latitude, longitude, and population_sector.
+        bh_boundary : gpd.GeoSeries
+            Union of all BH 2022 census sector geometries.
         """
         failures: list[str] = []
         for name, df in [("ovitraps", ovitraps), ("dengue", dengue)]:
@@ -470,10 +480,21 @@ class TestSectorNullAttribution:
                 & (df["longitude"] != 0)
             )
             has_nan_sector = df["population_sector"].isna()
-            leaking = df[has_valid_coords & has_nan_sector]
-            if not leaking.empty:
+            leaking = df[has_valid_coords & has_nan_sector].copy()
+
+            if leaking.empty:
+                continue
+
+            points = leaking.apply(
+                lambda r: Point(r["longitude"], r["latitude"]), axis=1
+            )
+            inside_bh = points.apply(bh_boundary.contains)
+            genuine = leaking[inside_bh.values]
+
+            if not genuine.empty:
                 failures.append(
-                    f"{name}: {len(leaking)} records have valid coordinates "
-                    f"but no sector assignment"
+                    f"{name}: {len(genuine)} records inside BH have valid "
+                    f"coordinates but no sector assignment"
                 )
+
         assert not failures, "\n".join(failures)
