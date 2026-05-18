@@ -1,9 +1,25 @@
-"""Associate ovitraps with population sectors via centroids and IDW interpolation.
+"""
+Stage: associate_ovitraps_and_population
 
-This script reads the census sectors GeoJSON file and calculates the geometric
-centroid for each sector, then computes IDW (Inverse Distance Weighting)
-interpolated ovitrap egg values for each sector centroid based on the nearest
-ovitraps per biweek.
+Produces two spatial summary tables that link ovitrap egg counts to census
+sector geometries, enabling sector-level dengue risk modelling.
+
+Step 1 — Sector centroids:
+  Reprojects the 2022 BH sector geometries to SIRGAS 2000 / UTM zone 23S
+  (EPSG:31983) for accurate centroid calculation, then back-projects to
+  WGS-84. Output includes sector code, neighbourhood, area, 2010/2022
+  population, and centroid coordinates.
+
+Step 2 — IDW interpolation:
+  For each sector centroid and each biweek, selects the k nearest ovitraps
+  (default k=6) and computes an Inverse Distance Weighting (IDW, power=2)
+  estimate of the egg count. If a trap falls exactly on a centroid, its value
+  is used directly (distance = 0 guard).
+
+Outputs:
+  - centroids CSV       — one row per sector with centroid lat/lon
+  - centroids_idw CSV   — one row per (sector, biweek) with idw_egg_value,
+                          distance to nearest trap, and traps used
 """
 
 from __future__ import annotations

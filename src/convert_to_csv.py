@@ -1,3 +1,22 @@
+"""
+Stage: convert_to_csv
+
+Entry point of the DVC pipeline. Converts all raw source files to UTF-8 CSV
+so that downstream stages can rely on a single, consistent format.
+
+Datasets converted:
+  - Health centers (Excel → CSV)
+  - Dengue cases (Excel → CSV)
+  - Ovitraps (Excel → CSV)
+  - IBGE 2010 census sector population (XLS → CSV)
+  - IBGE 2022 census sector population (latin-1 CSV → UTF-8 CSV)
+  - IBGE census sector history (Excel → CSV)
+
+Each conversion is guarded by an existence check, so re-running the stage
+only re-converts files that are missing. Outputs are written to the raw data
+folder (data/raw/) and consumed by slow_processing and process_population_data.
+"""
+
 import pandas as pd
 import os
 import yaml

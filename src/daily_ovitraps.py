@@ -1,3 +1,14 @@
+"""
+Stage: daily_ovitraps
+
+Aggregates the fully-processed ovitrap records into a daily time series.
+Delegates entirely to project_utils.get_daily_ovitraps, which groups records
+by trap and date and fills gaps so every trap has a continuous daily index.
+
+Input:  data/processed/ovitraps_data.csv (output of add_population_sectors)
+Output: data/processed/daily_ovitraps.csv — one row per (trap, date)
+"""
+
 import pandas as pd
 import sys
 import yaml

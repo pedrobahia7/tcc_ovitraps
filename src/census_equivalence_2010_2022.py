@@ -1,6 +1,30 @@
-# =============================================================================
-# CENSUS EQUIVALENCE: 2010 → 2022 CONVERSION FOR DVC PIPELINE
-# =============================================================================
+"""
+Stage: process_population_data
+
+Builds a crosswalk between the 2010 and 2022 IBGE census sector boundaries
+for Belo Horizonte, then produces a per-sector weekly population time series
+covering the full epidemic period.
+
+Steps:
+  1. Load 2010 and 2022 shapefiles and reproject to SIRGAS 2000 / UTM zone 23S
+     (EPSG:31983) for accurate area calculations.
+  2. Compute the spatial intersection of every 2010 sector against every 2022
+     sector and derive the area-overlap fraction for each pair.
+  3. Redistribute 2010 census population to 2022 sector boundaries
+     proportionally to intersection area, classifying each transfer as
+     'maintained', 'subdivided', or 'aggregated'.
+  4. Linearly interpolate (and extrapolate) population between the 2010 and 2022
+     census anchors for every epidemic week present in the dengue dataset,
+     producing a wide-format table (sector × epidemic-week).
+
+Outputs:
+  - sector_equivalence_2010_to_2022.csv  — spatial overlap fractions
+  - population_data.csv                  — 2010 equivalent + actual 2022 pop
+  - interpolated_population_data.csv     — weekly population per sector
+  - bh_sectors_2022_with_populations.geojson — 2022 sector geometries with pop
+
+Consumed by: add_population_sectors, calculate_dengue_per_capita.
+"""
 
 import pandas as pd
 import geopandas as gpd

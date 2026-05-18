@@ -1,3 +1,28 @@
+"""
+Stage: fast_processing
+
+Second processing pass over dengue and ovitrap data. Operates on the
+slow-processed CSVs and prepares both datasets for spatial joining.
+
+Dengue cases:
+  - Renames columns to snake_case (SemEpi → semana, Ano_Caso → ano, etc.)
+  - Assigns epidemic week and year from the notification date (dt_notific)
+  - Drops unconfirmed cases (Dengue == 'N') and duplicate rows
+  - Derives epidemic_date string (e.g. '2019_20W03')
+
+Ovitraps:
+  - Renames columns to snake_case (semepi → semana, dtcol → dt_col, etc.)
+  - Assigns epidemic week and year from the installation date (dt_instal)
+  - Corrects known data errors: typo dates, out-of-range collection dates,
+    overlapping trap samples, and two traps sharing identical coordinates
+  - Normalises date columns to datetime and enforces a valid exposition window
+    (4–21 days); samples outside this range have dt_col reset to dt_instal + 7d
+  - Derives days_expo, eggs_per_day, epidemic_date, and biweek columns
+
+Outputs are written to an intermediate folder (data/processed/add_population_sectors/)
+and consumed by add_population_sectors.
+"""
+
 # %% Import libraries
 import os
 import pandas as pd

@@ -1,3 +1,26 @@
+"""
+Stage: slow_processing
+
+First processing pass over the three core raw datasets (health centers,
+dengue cases, ovitraps). Performs three main operations:
+
+  1. Health centers — corrects known OCR/transcription typos in facility
+     names (e.g. "BONSUO" → "BONSUCESSO") and standardises column names
+     to lowercase snake_case.
+
+  2. Dengue cases — reprojects QGIS planar coordinates (coordx/coordy) to
+     WGS-84 latitude/longitude, then assigns the nearest health center to
+     each case using a Haversine distance lookup.
+
+  3. Ovitraps — same coordinate reprojection and nearest-health-center
+     assignment as dengue cases.
+
+Called "slow" because closest_health_center iterates over every row and
+computes distances to all health centers (O(n * m)); this is the bottleneck
+of the pipeline. Outputs are written to data/processed/slow/ and consumed
+by process_data_fast.py in the next stage.
+"""
+
 # %% Import libraries
 import pandas as pd
 import sys

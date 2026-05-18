@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
 """
-Add Population Sector IDs to Ovitraps and Dengue Data
+Stage: add_population_sectors
 
-This script reads the processed ovitraps and dengue data files, performs spatial joins
-with the census sectors shapefile to identify which census sector each data point
-belongs to, and adds a 'population_sector' column containing the sector ID.
+Assigns a 2022 IBGE census sector ID to each dengue case and ovitrap record
+via a point-in-polygon spatial join.
 
-Input files:
-- data/processed/ovitraps_data.csv
-- data/processed/dengue_data.csv  
-- data/processed/bh_sectors_2022_with_populations.geojson
+Each record's (latitude, longitude) is tested against the 2022 BH sector
+geometries produced by process_population_data. Records with valid coordinates
+that fall within a sector receive a 'population_sector' column value (the
+CD_SETOR code). Records outside all sectors or with missing coordinates receive
+None.
 
-Output files:
-- data/processed/ovitraps_data.csv (updated with population_sector column)
-- data/processed/dengue_data.csv (updated with population_sector column)
+Input:  intermediate dengue and ovitrap CSVs from fast_processing
+        (data/processed/add_population_sectors/)
+        2022 sectors GeoJSON from process_population_data
+Output: data/processed/dengue_data.csv   — with population_sector column
+        data/processed/ovitraps_data.csv — with population_sector column
 
-Author: Census Equivalence Processing System
-Date: December 2025
+Consumed by: daily_ovitraps, associate_ovitraps_and_population,
+             calculate_dengue_per_capita, run_tests.
 """
 
 import pandas as pd

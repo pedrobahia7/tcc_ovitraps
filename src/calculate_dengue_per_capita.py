@@ -1,13 +1,24 @@
-"""Calculate dengue cases per capita (per 1,000 population) by sector and biweek.
+"""
+Stage: calculate_dengue_per_capita
 
-Aggregates dengue case counts per population sector and biweek, then
-joins with the interpolated population data to compute the per-capita rate.
-Also applies Empirical Bayes smoothing (Marshall, 1991) to correct for
-variance instability in small-population sectors.
+Computes dengue incidence rates per 1,000 inhabitants by census sector and
+biweek, producing both a crude rate and an Empirical Bayes smoothed rate.
 
-Biweek grouping follows the project convention:
-    biweek_num = ((week_num + 1) // 2) * 2
-    biweek = epi_year + 'W' + biweek_num (zero-padded)
+Steps:
+  1. Aggregate dengue case counts by (population_sector, biweek), converting
+     epidemic_date to biweek using the project convention:
+       biweek_num = ((week_num + 1) // 2) * 2
+  2. Melt the wide-format interpolated population table to long format and
+     aggregate weekly population to biweekly means.
+  3. Left-join population onto cases so every sector-biweek is represented,
+     filling missing case counts with 0.
+  4. Compute crude rate: (case_count / population) * 1,000.
+  5. Apply Empirical Bayes smoothing (Marshall, 1991) via PySAL's
+     esda.smoothing.Empirical_Bayes to shrink rates from small-population
+     sectors toward the global mean.
+
+Output columns: sector_id, biweek, case_count, population,
+                cases_per_1000, eb_rate_per_1000.
 """
 
 from __future__ import annotations
