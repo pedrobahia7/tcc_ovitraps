@@ -31,6 +31,7 @@ Outputs:
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -68,8 +69,8 @@ def _load_params(params_path: Path = Path("params.yaml")) -> dict:
 def _resolve_paths(params: dict) -> dict[str, Path]:
     dvc = params["all"]["paths"]["data"]["dvc"]
     return {
-        "ovitraps_input":          Path(dvc["fast_processing"]["ovitraps"]),
-        "dengue_input":            Path(dvc["fast_processing"]["dengue"]),
+        "ovitraps_input":          Path(dvc["process_data"]["ovitraps"]),
+        "dengue_input":            Path(dvc["process_data"]["dengue"]),
         "sectors_geojson":         Path(dvc["process_population_data"]["sectors_geojson"]),
         "population_interpolated": Path(dvc["process_population_data"]["population_interpolated"]),
         "ovitraps_out":            Path(dvc["add_population_info"]["ovitraps"]),
@@ -369,6 +370,7 @@ def run_centroids_and_idw(ovitraps: pd.DataFrame, paths: dict[str, Path]) -> Non
 def main() -> None:
     params = _load_params()
     paths = _resolve_paths(params)
+    os.makedirs(paths["dengue_out"].parent, exist_ok=True)
 
     logger.info("=== Step 1: Sector assignment ===")
     ovitraps, dengue = run_sector_assignment(paths)
