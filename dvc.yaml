@@ -1,8 +1,8 @@
 stages:
   convert_to_csv:
-    cmd: python src/convert_to_csv.py
+    cmd: python src/dvc/convert_to_csv.py
     deps:
-      - src/convert_to_csv.py
+      - src/dvc/convert_to_csv.py
       - ${all.paths.data.raw.health_centers}
       - ${all.paths.data.raw.dengue}
       - ${all.paths.data.raw.ovitraps}
@@ -24,9 +24,9 @@ stages:
           persist: true
 
   slow_processing:
-    cmd: python src/process_data_slow.py
+    cmd: python src/dvc/process_data_slow.py
     deps:
-      - src/process_data_slow.py
+      - src/dvc/process_data_slow.py
       - ${all.paths.data.raw.health_centers_csv}
       - ${all.paths.data.raw.dengue_csv}
       - ${all.paths.data.raw.ovitraps_csv}
@@ -39,9 +39,9 @@ stages:
           persist: true
 
   process_population_data:
-    cmd: python src/census_equivalence_2010_2022.py
+    cmd: python src/dvc/process_population_data.py
     deps:
-      - src/census_equivalence_2010_2022.py
+      - src/dvc/process_population_data.py
       - ${all.paths.data.raw.ibge_2010_population_csv}
       - ${all.paths.data.raw.ibge_2022_population}
       - ${all.paths.data.raw.ibge_sector_history_csv}
@@ -58,9 +58,9 @@ stages:
           persist: true
 
   fast_processing:
-    cmd: python src/process_data_fast.py
+    cmd: python src/dvc/process_data_fast.py
     deps:
-      - src/process_data_fast.py
+      - src/dvc/process_data_fast.py
       - ${all.paths.data.processed.slow.health_centers}
       - ${all.paths.data.processed.slow.dengue}
       - ${all.paths.data.processed.slow.ovitraps}
@@ -71,9 +71,9 @@ stages:
       - ${all.paths.data.processed.daily_ovitraps}
 
   add_population_info:
-    cmd: python src/add_population_info.py
+    cmd: python src/dvc/add_population_info.py
     deps:
-      - src/add_population_info.py
+      - src/dvc/add_population_info.py
       - ${all.paths.data.processed.add_population_sectors.ovitraps}
       - ${all.paths.data.processed.add_population_sectors.dengue}
       - ${all.paths.data.processed.census_equivalence.sectors_geojson}
