@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from typing import List, Tuple
 
 from pyproj import Transformer
+from sklearn.neighbors import BallTree
 
 
 EPIDEMY_YEARS = ["2012_13", "2015_16", "2018_19", "2023_24"]
@@ -811,38 +812,53 @@ def convert_week_df_to_epidemic_week_and_year(
 ################# Geographical Functions ###################
 
 
-def closest_health_center(df, health_centers, method="haversine"):
+def closest_health_center(
+    df: pd.DataFrame,
+    health_centers: pd.DataFrame,
+    method: str = "haversine",
+) -> list:
     """
     Find the closest health center to each point in the DataFrame.
 
+    Vectorized via BallTree with Haversine metric (O(n log m)). Rows
+    with missing coordinates receive NaN. The `method` param is kept
+    for API compatibility but ignored.
+
     Parameters
     ----------
-    - df (pd.DataFrame): DataFrame with the points.
-    - health_centers (pd.DataFrame): DataFrame with health center locations and names.
-    - method (str): Method to calculate the distance. Options are
-        "haversine" and "planar".
+    - df (pd.DataFrame): DataFrame with latitude/longitude columns.
+    - health_centers (pd.DataFrame): DataFrame with latitude, longitude,
+        and health_center columns.
+    - method (str): Ignored; kept for backward compatibility.
 
     Returns
     -------
-    - pd.DataFrame: DataFrame with the closest health center for each point.
-
+    - list: Closest health center name per row, NaN where coords missing.
     """
-    # Calculate the distance between each point and each health center
-    closest_health_center_list = []
-    for _, row in df.iterrows():
-        if row[["latitude", "longitude"]].notnull().all():
-            closest_health_center_list.append(
-                generic.smaller_distance_in_df(
-                    row["latitude"],
-                    row["longitude"],
-                    health_centers,
-                    method=method,
-                )["health_center"]
-            )
-        else:
-            closest_health_center_list.append(np.nan)
+    result = pd.Series(np.nan, index=df.index, dtype=object)
+    valid_mask = df[["latitude", "longitude"]].notnull().all(axis=1)
+    valid_df = df.loc[valid_mask]
 
-    return closest_health_center_list
+    if valid_df.empty:
+        return result.tolist()
+
+    # BallTree expects radians for haversine
+    query_rad = np.radians(
+        valid_df[["latitude", "longitude"]].to_numpy(dtype=float)
+    )
+    center_rad = np.radians(
+        health_centers[["latitude", "longitude"]].to_numpy(dtype=float)
+    )
+
+    tree = BallTree(center_rad, metric="haversine")
+    _, indices = tree.query(query_rad, k=1)
+
+    names = health_centers["health_center"].iloc[
+        indices[:, 0]
+    ].to_numpy()
+    result.loc[valid_mask] = names
+
+    return result.tolist()
 
 
 def convert_qgis_to_latlon(df, x_col="coordx", y_col="coordy"):

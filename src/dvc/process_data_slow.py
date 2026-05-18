@@ -49,7 +49,8 @@ os.makedirs(_out['folder'], exist_ok=True)
 # %% Health Centers data
 # Load
 print("Processing health centers data")
-health_centers["CENTRO DE SAÚDE"].replace(
+_HC_COL = "CENTRO DE SAÚDE"
+health_centers[_HC_COL] = health_centers[_HC_COL].replace(
     {
         "BONSUO": "BONSUCESSO",
         "TARO": "TARCISIO",
@@ -58,16 +59,14 @@ health_centers["CENTRO DE SAÚDE"].replace(
         "DE RO": "DE CASTRO",
     },
     regex=True,
-    inplace=True,
 )
 
-health_centers.rename(
+health_centers = health_centers.rename(
     columns={
         "LATITUDE": "latitude",
         "LONGITUDE": "longitude",
-        "CENTRO DE SAÚDE": "health_center",
+        _HC_COL: "health_center",
     },
-    inplace=True,
 )
 
 health_centers.to_csv(_out['health_centers'], index=False)
