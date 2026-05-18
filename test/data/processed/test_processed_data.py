@@ -24,11 +24,12 @@ class TestProcessedData:
     @pytest.fixture(scope="class")
     def data_paths(self):
         """Fixture providing paths to processed data files."""
+        dvc = params["all"]["paths"]["data"]["dvc"]
         return {
-            'dengue': params["all"]["paths"]["data"]["processed"]["dengue"],
-            'ovitraps': params["all"]["paths"]["data"]["processed"]["ovitraps"],
-            'health_centers': params["all"]["paths"]["data"]["processed"]["health_centers"],
-            'daily_ovitraps': params["all"]["paths"]["data"]["processed"]["daily_ovitraps"]
+            'dengue': dvc["add_population_info"]["dengue"],
+            'ovitraps': dvc["add_population_info"]["ovitraps"],
+            'health_centers': dvc["fast_processing"]["health_centers"],
+            'daily_ovitraps': dvc["fast_processing"]["daily_ovitraps"],
         }
     
     @pytest.fixture(scope="class")

@@ -10,82 +10,82 @@ stages:
       - ${all.paths.data.raw.ibge_2022_population}
       - ${all.paths.data.raw.ibge_sector_history}
     outs:
-      - ${all.paths.data.raw.health_centers_csv}:
+      - ${all.paths.data.dvc.convert_to_csv.health_centers_csv}:
           persist: true
-      - ${all.paths.data.raw.dengue_csv}:
+      - ${all.paths.data.dvc.convert_to_csv.dengue_csv}:
           persist: true
-      - ${all.paths.data.raw.ovitraps_csv}:
+      - ${all.paths.data.dvc.convert_to_csv.ovitraps_csv}:
           persist: true
-      - ${all.paths.data.raw.ibge_2010_population_csv}:
+      - ${all.paths.data.dvc.convert_to_csv.ibge_2010_population_csv}:
           persist: true
-      - ${all.paths.data.raw.ibge_2022_population_csv}:
+      - ${all.paths.data.dvc.convert_to_csv.ibge_2022_population_csv}:
           persist: true
-      - ${all.paths.data.raw.ibge_sector_history_csv}:
+      - ${all.paths.data.dvc.convert_to_csv.ibge_sector_history_csv}:
           persist: true
 
   slow_processing:
     cmd: python src/dvc/process_data_slow.py
     deps:
       - src/dvc/process_data_slow.py
-      - ${all.paths.data.raw.health_centers_csv}
-      - ${all.paths.data.raw.dengue_csv}
-      - ${all.paths.data.raw.ovitraps_csv}
+      - ${all.paths.data.dvc.convert_to_csv.health_centers_csv}
+      - ${all.paths.data.dvc.convert_to_csv.dengue_csv}
+      - ${all.paths.data.dvc.convert_to_csv.ovitraps_csv}
     outs:
-      - ${all.paths.data.processed.slow.health_centers}:
+      - ${all.paths.data.dvc.slow_processing.health_centers}:
           persist: true
-      - ${all.paths.data.processed.slow.dengue}:
+      - ${all.paths.data.dvc.slow_processing.dengue}:
           persist: true
-      - ${all.paths.data.processed.slow.ovitraps}:
+      - ${all.paths.data.dvc.slow_processing.ovitraps}:
           persist: true
 
   process_population_data:
     cmd: python src/dvc/process_population_data.py
     deps:
       - src/dvc/process_population_data.py
-      - ${all.paths.data.raw.ibge_2010_population_csv}
+      - ${all.paths.data.dvc.convert_to_csv.ibge_2010_population_csv}
       - ${all.paths.data.raw.ibge_2022_population}
-      - ${all.paths.data.raw.ibge_sector_history_csv}
-      - ${all.paths.data.raw.dengue_csv}
+      - ${all.paths.data.dvc.convert_to_csv.ibge_sector_history_csv}
+      - ${all.paths.data.dvc.convert_to_csv.dengue_csv}
       - data/raw/IBGE/2010/shapefiles/
       - data/raw/IBGE/2022/shapefiles/MG_setores_CD2022.shp
       - data/raw/IBGE/2010/population/Base_informacoes_setores2010_sinopse_MG.xls
     outs:
-      - ${all.paths.data.processed.census_equivalence.population_2010_to_2022}:
+      - ${all.paths.data.dvc.process_population_data.population_2010_to_2022}:
           persist: true
-      - ${all.paths.data.processed.census_equivalence.sectors_geojson}:
+      - ${all.paths.data.dvc.process_population_data.sectors_geojson}:
           persist: true
-      - ${all.paths.data.processed.population_interpolated}:
+      - ${all.paths.data.dvc.process_population_data.population_interpolated}:
           persist: true
 
   fast_processing:
     cmd: python src/dvc/process_data_fast.py
     deps:
       - src/dvc/process_data_fast.py
-      - ${all.paths.data.processed.slow.health_centers}
-      - ${all.paths.data.processed.slow.dengue}
-      - ${all.paths.data.processed.slow.ovitraps}
+      - ${all.paths.data.dvc.slow_processing.health_centers}
+      - ${all.paths.data.dvc.slow_processing.dengue}
+      - ${all.paths.data.dvc.slow_processing.ovitraps}
     outs:
-      - ${all.paths.data.processed.health_centers}
-      - ${all.paths.data.processed.add_population_sectors.dengue}
-      - ${all.paths.data.processed.add_population_sectors.ovitraps}
-      - ${all.paths.data.processed.daily_ovitraps}
+      - ${all.paths.data.dvc.fast_processing.health_centers}
+      - ${all.paths.data.dvc.fast_processing.dengue}
+      - ${all.paths.data.dvc.fast_processing.ovitraps}
+      - ${all.paths.data.dvc.fast_processing.daily_ovitraps}
 
   add_population_info:
     cmd: python src/dvc/add_population_info.py
     deps:
       - src/dvc/add_population_info.py
-      - ${all.paths.data.processed.add_population_sectors.ovitraps}
-      - ${all.paths.data.processed.add_population_sectors.dengue}
-      - ${all.paths.data.processed.census_equivalence.sectors_geojson}
-      - ${all.paths.data.processed.population_interpolated}
+      - ${all.paths.data.dvc.fast_processing.ovitraps}
+      - ${all.paths.data.dvc.fast_processing.dengue}
+      - ${all.paths.data.dvc.process_population_data.sectors_geojson}
+      - ${all.paths.data.dvc.process_population_data.population_interpolated}
     outs:
-      - ${all.paths.data.processed.ovitraps}
-      - ${all.paths.data.processed.dengue}
-      - ${all.paths.data.processed.dengue_per_capita}:
+      - ${all.paths.data.dvc.add_population_info.ovitraps}
+      - ${all.paths.data.dvc.add_population_info.dengue}
+      - ${all.paths.data.dvc.add_population_info.dengue_per_capita}:
           persist: true
-      - ${all.paths.data.processed.centroids}:
+      - ${all.paths.data.dvc.add_population_info.centroids}:
           persist: true
-      - ${all.paths.data.processed.centroids_idw}:
+      - ${all.paths.data.dvc.add_population_info.centroids_idw}:
           persist: true
 
   run_tests:
@@ -105,11 +105,11 @@ stages:
       - test/utils/test_project_utils.py
       - utils/project_utils.py
       - utils/generic.py
-      - ${all.paths.data.processed.ovitraps}
-      - ${all.paths.data.processed.dengue}
-      - ${all.paths.data.processed.dengue_per_capita}
-      - ${all.paths.data.processed.centroids}
-      - ${all.paths.data.processed.centroids_idw}
+      - ${all.paths.data.dvc.add_population_info.ovitraps}
+      - ${all.paths.data.dvc.add_population_info.dengue}
+      - ${all.paths.data.dvc.add_population_info.dengue_per_capita}
+      - ${all.paths.data.dvc.add_population_info.centroids}
+      - ${all.paths.data.dvc.add_population_info.centroids_idw}
     outs:
       - ${all.paths.test.data.raw.diagnosis_raw_comparison}:
           persist: true

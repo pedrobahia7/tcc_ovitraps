@@ -33,21 +33,24 @@ sys.path.append("utils")
 import project_utils
 
 params = yaml.safe_load(open("params.yaml"))
+_in = params['all']['paths']['data']['dvc']['slow_processing']
+_out = params['all']['paths']['data']['dvc']['fast_processing']
+
 # %% Load all data
 print("Loading data")
-dengue_data = pd.read_csv(params['all']['paths']['data']['processed']['slow']['dengue'])
-ovitraps_data = pd.read_csv(params['all']['paths']['data']['processed']['slow']['ovitraps'])
-health_centers = pd.read_csv(params['all']['paths']['data']['processed']['slow']['health_centers'])
+dengue_data = pd.read_csv(_in['dengue'])
+ovitraps_data = pd.read_csv(_in['ovitraps'])
+health_centers = pd.read_csv(_in['health_centers'])
 
 # %% Prepare folders
-os.makedirs(params['all']['paths']['data']['processed']['folder'], exist_ok=True)
+os.makedirs(_out['folder'], exist_ok=True)
 
 
 # %% Health Centers data
 # Load
 
 # Save
-health_centers.to_csv(params['all']['paths']['data']['processed']['health_centers'], index=False)
+health_centers.to_csv(_out['health_centers'], index=False)
 
 # %% Dengue data
 # Process
@@ -254,17 +257,10 @@ ovitraps_data['nplaca'] = ovitraps_data['nplaca'].astype(int).astype(str)
 print("Computing daily ovitraps")
 daily_ovitraps = project_utils.get_daily_ovitraps(ovitraps_data)
 daily_ovitraps.to_csv(
-    params['all']['paths']['data']['processed']['daily_ovitraps'],
+    _out['daily_ovitraps'],
     index=True,
     date_format="%Y-%m-%d",
 )
 
-# Create intermediate directory
-os.makedirs('data/processed/add_population_sectors', exist_ok=True)
-
-# Save Data to intermediate location and final location
-ovitraps_data.to_csv(params['all']['paths']['data']['processed']['add_population_sectors']['ovitraps'], index=False)
-dengue_data.to_csv(params['all']['paths']['data']['processed']['add_population_sectors']['dengue'], index=False)
-
-# Also save health centers to final location
-health_centers.to_csv(params['all']['paths']['data']['processed']['health_centers'], index=False)
+ovitraps_data.to_csv(_out['ovitraps'], index=False)
+dengue_data.to_csv(_out['dengue'], index=False)

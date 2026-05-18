@@ -33,11 +33,11 @@ class TestDenguePerCapita:
 
     @pytest.fixture(scope="class")
     def paths(self):
-        proc = params["all"]["paths"]["data"]["processed"]
+        dvc = params["all"]["paths"]["data"]["dvc"]
         return {
-            "per_capita": proc["dengue_per_capita"],
-            "dengue": proc["dengue"],
-            "population": proc["population_interpolated"],
+            "per_capita": dvc["add_population_info"]["dengue_per_capita"],
+            "dengue": dvc["add_population_info"]["dengue"],
+            "population": dvc["process_population_data"]["population_interpolated"],
         }
 
     @pytest.fixture(scope="class")

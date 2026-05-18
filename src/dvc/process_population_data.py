@@ -47,6 +47,8 @@ while (
 ):
     PROJECT_ROOT = PROJECT_ROOT.parent
 params = yaml.safe_load(open(PROJECT_ROOT / "params.yaml"))
+_stage = params["all"]["paths"]["data"]["dvc"]["process_population_data"]
+_convert = params["all"]["paths"]["data"]["dvc"]["convert_to_csv"]
 
 
 def _round_to_int(values: np.ndarray) -> np.ndarray:
@@ -558,8 +560,8 @@ def main():
                 ) = convert_population(sector_linkage, pop_2010, pop_2022)
 
                 # Create output directory
-                output_dir = Path("data/processed")
-                output_dir.mkdir(exist_ok=True)
+                output_dir = Path(_stage["folder"])
+                output_dir.mkdir(parents=True, exist_ok=True)
 
                 # Save results
                 logger.info("Saving conversion results...")
@@ -614,7 +616,7 @@ def main():
                 # Create DataFrame and save CSV
                 sector_comparison_df = pd.DataFrame(sector_comparison)
                 sector_comparison_df.to_csv(
-                    output_dir / "population_data.csv", index=False
+                    _stage["population_2010_to_2022"], index=False
                 )
                 logger.info(
                     f"Saved sector population comparison CSV: {len(sector_comparison_df):,} sectors"
@@ -622,9 +624,7 @@ def main():
 
                 # Build and save weekly interpolated/extrapolated population table
                 epidemic_weeks = load_epidemic_weeks_from_dengue(
-                    dengue_path=params["all"]["paths"]["data"][
-                        "processed"
-                    ]["dengue"]
+                    dengue_path=_convert["dengue_csv"]
                 )
                 interpolated_population_df = (
                     build_extrapolated_population_table(
@@ -633,7 +633,7 @@ def main():
                     )
                 )
                 interpolated_population_df.to_csv(
-                    output_dir / "interpolated_population_data.csv",
+                    _stage["population_interpolated"],
                     index=False,
                 )
                 logger.info(
@@ -662,8 +662,7 @@ def main():
 
                 # Save as GeoJSON
                 bh_sectors_with_both_pop.to_file(
-                    output_dir
-                    / "bh_sectors_2022_with_populations.geojson",
+                    _stage["sectors_geojson"],
                     driver="GeoJSON",
                 )
                 logger.info(

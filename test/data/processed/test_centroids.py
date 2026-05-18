@@ -26,12 +26,12 @@ class TestSectorCentroids:
 
     @pytest.fixture(scope="class")
     def paths(self):
-        proc = params["all"]["paths"]["data"]["processed"]
+        dvc = params["all"]["paths"]["data"]["dvc"]
         return {
-            "centroids": proc["centroids"],
-            "centroids_idw": proc["centroids_idw"],
-            "sectors_geojson": proc["census_equivalence"]["sectors_geojson"],
-            "ovitraps": proc["ovitraps"],
+            "centroids": dvc["add_population_info"]["centroids"],
+            "centroids_idw": dvc["add_population_info"]["centroids_idw"],
+            "sectors_geojson": dvc["process_population_data"]["sectors_geojson"],
+            "ovitraps": dvc["add_population_info"]["ovitraps"],
         }
 
     @pytest.fixture(scope="class")
@@ -135,11 +135,11 @@ class TestCentroidsIDW:
 
     @pytest.fixture(scope="class")
     def paths(self):
-        proc = params["all"]["paths"]["data"]["processed"]
+        dvc = params["all"]["paths"]["data"]["dvc"]
         return {
-            "centroids": proc["centroids"],
-            "centroids_idw": proc["centroids_idw"],
-            "ovitraps": proc["ovitraps"],
+            "centroids": dvc["add_population_info"]["centroids"],
+            "centroids_idw": dvc["add_population_info"]["centroids_idw"],
+            "ovitraps": dvc["add_population_info"]["ovitraps"],
         }
 
     @pytest.fixture(scope="class")

@@ -32,10 +32,11 @@ class TestRawData:
     @pytest.fixture(scope="class")
     def data_paths(self):
         """Fixture providing paths to processed data files."""
+        _stage = params["all"]["paths"]["data"]["dvc"]["convert_to_csv"]
         return {
-            'dengue': params["all"]["paths"]["data"]["raw"]["dengue_csv"],
-            'ovitraps': params["all"]["paths"]["data"]["raw"]["ovitraps_csv"],
-            'health_centers': params["all"]["paths"]["data"]["raw"]["health_centers_csv"],
+            'dengue': _stage["dengue_csv"],
+            'ovitraps': _stage["ovitraps_csv"],
+            'health_centers': _stage["health_centers_csv"],
         }
     
     @pytest.fixture(scope="class")

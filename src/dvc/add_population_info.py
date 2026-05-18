@@ -66,17 +66,17 @@ def _load_params(params_path: Path = Path("params.yaml")) -> dict:
 
 
 def _resolve_paths(params: dict) -> dict[str, Path]:
-    proc = params["all"]["paths"]["data"]["processed"]
+    dvc = params["all"]["paths"]["data"]["dvc"]
     return {
-        "ovitraps_input":          Path(proc["add_population_sectors"]["ovitraps"]),
-        "dengue_input":            Path(proc["add_population_sectors"]["dengue"]),
-        "sectors_geojson":         Path(proc["census_equivalence"]["sectors_geojson"]),
-        "population_interpolated": Path(proc["population_interpolated"]),
-        "ovitraps_out":            Path(proc["ovitraps"]),
-        "dengue_out":              Path(proc["dengue"]),
-        "dengue_per_capita":       Path(proc["dengue_per_capita"]),
-        "centroids":               Path(proc["centroids"]),
-        "centroids_idw":           Path(proc["centroids_idw"]),
+        "ovitraps_input":          Path(dvc["fast_processing"]["ovitraps"]),
+        "dengue_input":            Path(dvc["fast_processing"]["dengue"]),
+        "sectors_geojson":         Path(dvc["process_population_data"]["sectors_geojson"]),
+        "population_interpolated": Path(dvc["process_population_data"]["population_interpolated"]),
+        "ovitraps_out":            Path(dvc["add_population_info"]["ovitraps"]),
+        "dengue_out":              Path(dvc["add_population_info"]["dengue"]),
+        "dengue_per_capita":       Path(dvc["add_population_info"]["dengue_per_capita"]),
+        "centroids":               Path(dvc["add_population_info"]["centroids"]),
+        "centroids_idw":           Path(dvc["add_population_info"]["centroids_idw"]),
     }
 
 

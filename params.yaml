@@ -6,37 +6,41 @@ all:
         ovitraps: data/raw/MasterDataExtend062025_v2.xlsx
         dengue: data/raw/Dengue2007_2025.xlsx
         health_centers: data/raw/CENTRO_SAUDE_new.xlsx
-        ovitraps_csv: data/raw/MasterDataExtend062025_v2.csv
-        dengue_csv: data/raw/Dengue2007_2025.csv
-        health_centers_csv: data/raw/CENTRO_SAUDE_new.csv
         ibge_2010_population: data/raw/IBGE/2010/population/Base_informacoes_setores2010_sinopse_MG.xls
         ibge_2022_population: data/raw/IBGE/2022/population/Agregados_por_setores_basico_BR_20250417.csv
         ibge_sector_history: data/raw/IBGE/Historico_formacao_Setores_Censitarios_2010_2022.xlsx
-        ibge_2010_population_csv: data/raw/ibge_2010_population.csv
-        ibge_2022_population_csv: data/raw/ibge_2022_population.csv
-        ibge_sector_history_csv: data/raw/ibge_sector_history.csv
-
-      processed: 
-        folder: data/processed/
-        ovitraps: data/processed/ovitraps_data.csv
-        dengue: data/processed/dengue_data.csv
-        health_centers: data/processed/health_centers.csv
-        daily_ovitraps: data/processed/daily_ovitraps_data.csv
-        census_equivalence:
-          population_2010_to_2022: data/processed/population_data.csv
-          sectors_geojson: data/processed/bh_sectors_2022_with_populations.geojson
-        population_interpolated: data/processed/interpolated_population_data.csv
-        dengue_per_capita: data/processed/dengue_per_capita.csv
-        centroids: data/processed/bh_sectors_2022_centroids.csv
-        centroids_idw: data/processed/sector_centroids_with_idw.csv
-        add_population_sectors:
-          ovitraps: data/processed/add_population_sectors/ovitraps_data.csv
-          dengue: data/processed/add_population_sectors/dengue_data.csv
-        slow:
-          folder: data/processed/slow/
-          ovitraps: data/processed/slow/ovitraps_data.csv
-          dengue: data/processed/slow/dengue_data.csv
-          health_centers: data/processed/slow/health_centers.csv
+      dvc:
+        convert_to_csv:
+          folder: data/dvc/convert_to_csv/
+          health_centers_csv: data/dvc/convert_to_csv/health_centers.csv
+          dengue_csv: data/dvc/convert_to_csv/dengue.csv
+          ovitraps_csv: data/dvc/convert_to_csv/ovitraps.csv
+          ibge_2010_population_csv: data/dvc/convert_to_csv/ibge_2010_population.csv
+          ibge_2022_population_csv: data/dvc/convert_to_csv/ibge_2022_population.csv
+          ibge_sector_history_csv: data/dvc/convert_to_csv/ibge_sector_history.csv
+        slow_processing:
+          folder: data/dvc/slow_processing/
+          health_centers: data/dvc/slow_processing/health_centers.csv
+          dengue: data/dvc/slow_processing/dengue_data.csv
+          ovitraps: data/dvc/slow_processing/ovitraps_data.csv
+        process_population_data:
+          folder: data/dvc/process_population_data/
+          population_2010_to_2022: data/dvc/process_population_data/population_data.csv
+          sectors_geojson: data/dvc/process_population_data/bh_sectors_2022_with_populations.geojson
+          population_interpolated: data/dvc/process_population_data/interpolated_population_data.csv
+        fast_processing:
+          folder: data/dvc/fast_processing/
+          health_centers: data/dvc/fast_processing/health_centers.csv
+          dengue: data/dvc/fast_processing/dengue_data.csv
+          ovitraps: data/dvc/fast_processing/ovitraps_data.csv
+          daily_ovitraps: data/dvc/fast_processing/daily_ovitraps_data.csv
+        add_population_info:
+          folder: data/dvc/add_population_info/
+          ovitraps: data/dvc/add_population_info/ovitraps_data.csv
+          dengue: data/dvc/add_population_info/dengue_data.csv
+          dengue_per_capita: data/dvc/add_population_info/dengue_per_capita.csv
+          centroids: data/dvc/add_population_info/bh_sectors_2022_centroids.csv
+          centroids_idw: data/dvc/add_population_info/sector_centroids_with_idw.csv
     test:
       data:
         raw:

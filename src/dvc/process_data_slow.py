@@ -30,18 +30,20 @@ sys.path.append("utils")
 import project_utils
 import yaml
 params = yaml.safe_load(open("params.yaml"))
+_in = params['all']['paths']['data']['dvc']['convert_to_csv']
+_out = params['all']['paths']['data']['dvc']['slow_processing']
 
 # %% Load all data.
 print("Loading data")
 print("Loading health centers from CSV")
-health_centers = pd.read_csv(params['all']['paths']['data']['raw']['health_centers_csv'])
+health_centers = pd.read_csv(_in['health_centers_csv'])
 print("Loading dengue data from CSV")
-dengue_data = pd.read_csv(params['all']['paths']['data']['raw']['dengue_csv'])
+dengue_data = pd.read_csv(_in['dengue_csv'])
 print("Loading ovitraps data from CSV")
-ovitraps_data = pd.read_csv(params['all']['paths']['data']['raw']['ovitraps_csv'])
+ovitraps_data = pd.read_csv(_in['ovitraps_csv'])
 
 # %% Prepare folders
-os.makedirs("data/processed/slow/", exist_ok=True)
+os.makedirs(_out['folder'], exist_ok=True)
 
 
 # %% Health Centers data
@@ -68,10 +70,7 @@ health_centers.rename(
     inplace=True,
 )
 
-health_centers.to_csv(
-    params['all']['paths']['data']['processed']['slow']['health_centers'],
-    index=False
-)
+health_centers.to_csv(_out['health_centers'], index=False)
 
 # %% Dengue data
 # Process
@@ -85,7 +84,7 @@ dengue_data["closest_health_center"] = project_utils.closest_health_center(
     dengue_data, health_centers
 )
 
-dengue_data.to_csv(params['all']['paths']['data']['processed']['slow']['dengue'], index=False)
+dengue_data.to_csv(_out['dengue'], index=False)
 
 
 # %% Ovitraps data
@@ -96,6 +95,4 @@ ovitraps_data["closest_health_center"] = (
     project_utils.closest_health_center(ovitraps_data, health_centers)
 )
 
-ovitraps_data.to_csv(
-    params['all']['paths']['data']['processed']['slow']['ovitraps'], index=False
-)
+ovitraps_data.to_csv(_out['ovitraps'], index=False)
