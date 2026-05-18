@@ -537,6 +537,19 @@ def generate_all_weeks(pivot_data: pd.DataFrame) -> list:
     return new_tuples
 
 
+def epidemic_date_to_biweek(dates: pd.Series) -> pd.Series:
+    """Convert epidemic_date labels (e.g. '2019_20W03') to biweek labels.
+
+    Project convention: biweek_num = ((week_num + 1) // 2) * 2
+    so weeks 1-2 → W02, weeks 3-4 → W04, etc.
+    """
+    dates = dates.astype(str)
+    epi_year = dates.str.split("W").str[0]
+    week_num = dates.str.split("W").str[1].astype(int)
+    biweek_num = ((week_num + 1) // 2) * 2
+    return epi_year + "W" + biweek_num.astype(str).str.zfill(2)
+
+
 def generate_all_biweeks(min_biweek: str, max_biweek: str) -> list:
     """Generate complete biweek index (even weeks) from min to max."""
     min_year = int(min_biweek.split("_")[0])

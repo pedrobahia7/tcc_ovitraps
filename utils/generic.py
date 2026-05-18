@@ -723,52 +723,63 @@ def smaller_distance_in_df(
     return df.loc[distances.idxmin()]
 
 
-def nearest_neighbors(points1: np.ndarray, points2: np.ndarray) -> np.ndarray:
+def nearest_neighbors(
+    points1: np.ndarray,
+    points2: np.ndarray,
+    k: int = 1,
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    For each point in points1, find the closest point in points2.
-    Returns indices of nearest points in points2. This function uses
-    KDTree for efficient nearest neighbor search and is suitable for
-    large datasets and latitude/longitude coordinates for small distances 
-    (within a city).
+    For each point in points1, find the k closest points in points2.
+    Uses cKDTree for O(n log m) queries. Suitable for lat/lon at city scale.
 
     Parameters
     ----------
-    - points1 (np.ndarray): Array of shape (n, d) with n points (latitude, longitude).
-    - points2 (np.ndarray): Array of shape (m, d) with m points (latitude, longitude).
+    - points1 (np.ndarray): Shape (n, d) — query points.
+    - points2 (np.ndarray): Shape (m, d) — candidate points.
+    - k (int): Number of nearest neighbors (default 1).
 
     Returns
     -------
-    - indices (np.ndarray): Array of shape (n,) with indices of nearest points in points2.
-    
+    - distances (np.ndarray): Shape (n, k) — Euclidean distances.
+    - indices (np.ndarray): Shape (n, k) — indices into points2.
     """
-    # Input validation
-    def check_array(arr,name):
-        
+    def check_array(arr, name):
         assert isinstance(arr, np.ndarray), f"{name} must be a numpy array"
-        assert not arr.size == 0, f"{name} must not be empty"
-        assert arr.ndim == 2, f"{name} must be 2D arrays"
-        assert np.issubdtype(arr.dtype, np.number), f"{name} must contain numeric values"
-        assert not np.issubdtype(arr.dtype, np.bool_), f"{name} must not be boolean"
+        assert arr.size != 0, f"{name} must not be empty"
+        assert arr.ndim == 2, f"{name} must be a 2D array"
+        assert np.issubdtype(arr.dtype, np.number), (
+            f"{name} must contain numeric values"
+        )
+        assert not np.issubdtype(arr.dtype, np.bool_), (
+            f"{name} must not be boolean"
+        )
         assert not np.isnan(arr).any(), f"{name} must not contain NaN values"
-        assert not np.isinf(arr).any(), f"{name} must not contain infinity values"
-        
-    check_array(points1,"points1")
-    check_array(points2,"points2")
-    assert points1.shape[1] == points2.shape[1], "points1 and points2 must have the same number of dimensions"
+        assert not np.isinf(arr).any(), (
+            f"{name} must not contain infinity values"
+        )
 
-    # Build KDTree for points2 and query for nearest neighbors
+    check_array(points1, "points1")
+    check_array(points2, "points2")
+    assert points1.shape[1] == points2.shape[1], (
+        "points1 and points2 must have the same number of dimensions"
+    )
+    assert isinstance(k, int) and k > 0, "k must be a positive integer"
+    assert k <= len(points2), (
+        f"k={k} exceeds number of candidates ({len(points2)})"
+    )
+
     tree = cKDTree(points2)
-    _, indices = tree.query(points1, k=1)
+    distances, indices = tree.query(points1, k=k)
 
-    # Ouptut validation
-    assert isinstance(indices, np.ndarray), "Output must be a numpy array"
-    assert indices.ndim == 1, "Output must be a 1D array"
-    assert indices.shape[0] == points1.shape[0], "Output length must match points1 length"
-    assert np.issubdtype(indices.dtype, np.integer), "Output must contain integer values"
-    assert not np.isnan(indices).any(), "Output must not contain NaN values"
-    assert not np.isinf(indices).any(), "Output must not contain infinity values"
+    # cKDTree returns 1D arrays for k=1; normalise to 2D for consistency
+    if k == 1:
+        distances = distances.reshape(-1, 1)
+        indices = indices.reshape(-1, 1)
 
-    return indices
+    assert distances.shape == (len(points1), k), "distances shape mismatch"
+    assert indices.shape == (len(points1), k), "indices shape mismatch"
+
+    return distances, indices
 
 
 def create_grid(lat_min: float, lat_max: float, lon_min: float, lon_max: float, spacing_m: float) -> pd.DataFrame:
