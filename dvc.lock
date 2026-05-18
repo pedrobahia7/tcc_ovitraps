@@ -476,3 +476,48 @@ stages:
       hash: md5
       md5: f62ab5065793f28300bf5943fdb5fe81
       size: 290531195
+  add_population_info:
+    cmd: python src/dvc/add_population_info.py
+    deps:
+    - path: data/dvc/process_data/dengue_data.csv
+      hash: md5
+      md5: 1cde0ab9b6f395253273ba6c165e5538
+      size: 177872069
+    - path: data/dvc/process_data/ovitraps_data.csv
+      hash: md5
+      md5: f62ab5065793f28300bf5943fdb5fe81
+      size: 290531195
+    - path: 
+        data/dvc/process_population_data/bh_sectors_2022_with_populations.geojson
+      hash: md5
+      md5: 479a5d3f31facc2e3a4127f11a270d08
+      size: 10763766
+    - path: data/dvc/process_population_data/interpolated_population_data.csv
+      hash: md5
+      md5: 53fbd528cc06aa90ff8cc867b8c030ed
+      size: 19662444
+    - path: src/dvc/add_population_info.py
+      hash: md5
+      md5: 89118e8d3a6da1aabe5cd6e44cb08c67
+      size: 14044
+    outs:
+    - path: data/dvc/add_population_info/bh_sectors_2022_centroids.csv
+      hash: md5
+      md5: 2eca4f577656496b3186b0bec9bfb4e2
+      size: 561709
+    - path: data/dvc/add_population_info/dengue_data.csv
+      hash: md5
+      md5: 601512e4175ba7a6aab49ffb5317b7e8
+      size: 185662807
+    - path: data/dvc/add_population_info/dengue_per_capita.csv
+      hash: md5
+      md5: b48c88d887bddc952b1f98fc0692838f
+      size: 145913819
+    - path: data/dvc/add_population_info/ovitraps_data.csv
+      hash: md5
+      md5: afa36c1803e437361159925f399a0ac5
+      size: 299094600
+    - path: data/dvc/add_population_info/sector_centroids_with_idw.csv
+      hash: md5
+      md5: 9b8d893cb840535c5f8aa1bd9872bc12
+      size: 261142185

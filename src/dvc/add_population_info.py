@@ -263,6 +263,46 @@ def _load_population_biweekly(population_path: Path) -> pd.DataFrame:
     return biweekly[["sector_id", "biweek", "population"]]
 
 
+def _compute_dengue_per_capita(
+    population: pd.DataFrame,
+    case_counts: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Join population with case counts and compute per-capita incidence rates.
+
+    Merges the biweekly population table with the aggregated case counts on
+    ``(sector_id, biweek)``. Sectors with no recorded cases receive
+    ``case_count = 0``. Two rate columns are produced: a crude rate and an
+    Empirical Bayes smoothed rate, both expressed per 1 000 inhabitants.
+
+    Parameters
+    ----------
+    - population (pd.DataFrame): Biweekly population table with columns
+      ``sector_id``, ``biweek``, and ``population``.
+    - case_counts (pd.DataFrame): Aggregated dengue case counts with columns
+      ``sector_id``, ``biweek``, and ``case_count``.
+
+    Returns
+    -------
+    - df (pd.DataFrame): Merged DataFrame sorted by ``(sector_id, biweek)``
+      with added columns ``case_count``, ``cases_per_1000``, and
+      ``eb_rate_per_1000``.
+    """
+    df = population.merge(case_counts, on=["sector_id", "biweek"], how="left")
+    df["case_count"] = df["case_count"].fillna(0).astype(int)
+    df["cases_per_1000"] = np.where(
+        df["population"] > 0,
+        df["case_count"] / df["population"] * PER_CAPITA_MULTIPLIER,
+        0,
+    )
+    df["eb_rate_per_1000"] = _empirical_bayes_rate(
+        df["case_count"].to_numpy(dtype=np.float64),
+        df["population"].to_numpy(dtype=np.float64),
+        PER_CAPITA_MULTIPLIER,
+    )
+    return df.sort_values(["sector_id", "biweek"]).reset_index(drop=True)
+
+
 def _empirical_bayes_rate(
     events: np.ndarray,
     population: np.ndarray,
@@ -338,7 +378,7 @@ def _calculate_centroids(sectors_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
     return df.sort_values("CD_SETOR").reset_index(drop=True)
 
 
-def _calculate_idw(
+def _calculate_eggs_per_centroid(
     centroids_df: pd.DataFrame,
     ovitraps_df: pd.DataFrame,
     n_neighbors: int = DEFAULT_N_NEIGHBORS,
@@ -467,31 +507,22 @@ def main() -> None:
     # Transform
     # ----------------------------------------------------------------
     logger.info("=== Step 1: Sector assignment ===")
+    import ipdb
     ovitraps = _assign_sector_ids(ovitraps, sectors_gdf, "ovitraps")
+    #TODO: why is some sector_ids with Nan? investigate 
     dengue = _assign_sector_ids(dengue, sectors_gdf, "dengue")
+    #TODO: why is some sector_ids with Nan? investigate 
+    ipdb.set_trace()
 
     logger.info("=== Step 2: Dengue per capita ===")
     case_counts = _aggregate_case_counts(dengue)
+    # TODO add processing for complete biweeks with zero cases
     logger.info("  %d sector-biweek combinations with cases", len(case_counts))
-    merged = population.merge(
-        case_counts, on=["sector_id", "biweek"], how="left"
-    )
-    merged["case_count"] = merged["case_count"].fillna(0).astype(int)
-    merged["cases_per_1000"] = np.where(
-        merged["population"] > 0,
-        merged["case_count"] / merged["population"] * PER_CAPITA_MULTIPLIER,
-        0,
-    )
-    merged["eb_rate_per_1000"] = _empirical_bayes_rate(
-        merged["case_count"].to_numpy(dtype=np.float64),
-        merged["population"].to_numpy(dtype=np.float64),
-        PER_CAPITA_MULTIPLIER,
-    )
-    merged = merged.sort_values(["sector_id", "biweek"]).reset_index(drop=True)
+    dengue_per_capita_df = _compute_dengue_per_capita(population, case_counts)
 
     logger.info("=== Step 3: Centroids + IDW ===")
-    centroids_df = _calculate_centroids(sectors_gdf)
-    idw_df = _calculate_idw(centroids_df, ovitraps)
+    sectors_gdf = _calculate_centroids(sectors_gdf)
+    biweek_ovitraps_centroids_df = _calculate_eggs_per_centroid(sectors_gdf, ovitraps)
 
     # ----------------------------------------------------------------
     # Save all
@@ -500,14 +531,14 @@ def main() -> None:
     _out["dengue_per_capita"].parent.mkdir(parents=True, exist_ok=True)
     ovitraps.to_csv(_out["ovitraps"], index=False)
     dengue.to_csv(_out["dengue"], index=False)
-    merged.to_csv(_out["dengue_per_capita"], index=False)
-    centroids_df.to_csv(_out["centroids"], index=False)
-    idw_df.to_csv(_out["centroids_idw"], index=False)
+    dengue_per_capita_df.to_csv(_out["dengue_per_capita"], index=False)
+    sectors_gdf.to_csv(_out["centroids"], index=False)
+    biweek_ovitraps_centroids_df.to_csv(_out["centroids_idw"], index=False)
     logger.info("Saved ovitraps        → %s", _out["ovitraps"])
     logger.info("Saved dengue          → %s", _out["dengue"])
-    logger.info("Saved dengue_per_capita → %s (%d rows)", _out["dengue_per_capita"], len(merged))
-    logger.info("Saved centroids       → %s (%d sectors)", _out["centroids"], len(centroids_df))
-    logger.info("Saved centroids_idw   → %s (%d rows)", _out["centroids_idw"], len(idw_df))
+    logger.info("Saved dengue_per_capita → %s (%d rows)", _out["dengue_per_capita"], len(dengue_per_capita_df))
+    logger.info("Saved centroids       → %s (%d sectors)", _out["centroids"], len(sectors_gdf))
+    logger.info("Saved centroids_idw   → %s (%d rows)", _out["centroids_idw"], len(biweek_ovitraps_centroids_df))
 
     logger.info("add_population_info completed successfully.")
 
