@@ -22,21 +22,6 @@ stages:
           persist: true
       - ${all.paths.data.raw.ibge_sector_history_csv}:
           persist: true
-  raw_data_test:
-    cmd: 
-      - pytest test/data/raw/test_raw_data.py
-      - pytest test/data/raw/test_raw_data_comparison.py
-    deps:
-      - test/data/raw/test_raw_data.py
-      - test/data/raw/test_raw_data_comparison.py
-      - ${all.paths.data.raw.ovitraps_csv}
-      - ${all.paths.data.raw.dengue_csv}
-      - ${all.paths.data.raw.health_centers_csv}
-    outs:
-      - ${all.paths.test.data.raw.diagnosis_raw_comparison}:
-          persist: true
-      - ${all.paths.test.data.raw.diagnosis_raw_data}:
-          persist: true
 
   slow_processing:
     cmd: python src/process_data_slow.py
@@ -115,15 +100,6 @@ stages:
       - ${all.paths.data.processed.centroids_idw}:
           persist: true
 
-  centroids_test:
-    cmd: pytest test/data/processed/test_centroids.py
-    deps:
-      - test/data/processed/test_centroids.py
-      - ${all.paths.data.processed.centroids}
-      - ${all.paths.data.processed.centroids_idw}
-      - ${all.paths.data.processed.census_equivalence.sectors_geojson}
-      - ${all.paths.data.processed.ovitraps}
-
   calculate_dengue_per_capita:
     cmd: python src/calculate_dengue_per_capita.py
     deps:
@@ -134,26 +110,37 @@ stages:
       - ${all.paths.data.processed.dengue_per_capita}:
           persist: true
 
-  dengue_per_capita_test:
-    cmd: pytest test/data/processed/test_dengue_per_capita.py
+  run_tests:
+    cmd:
+      - pytest test/data/raw/test_raw_data.py
+      - pytest test/data/raw/test_raw_data_comparison.py
+      - pytest test/data/processed/test_centroids.py
+      - pytest test/data/processed/test_dengue_per_capita.py
+      - pytest test/data/processed/test_processed_data.py
+      - pytest test/utils/test_project_utils.py
     deps:
+      - test/data/raw/test_raw_data.py
+      - test/data/raw/test_raw_data_comparison.py
+      - test/data/processed/test_centroids.py
       - test/data/processed/test_dengue_per_capita.py
-      - ${all.paths.data.processed.dengue_per_capita}
-      - ${all.paths.data.processed.dengue}
-      - ${all.paths.data.processed.population_interpolated}
-
-  process_data_test:
-    cmd: pytest test/data/processed/test_processed_data.py
-    deps:
       - test/data/processed/test_processed_data.py
+      - test/utils/test_project_utils.py
+      - utils/project_utils.py
+      - utils/generic.py
+      - ${all.paths.data.raw.ovitraps_csv}
+      - ${all.paths.data.raw.dengue_csv}
+      - ${all.paths.data.raw.health_centers_csv}
       - ${all.paths.data.processed.health_centers}
       - ${all.paths.data.processed.dengue}
       - ${all.paths.data.processed.ovitraps}
       - ${all.paths.data.processed.daily_ovitraps}
-
-  libraries_tests:
-    cmd: pytest test/utils/test_project_utils.py
-    deps:
-      - test/utils/test_project_utils.py
-      - utils/project_utils.py
-      - utils/generic.py
+      - ${all.paths.data.processed.centroids}
+      - ${all.paths.data.processed.centroids_idw}
+      - ${all.paths.data.processed.census_equivalence.sectors_geojson}
+      - ${all.paths.data.processed.dengue_per_capita}
+      - ${all.paths.data.processed.population_interpolated}
+    outs:
+      - ${all.paths.test.data.raw.diagnosis_raw_comparison}:
+          persist: true
+      - ${all.paths.test.data.raw.diagnosis_raw_data}:
+          persist: true
