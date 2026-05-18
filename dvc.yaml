@@ -69,16 +69,23 @@ stages:
       - ${all.paths.data.processed.add_population_sectors.dengue}
       - ${all.paths.data.processed.add_population_sectors.ovitraps}
 
-  add_population_sectors:
-    cmd: python src/add_population_sectors.py
+  add_population_info:
+    cmd: python src/add_population_info.py
     deps:
-      - src/add_population_sectors.py
+      - src/add_population_info.py
       - ${all.paths.data.processed.add_population_sectors.ovitraps}
       - ${all.paths.data.processed.add_population_sectors.dengue}
       - ${all.paths.data.processed.census_equivalence.sectors_geojson}
+      - ${all.paths.data.processed.population_interpolated}
     outs:
       - ${all.paths.data.processed.ovitraps}
       - ${all.paths.data.processed.dengue}
+      - ${all.paths.data.processed.dengue_per_capita}:
+          persist: true
+      - ${all.paths.data.processed.centroids}:
+          persist: true
+      - ${all.paths.data.processed.centroids_idw}:
+          persist: true
 
   daily_ovitraps:
     cmd: python src/daily_ovitraps.py
@@ -87,28 +94,6 @@ stages:
       - ${all.paths.data.processed.ovitraps}
     outs:
       - ${all.paths.data.processed.daily_ovitraps}
-
-  associate_ovitraps_and_population:
-    cmd: python src/associate_ovitraps_and_population.py
-    deps:
-      - src/associate_ovitraps_and_population.py
-      - ${all.paths.data.processed.census_equivalence.sectors_geojson}
-      - ${all.paths.data.processed.ovitraps}
-    outs:
-      - ${all.paths.data.processed.centroids}:
-          persist: true
-      - ${all.paths.data.processed.centroids_idw}:
-          persist: true
-
-  calculate_dengue_per_capita:
-    cmd: python src/calculate_dengue_per_capita.py
-    deps:
-      - src/calculate_dengue_per_capita.py
-      - ${all.paths.data.processed.dengue}
-      - ${all.paths.data.processed.population_interpolated}
-    outs:
-      - ${all.paths.data.processed.dengue_per_capita}:
-          persist: true
 
   run_tests:
     cmd:
