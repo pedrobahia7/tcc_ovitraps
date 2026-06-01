@@ -217,17 +217,17 @@ _INPUT_COLS = [
     "cases_per_1000_lag1",
     "cases_per_1000_lag2",
     "cases_per_1000_lag3",
-    "mean_eggs_lag1",
-    "mean_eggs_lag2",
     "mean_eggs_lag3",
     "mean_eggs_lag4",
-    "mean_eggs_lag5",
+    "week_sin",
+    "week_cos",
 ]
 
 _TABLE_HEADERS = [
     "Biweek", "Split",
     "Cases Lag1", "Cases Lag2", "Cases Lag3",
-    "Eggs Lag1", "Eggs Lag2", "Eggs Lag3", "Eggs Lag4", "Eggs Lag5",
+    "Eggs Lag3", "Eggs Lag4",
+    "Week Sin", "Week Cos",
     "Actual Rate", "MLP Pred", "Naive Pred",
 ]
 

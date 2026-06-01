@@ -108,8 +108,10 @@ def prepare_features(
     # Create lag features for dengue rate (3 lags)
     df = create_lag_features(df, "cases_per_1000", lags=3)
 
-    # Create lag features for ovitraps eggs (5 lags)
-    df = create_lag_features(df, "mean_eggs", lags=5)
+    # Create lags 1-4 for eggs then keep only 3+4 (biologically relevant
+    # incubation window); drops fewer rows than keeping all 5 lags.
+    df = create_lag_features(df, "mean_eggs", lags=4)
+    df = df.drop(columns=["mean_eggs_lag1", "mean_eggs_lag2"])
 
     # Verify biweek sequence is complete after reset_index
     assert df["biweek"].tolist() == all_biweeks, (
@@ -124,11 +126,8 @@ def prepare_features(
         & df["cases_per_1000_lag1"].notna()
         & df["cases_per_1000_lag2"].notna()
         & df["cases_per_1000_lag3"].notna()
-        & df["mean_eggs_lag1"].notna()
-        & df["mean_eggs_lag2"].notna()
         & df["mean_eggs_lag3"].notna()
         & df["mean_eggs_lag4"].notna()
-        & df["mean_eggs_lag5"].notna()
     )
     valid_idx = df[valid_mask].index
 
@@ -142,7 +141,7 @@ def prepare_features(
             df.loc[check_idx - lag, "cases_per_1000"],
         ), f"Dengue lag{lag} mismatch at index {check_idx}"
 
-    for lag in range(1, 6):
+    for lag in (3, 4):
         assert np.isclose(
             row[f"mean_eggs_lag{lag}"],
             df.loc[check_idx - lag, "mean_eggs"],
@@ -218,11 +217,8 @@ def train_mlp(
         "cases_per_1000_lag1",
         "cases_per_1000_lag2",
         "cases_per_1000_lag3",
-        "mean_eggs_lag1",
-        "mean_eggs_lag2",
         "mean_eggs_lag3",
         "mean_eggs_lag4",
-        "mean_eggs_lag5",
         "week_sin",
         "week_cos",
     ]
@@ -430,11 +426,8 @@ def main() -> None:
         "cases_per_1000_lag1",
         "cases_per_1000_lag2",
         "cases_per_1000_lag3",
-        "mean_eggs_lag1",
-        "mean_eggs_lag2",
         "mean_eggs_lag3",
         "mean_eggs_lag4",
-        "mean_eggs_lag5",
         "week_sin",
         "week_cos",
     ]
