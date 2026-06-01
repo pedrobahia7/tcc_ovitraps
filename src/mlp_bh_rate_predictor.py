@@ -9,6 +9,7 @@ Trained exclusively on epidemic years with naive baseline comparison.
 
 import json
 from pathlib import Path
+import time
 
 import joblib
 import numpy as np
@@ -251,9 +252,12 @@ def train_mlp(
         n_jobs=-1,
         refit=True,
     )
+    t0 = time.perf_counter()
     grid.fit(X_train_scaled, y_train)
+    train_time_s = time.perf_counter() - t0
     mlp = grid.best_estimator_
     print(f"  Best params: {grid.best_params_}")
+    print(f"  Train time: {train_time_s:.1f}s")
 
     y_train_pred = np.maximum(mlp.predict(X_train_scaled), 0)
     y_test_pred = np.maximum(mlp.predict(X_test_scaled), 0)
@@ -267,7 +271,7 @@ def train_mlp(
     assert np.var(y_train_pred) > 0
     assert np.var(y_test_pred) > 0
 
-    return mlp, scaler, y_train_pred, y_test_pred, y_train, y_test
+    return mlp, scaler, y_train_pred, y_test_pred, y_train, y_test, train_time_s
 
 
 def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
@@ -362,7 +366,7 @@ def run_fold(
     )
 
     print("Training MLP model...")
-    mlp, scaler, mlp_train_pred, mlp_test_pred, y_train, y_test = (
+    mlp, scaler, mlp_train_pred, mlp_test_pred, y_train, y_test, train_time_s = (
         train_mlp(train_df, test_df)
     )
 
@@ -374,6 +378,7 @@ def run_fold(
         "mlp": {
             "train": compute_metrics(y_train, mlp_train_pred),
             "test": compute_metrics(y_test, mlp_test_pred),
+            "train_time_s": round(train_time_s, 2),
         },
         "naive": {
             "train": compute_metrics(y_train, naive_train_pred),

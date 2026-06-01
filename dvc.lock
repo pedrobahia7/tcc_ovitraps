@@ -601,3 +601,57 @@ stages:
       hash: md5
       md5: 3212a314b837f1955d39daf70fe58ef0
       size: 277857
+  mlp_bh_rate_predictor:
+    cmd:
+    - python src/mlp_bh_rate_predictor.py
+    - python scripts/mlp_bh_dashboard.py
+    - python scripts/sector_mlp_dashboard.py
+    deps:
+    - path: data/dvc/add_population_info/dengue_citywide_per_capita.csv
+      hash: md5
+      md5: 282cd5bd45d8e645e6948490fb09a59d
+      size: 20514
+    - path: data/dvc/add_population_info/dengue_per_capita.csv
+      hash: md5
+      md5: b48c88d887bddc952b1f98fc0692838f
+      size: 145913819
+    - path: data/dvc/add_population_info/ovitraps_data.csv
+      hash: md5
+      md5: afa36c1803e437361159925f399a0ac5
+      size: 299094600
+    - path: data/dvc/add_population_info/sector_centroids_with_idw.csv
+      hash: md5
+      md5: 9b8d893cb840535c5f8aa1bd9872bc12
+      size: 261142185
+    - path: 
+        data/dvc/process_population_data/bh_sectors_2022_with_populations.geojson
+      hash: md5
+      md5: 479a5d3f31facc2e3a4127f11a270d08
+      size: 10763766
+    - path: scripts/mlp_bh_dashboard.py
+      hash: md5
+      md5: d88a9bffed2f5179042203595dc89e61
+      size: 16694
+    - path: scripts/sector_mlp_dashboard.py
+      hash: md5
+      md5: e20a76aa8a790314dc24600623a0881c
+      size: 10821
+    - path: src/mlp_bh_rate_predictor.py
+      hash: md5
+      md5: 456c4819c136be04fa6f51d3d05aa59c
+      size: 15816
+    - path: utils/project_utils.py
+      hash: md5
+      md5: 01afb369e9dc4be1635fedaac1e4e845
+      size: 33972
+      isexec: true
+    outs:
+    - path: results/mlp_bh_rate_predictor/
+      hash: md5
+      md5: 95be2519353eb9fed28947464d59da43.dir
+      size: 465803
+      nfiles: 22
+    - path: results/sector_mlp_dashboard.html
+      hash: md5
+      md5: 29fe27c5e03ae02ca5e3bc8831ef32a3
+      size: 44377758

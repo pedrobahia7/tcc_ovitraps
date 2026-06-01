@@ -106,3 +106,24 @@ stages:
           persist: true
       - ${all.paths.test.data.raw.diagnosis_raw_data}:
           persist: true
+
+  mlp_bh_rate_predictor:
+    cmd:
+      - python src/mlp_bh_rate_predictor.py
+      - python scripts/mlp_bh_dashboard.py
+      - python scripts/sector_mlp_dashboard.py
+    deps:
+      - src/mlp_bh_rate_predictor.py
+      - scripts/mlp_bh_dashboard.py
+      - scripts/sector_mlp_dashboard.py
+      - utils/project_utils.py
+      - ${all.paths.data.dvc.add_population_info.dengue_citywide_per_capita}
+      - ${all.paths.data.dvc.add_population_info.ovitraps}
+      - ${all.paths.data.dvc.add_population_info.dengue_per_capita}
+      - ${all.paths.data.dvc.add_population_info.centroids_idw}
+      - ${all.paths.data.dvc.process_population_data.sectors_geojson}
+    outs:
+      - results/mlp_bh_rate_predictor/:
+          persist: true
+      - results/sector_mlp_dashboard.html:
+          persist: true

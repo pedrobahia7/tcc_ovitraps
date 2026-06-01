@@ -138,6 +138,23 @@ def _add_metrics_traces(
         col=2,
     )
 
+    train_time_s = metrics["mlp"].get("train_time_s")
+    if train_time_s is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=["Test RMSE"],
+                y=[max(mlp_vals) * 1.18],
+                mode="text",
+                text=[f"Grid search: {train_time_s:.1f}s"],
+                textfont={"size": 12, "color": "steelblue"},
+                showlegend=False,
+                visible=visible,
+                meta={"year": year},
+            ),
+            row=1,
+            col=2,
+        )
+
 
 def _add_residual_traces(
     fig: go.Figure,
