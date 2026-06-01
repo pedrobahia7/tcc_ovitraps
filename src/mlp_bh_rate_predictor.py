@@ -25,28 +25,17 @@ import sys
 
 sys.path.append("utils")
 import project_utils
-import ipdb 
 # Epidemic years defined in project_utils.EPIDEMY_YEARS
 EPIDEMY_YEARS = ["2012_13", "2015_16", "2018_19", "2023_24"]
 
 
 def load_dengue_citywide() -> pd.DataFrame:
-    """Load and aggregate dengue data to city-wide biweekly rates."""
-    dengue_path = Path("data/processed/dengue_per_capita.csv")
-    df = pd.read_csv(dengue_path)
-
-    # Aggregate to city-wide: sum cases and population, compute rate
-    citywide = (
-        df.groupby("biweek")
-        .agg({"case_count": "sum", "population": "sum"})
-        .reset_index()
+    """Load city-wide dengue biweekly rate (all years, no sector filter)."""
+    path = Path(
+        "data/dvc/add_population_info/dengue_citywide_per_capita.csv"
     )
-
-    citywide["cases_per_1000"] = (
-        citywide["case_count"] / citywide["population"] * 1000
-    ).fillna(0)
-
-    return citywide[["biweek", "cases_per_1000"]]
+    df = pd.read_csv(path)
+    return df[["biweek", "cases_per_1000"]]
 
 
 def load_ovitraps_citywide() -> pd.DataFrame:

@@ -498,9 +498,42 @@ stages:
       size: 19662444
     - path: src/dvc/add_population_info.py
       hash: md5
-      md5: 89118e8d3a6da1aabe5cd6e44cb08c67
-      size: 14044
+      md5: 3469620882d47c311ab9720945b872fc
+      size: 22523
     outs:
+    - path: data/dvc/add_population_info/bh_sectors_2022_centroids.csv
+      hash: md5
+      md5: 2eca4f577656496b3186b0bec9bfb4e2
+      size: 561709
+    - path: data/dvc/add_population_info/dengue_citywide_per_capita.csv
+      hash: md5
+      md5: 282cd5bd45d8e645e6948490fb09a59d
+      size: 20514
+    - path: data/dvc/add_population_info/dengue_data.csv
+      hash: md5
+      md5: 601512e4175ba7a6aab49ffb5317b7e8
+      size: 185662807
+    - path: data/dvc/add_population_info/dengue_per_capita.csv
+      hash: md5
+      md5: b48c88d887bddc952b1f98fc0692838f
+      size: 145913819
+    - path: data/dvc/add_population_info/ovitraps_data.csv
+      hash: md5
+      md5: afa36c1803e437361159925f399a0ac5
+      size: 299094600
+    - path: data/dvc/add_population_info/sector_centroids_with_idw.csv
+      hash: md5
+      md5: 9b8d893cb840535c5f8aa1bd9872bc12
+      size: 261142185
+  run_tests:
+    cmd:
+    - pytest test/data/raw/test_raw_data.py
+    - pytest test/data/raw/test_raw_data_comparison.py
+    - pytest test/data/processed/test_centroids.py
+    - pytest test/data/processed/test_dengue_per_capita.py
+    - pytest test/data/processed/test_processed_data.py
+    - pytest test/utils/test_project_utils.py
+    deps:
     - path: data/dvc/add_population_info/bh_sectors_2022_centroids.csv
       hash: md5
       md5: 2eca4f577656496b3186b0bec9bfb4e2
@@ -521,3 +554,50 @@ stages:
       hash: md5
       md5: 9b8d893cb840535c5f8aa1bd9872bc12
       size: 261142185
+    - path: test/data/processed/test_centroids.py
+      hash: md5
+      md5: 2baab6345838a6deba27e75ff6d17af6
+      size: 11884
+    - path: test/data/processed/test_dengue_per_capita.py
+      hash: md5
+      md5: 0f0c5db46ce4ff09fbeb6d59db0b28ef
+      size: 11295
+    - path: test/data/processed/test_processed_data.py
+      hash: md5
+      md5: 83de1493a3664bf9cb4976eea2f90592
+      size: 19916
+      isexec: true
+    - path: test/data/raw/test_raw_data.py
+      hash: md5
+      md5: 7fb218f26da75726c675df0f5c0b640a
+      size: 12019
+      isexec: true
+    - path: test/data/raw/test_raw_data_comparison.py
+      hash: md5
+      md5: 8d5f5de5afa85d85331666c7d0e1535a
+      size: 9433
+      isexec: true
+    - path: test/utils/test_project_utils.py
+      hash: md5
+      md5: ba6b6b919133a2e47502857c6f6fcd77
+      size: 36731
+      isexec: true
+    - path: utils/generic.py
+      hash: md5
+      md5: 412b0554423208a2be9046440e1a3cfd
+      size: 33455
+      isexec: true
+    - path: utils/project_utils.py
+      hash: md5
+      md5: 01afb369e9dc4be1635fedaac1e4e845
+      size: 33972
+      isexec: true
+    outs:
+    - path: test/data/raw/diagnosis_raw_comparison.txt
+      hash: md5
+      md5: 5f7396f61b3524f87ea7924413b22f29
+      size: 2285768
+    - path: test/data/raw/diagnosis_raw_data.txt
+      hash: md5
+      md5: 3212a314b837f1955d39daf70fe58ef0
+      size: 277857

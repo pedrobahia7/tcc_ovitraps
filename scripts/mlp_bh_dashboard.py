@@ -53,6 +53,7 @@ def _add_time_series_traces(
     first_year: str,
 ) -> None:
     visible = year == first_year
+    p = p[p["split"] == "test"]
     for name, ycol, color, dash in [
         ("Actual", "target_rate", "black", None),
         ("MLP", "mlp_predicted", "blue", "dash"),
@@ -212,6 +213,67 @@ def _add_scatter_traces(
     )
 
 
+_INPUT_COLS = [
+    "cases_per_1000_lag1",
+    "cases_per_1000_lag2",
+    "cases_per_1000_lag3",
+    "mean_eggs_lag1",
+    "mean_eggs_lag2",
+    "mean_eggs_lag3",
+    "mean_eggs_lag4",
+    "mean_eggs_lag5",
+]
+
+_TABLE_HEADERS = [
+    "Biweek", "Split",
+    "Cases Lag1", "Cases Lag2", "Cases Lag3",
+    "Eggs Lag1", "Eggs Lag2", "Eggs Lag3", "Eggs Lag4", "Eggs Lag5",
+    "Actual Rate", "MLP Pred", "Naive Pred",
+]
+
+_DISPLAY_COLS = (
+    ["biweek", "split"]
+    + _INPUT_COLS
+    + ["target_rate", "mlp_predicted", "naive_predicted"]
+)
+
+
+def _add_feature_table(
+    fig: go.Figure,
+    p: pd.DataFrame,
+    year: str,
+    first_year: str,
+) -> None:
+    row_colors = [
+        "lightblue" if s == "train" else "lightyellow"
+        for s in p["split"]
+    ]
+    cell_values = [
+        p[col].round(4) if col not in {"biweek", "split"} else p[col]
+        for col in _DISPLAY_COLS
+    ]
+    fig.add_trace(
+        go.Table(
+            header={
+                "values": _TABLE_HEADERS,
+                "fill_color": "steelblue",
+                "font": {"color": "white", "size": 11},
+                "align": "center",
+            },
+            cells={
+                "values": cell_values,
+                "fill_color": [row_colors] * len(_DISPLAY_COLS),
+                "align": "center",
+                "font": {"size": 10},
+            },
+            visible=(year == first_year),
+            meta={"year": year},
+        ),
+        row=3,
+        col=1,
+    )
+
+
 def _build_dropdown_buttons(
     year_indices: dict[str, list[int]], total_traces: int
 ) -> list[dict]:
@@ -238,19 +300,22 @@ def _build_dropdown_buttons(
 def create_interactive_dashboard(all_results: dict) -> go.Figure:
     """Create interactive dashboard with year selector using visibility toggling."""
     fig = make_subplots(
-        rows=2,
+        rows=3,
         cols=2,
         subplot_titles=(
             "Time Series",
             "Error Metrics",
             "Residuals",
             "Scatter Plot",
+            "Model Inputs",
         ),
         specs=[
             [{"type": "scatter"}, {"type": "bar"}],
             [{"type": "scatter"}, {"type": "scatter"}],
+            [{"type": "table", "colspan": 2}, None],
         ],
-        vertical_spacing=0.15,
+        row_heights=[0.35, 0.35, 0.30],
+        vertical_spacing=0.12,
         horizontal_spacing=0.1,
     )
 
@@ -269,6 +334,7 @@ def create_interactive_dashboard(all_results: dict) -> go.Figure:
         _add_metrics_traces(fig, metrics, year, first_year)
         _add_residual_traces(fig, p, year, first_year)
         _add_scatter_traces(fig, p, year, first_year)
+        _add_feature_table(fig, p, year, first_year)
 
         year_indices[year] = list(range(start, len(fig.data)))
 
@@ -312,7 +378,7 @@ def create_interactive_dashboard(all_results: dict) -> go.Figure:
             }
         ],
         template="plotly_white",
-        height=950,
+        height=1350,
         margin={"t": 150, "r": 250},
         showlegend=True,
         legend={
@@ -338,6 +404,81 @@ def create_interactive_dashboard(all_results: dict) -> go.Figure:
     fig.update_yaxes(title_text="Residual", row=2, col=1)
     fig.update_yaxes(title_text="Predicted Rate", row=2, col=2)
 
+    return fig
+
+
+def load_full_historical_data() -> pd.DataFrame:
+    """Load city-wide dengue rate and mean egg count for all biweeks."""
+    dengue = pd.read_csv(
+        Path("data/dvc/add_population_info/dengue_citywide_per_capita.csv")
+    )
+    ovi = pd.read_csv(
+        Path("data/processed/ovitraps_data.csv"), low_memory=False
+    )
+    ovi_agg = (
+        ovi.groupby("biweek")["novos"].mean().reset_index()
+        .rename(columns={"novos": "mean_eggs"})
+    )
+    df = dengue[["biweek", "cases_per_1000"]].merge(
+        ovi_agg, on="biweek", how="outer"
+    )
+    return df.sort_values("biweek").reset_index(drop=True)
+
+
+def create_full_history_figure(df: pd.DataFrame) -> go.Figure:
+    """Dual-axis time series of dengue rate and egg count across all years."""
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig.add_trace(
+        go.Scatter(
+            x=df["biweek"],
+            y=df["cases_per_1000"],
+            mode="lines",
+            name="Dengue (per 1000)",
+            line={"color": "red", "width": 1.5},
+        ),
+        secondary_y=False,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df["biweek"],
+            y=df["mean_eggs"],
+            mode="lines",
+            name="Mean egg count",
+            line={"color": "green", "width": 1.5},
+        ),
+        secondary_y=True,
+    )
+
+    for yr in EPIDEMY_YEARS:
+        yr_data = df[df["biweek"].str.startswith(yr)]
+        if yr_data.empty:
+            continue
+        fig.add_vrect(
+            x0=yr_data["biweek"].iloc[0],
+            x1=yr_data["biweek"].iloc[-1],
+            fillcolor="blue",
+            opacity=0.10,
+            line_width=0,
+            annotation_text=yr,
+            annotation_position="top left",
+            annotation_font_size=10,
+        )
+
+    fig.update_layout(
+        title="Full Historical Overview — Dengue Rate vs Egg Count "
+              "(epidemic years shaded)",
+        template="plotly_white",
+        height=400,
+        xaxis_title="Biweek",
+        margin={"t": 60, "b": 80},
+    )
+    fig.update_yaxes(
+        title_text="Cases per 1000", secondary_y=False, color="red"
+    )
+    fig.update_yaxes(
+        title_text="Mean Egg Count", secondary_y=True, color="green"
+    )
     return fig
 
 
@@ -372,11 +513,31 @@ def main() -> None:
         "Loaded %d folds: %s", len(all_results), list(all_results.keys())
     )
 
+    logger.info("Loading full historical data...")
+    hist_df = load_full_historical_data()
+    history_fig = create_full_history_figure(hist_df)
+
     logger.info("Creating interactive dashboard with year selector...")
     dashboard = create_interactive_dashboard(all_results)
 
     output_path = results_dir / "dashboard.html"
-    dashboard.write_html(str(output_path))
+    history_html = history_fig.to_html(
+        full_html=False, include_plotlyjs="cdn"
+    )
+    dashboard_html = dashboard.to_html(
+        full_html=False, include_plotlyjs=False
+    )
+    with open(output_path, "w") as f:
+        f.write(
+            "<html><head><meta charset='utf-8'></head><body>"
+            + "<h2 style='font-family:sans-serif;margin:20px'>"
+            "Full Historical Data</h2>"
+            + history_html
+            + "<h2 style='font-family:sans-serif;margin:20px'>"
+            "CV Fold Results</h2>"
+            + dashboard_html
+            + "</body></html>"
+        )
     logger.info("Dashboard saved to: %s", output_path)
 
     logger.info("=" * 60)

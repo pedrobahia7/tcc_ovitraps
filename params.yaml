@@ -36,6 +36,7 @@ all:
           dengue_per_capita: data/dvc/add_population_info/dengue_per_capita.csv
           centroids: data/dvc/add_population_info/bh_sectors_2022_centroids.csv
           centroids_idw: data/dvc/add_population_info/sector_centroids_with_idw.csv
+          dengue_citywide_per_capita: data/dvc/add_population_info/dengue_citywide_per_capita.csv
     test:
       data:
         raw:

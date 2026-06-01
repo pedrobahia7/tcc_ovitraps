@@ -76,6 +76,8 @@ stages:
           persist: true
       - ${all.paths.data.dvc.add_population_info.centroids_idw}:
           persist: true
+      - ${all.paths.data.dvc.add_population_info.dengue_citywide_per_capita}:
+          persist: true
 
   run_tests:
     cmd:
