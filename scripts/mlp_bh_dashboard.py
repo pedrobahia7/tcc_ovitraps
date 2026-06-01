@@ -413,7 +413,8 @@ def load_full_historical_data() -> pd.DataFrame:
         Path("data/dvc/add_population_info/dengue_citywide_per_capita.csv")
     )
     ovi = pd.read_csv(
-        Path("data/processed/ovitraps_data.csv"), low_memory=False
+        Path("data/dvc/add_population_info/ovitraps_data.csv"),
+        low_memory=False,
     )
     ovi_agg = (
         ovi.groupby("biweek")["novos"].mean().reset_index()

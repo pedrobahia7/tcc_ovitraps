@@ -41,7 +41,7 @@ def load_dengue_citywide() -> pd.DataFrame:
 
 def load_ovitraps_citywide() -> pd.DataFrame:
     """Load and aggregate ovitraps data to city-wide mean egg counts by biweek."""
-    ovitraps_path = Path("data/processed/ovitraps_data.csv")
+    ovitraps_path = Path("data/dvc/add_population_info/ovitraps_data.csv")
     df = pd.read_csv(ovitraps_path, low_memory=False)
 
     # Group by biweek and compute city-wide mean egg count
