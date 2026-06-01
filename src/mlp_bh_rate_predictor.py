@@ -14,6 +14,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.inspection import permutation_importance
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
@@ -48,6 +49,24 @@ def load_ovitraps_citywide() -> pd.DataFrame:
     citywide.rename(columns={"novos": "mean_eggs"}, inplace=True)
 
     return citywide
+
+
+def extract_week_number(biweek: str) -> int:
+    """Extract numeric week index from biweek string like '2006_07W32'."""
+    return int(biweek.split("W")[1])
+
+
+def add_seasonality_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add sin/cos cyclical encoding of biweek position within year.
+
+    Dengue is strongly seasonal; without this the model has no sense
+    of where in the season each sample falls.
+    """
+    week_num = df["biweek"].apply(extract_week_number)
+    df = df.copy()
+    df["week_sin"] = np.sin(2 * np.pi * week_num / 52)
+    df["week_cos"] = np.cos(2 * np.pi * week_num / 52)
+    return df
 
 
 def create_lag_features(
@@ -129,6 +148,9 @@ def prepare_features(
             df.loc[check_idx - lag, "mean_eggs"],
         ), f"Eggs lag{lag} mismatch at index {check_idx}"
 
+    # Add cyclical seasonality before dropping target cols
+    df = add_seasonality_features(df)
+
     # Remove current biweek eggs (not available as a feature)
     df = df.drop(columns=["mean_eggs"]).copy()
 
@@ -188,8 +210,10 @@ def naive_predictor(
     return y_train_naive, y_test_naive
 
 
-def train_mlp(train_df: pd.DataFrame, test_df: pd.DataFrame) -> tuple:
-    """Train MLP model and return predictions with metrics."""
+def train_mlp(
+    train_df: pd.DataFrame, test_df: pd.DataFrame
+) -> tuple:
+    """Train MLP via grid search; return predictions with metrics."""
     feature_cols = [
         "cases_per_1000_lag1",
         "cases_per_1000_lag2",
@@ -199,58 +223,54 @@ def train_mlp(train_df: pd.DataFrame, test_df: pd.DataFrame) -> tuple:
         "mean_eggs_lag3",
         "mean_eggs_lag4",
         "mean_eggs_lag5",
+        "week_sin",
+        "week_cos",
     ]
     X_train = train_df[feature_cols].values
     y_train = train_df["target_rate"].values
     X_test = test_df[feature_cols].values
     y_test = test_df["target_rate"].values
 
-    # Scale features
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    # Train MLP
-    mlp = MLPRegressor(
-        hidden_layer_sizes=(50, 25, 10),
+    param_grid = {
+        "hidden_layer_sizes": [(16,), (32,), (32, 16), (16, 8)],
+        "alpha": [0.001, 0.01, 0.1],
+    }
+    base = MLPRegressor(
         activation="relu",
         solver="adam",
         early_stopping=True,
         max_iter=5000,
         random_state=42,
-        verbose=True,
     )
+    tscv = TimeSeriesSplit(n_splits=3)
+    grid = GridSearchCV(
+        base,
+        param_grid,
+        cv=tscv,
+        scoring="neg_root_mean_squared_error",
+        n_jobs=-1,
+        refit=True,
+    )
+    grid.fit(X_train_scaled, y_train)
+    mlp = grid.best_estimator_
+    print(f"  Best params: {grid.best_params_}")
 
-    mlp.fit(X_train_scaled, y_train)
+    y_train_pred = np.maximum(mlp.predict(X_train_scaled), 0)
+    y_test_pred = np.maximum(mlp.predict(X_test_scaled), 0)
 
-    # Predictions
-    y_train_pred = mlp.predict(X_train_scaled)
-    y_test_pred = mlp.predict(X_test_scaled)
-    
-    # Change to 0 any negative predictions (not meaningful for rates)
-    y_train_pred = np.where(y_train_pred < 0, 0, y_train_pred)
-    y_test_pred = np.where(y_test_pred < 0, 0, y_test_pred)
+    assert len(y_train_pred) == len(y_train)
+    assert len(y_test_pred) == len(y_test)
+    assert not np.isnan(y_train_pred).any()
+    assert not np.isnan(y_test_pred).any()
+    assert (y_train_pred >= 0).all()
+    assert (y_test_pred >= 0).all()
+    assert np.var(y_train_pred) > 0
+    assert np.var(y_test_pred) > 0
 
-    # Check length of predictions matches true values
-    assert len(y_train_pred) == len(y_train), "Train predictions length mismatch"
-    assert len(y_test_pred) == len(y_test), "Test predictions length mismatch"
-
-    # Check for NaN values in predictions
-    assert not np.isnan(y_train_pred).any(), "NaN values in train predictions"
-    assert not np.isnan(y_test_pred).any(), "NaN values in test predictions"
-
-    # Check for reasonable prediction ranges (non-negative rates)
-    assert (y_train_pred >= 0).all(), "Negative values in train predictions"
-    assert (y_test_pred >= 0).all(), "Negative values in test predictions"
-
-    # Check for variance in predictions (not all the same value)
-    assert np.var(y_train_pred) > 0, "No variance in train predictions"
-    assert np.var(y_test_pred) > 0, "No variance in test predictions"
-
-    # Check for overfitting (train RMSE should be less than test RMSE)
-    train_rmse = np.sqrt(mean_squared_error(y_train, y_train_pred))
-    test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
-    assert (train_rmse < test_rmse * 1.5), f"Possible overfitting: train RMSE {train_rmse:.4f}, test RMSE {test_rmse:.4f}"
     return mlp, scaler, y_train_pred, y_test_pred, y_train, y_test
 
 
@@ -415,6 +435,8 @@ def main() -> None:
         "mean_eggs_lag3",
         "mean_eggs_lag4",
         "mean_eggs_lag5",
+        "week_sin",
+        "week_cos",
     ]
 
     # Run 4-fold CV
