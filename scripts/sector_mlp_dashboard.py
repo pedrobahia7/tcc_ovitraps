@@ -68,6 +68,13 @@ def build_feature_matrix(
     dengue: pd.DataFrame, idw: pd.DataFrame
 ) -> pd.DataFrame:
     """Vectorized lag creation per sector via groupby.shift."""
+    assert "eb_rate_per_1000" in dengue.columns, (
+        "Sector dengue input must contain 'eb_rate_per_1000'; "
+        "raw 'cases_per_1000' must not be used for sector predictions"
+    )
+    assert not any("cases_per_1000" in col for col in FEATURE_ORDER), (
+        "FEATURE_ORDER must reference EB-smoothed rates, not raw cases_per_1000"
+    )
     logger.info("Building lag features (dengue)...")
     dengue = dengue.sort_values(["sector_id", "biweek"]).copy()
     grp_d = dengue.groupby("sector_id")["eb_rate_per_1000"]
@@ -116,6 +123,15 @@ def predict_fold(
         logger.warning("  No test data for %s", test_year)
         return pd.DataFrame()
 
+    eb_lag_cols = [c for c in FEATURE_ORDER if c.startswith("eb_rate")]
+    assert all(c in test_df.columns for c in eb_lag_cols), (
+        f"EB lag features missing from feature matrix: "
+        f"{[c for c in eb_lag_cols if c not in test_df.columns]}"
+    )
+    assert "eb_rate_per_1000" in test_df.columns, (
+        "Target column 'eb_rate_per_1000' missing; "
+        "error must be measured against EB-smoothed rates"
+    )
     X_scaled = scaler.transform(test_df[FEATURE_ORDER].values)
     preds = np.maximum(model.predict(X_scaled), 0.0)
 
