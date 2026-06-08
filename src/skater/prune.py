@@ -13,6 +13,7 @@ Algorithm (Assunção et al. 2006, adapted):
 One Snapshot is stored per step, capturing the full assignment map
 and per-cluster diagnostics for later export and visualisation.
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── Data containers ───────────────────────────────────────────────────
+
 
 @dataclass
 class ClusterInfo:
@@ -72,6 +74,7 @@ class Snapshot:
 
 # ── Internal helpers ──────────────────────────────────────────────────
 
+
 def _split_tree(
     tree: nx.Graph, u: str, v: str
 ) -> tuple[frozenset[str], frozenset[str]]:
@@ -99,6 +102,10 @@ def _split_tree(
                 stack.append(nbr)
     comp_u = frozenset(visited)
     comp_v = frozenset(tree.nodes()) - comp_u
+    # TODO assert v in comp_v
+    # TODO assert comp_u.isdisjoint(comp_v)
+    # TODO assert comp_v is fully connected
+
     return comp_u, comp_v
 
 
@@ -129,9 +136,9 @@ def _aggregate(
           pop_total  — sum of all sector populations in this cluster.
     """
     idxs = np.array([sector_idx[s] for s in sector_set], dtype=int)
-    eggs_sub = eggs_epic[idxs, :]       # (n_sub, n_epic_bw)
-    dengue_sub = dengue_epic[idxs, :]   # (n_sub, n_epic_bw)
-    pop_sub = pop_vector[idxs]          # (n_sub,)
+    eggs_sub = eggs_epic[idxs, :]  # (n_sub, n_epic_bw)
+    dengue_sub = dengue_epic[idxs, :]  # (n_sub, n_epic_bw)
+    pop_sub = pop_vector[idxs]  # (n_sub,)
 
     with np.errstate(all="ignore"):
         eggs_agg = np.nanmean(eggs_sub, axis=0)  # (n_epic_bw,)
@@ -139,7 +146,9 @@ def _aggregate(
     pop_total = float(pop_sub.sum())
     if pop_total > 0:
         # Weight each sector's dengue rate by its population share
-        dengue_agg = (dengue_sub * pop_sub[:, None]).sum(axis=0) / pop_total
+        dengue_agg = (dengue_sub * pop_sub[:, None]).sum(
+            axis=0
+        ) / pop_total
     else:
         # Degenerate case: zero population, fall back to simple mean
         with np.errstate(all="ignore"):
@@ -208,8 +217,11 @@ def _cluster_info(
     )
     if n_valid < cfg.N_min:
         return ClusterInfo(
-            sectors=sector_set, q_c=0.0,
-            best_k=cfg.k_min, pop=pop, n_valid_pairs=n_valid,
+            sectors=sector_set,
+            q_c=0.0,
+            best_k=cfg.k_min,
+            pop=pop,
+            n_valid_pairs=n_valid,
         )
 
     # Compute the best lagged correlation
@@ -217,8 +229,11 @@ def _cluster_info(
         eggs_agg, dengue_agg, year_ids, cfg.k_min, cfg.k_max, cfg.N_min
     )
     return ClusterInfo(
-        sectors=sector_set, q_c=q_c,
-        best_k=best_k, pop=pop, n_valid_pairs=n_valid,
+        sectors=sector_set,
+        q_c=q_c,
+        best_k=best_k,
+        pop=pop,
+        n_valid_pairs=n_valid,
     )
 
 
@@ -228,6 +243,7 @@ def _assignments(clusters: list[ClusterInfo]) -> dict[str, int]:
 
 
 # ── Main pruning loop ─────────────────────────────────────────────────
+
 
 def greedy_prune(
     mst: nx.Graph,
@@ -266,8 +282,13 @@ def greedy_prune(
     # ── Initialise with the full MST as a single cluster ──────────────
     all_sectors = frozenset(mst.nodes())
     init_ci = _cluster_info(
-        all_sectors, sector_idx, eggs_epic, dengue_epic,
-        pop_vector, year_ids, cfg,
+        all_sectors,
+        sector_idx,
+        eggs_epic,
+        dengue_epic,
+        pop_vector,
+        year_ids,
+        cfg,
     )
     # One tree per current cluster; starts as just the full MST
     trees: list[nx.Graph] = [mst.copy()]
@@ -275,10 +296,13 @@ def greedy_prune(
     Q_cur = (init_ci.pop / POP_TOTAL) * init_ci.q_c
 
     snapshots: list[Snapshot] = [
-        Snapshot(C=1, Q=Q_cur, clusters=[init_ci],
-                 assignments=_assignments([init_ci]))
+        Snapshot(
+            C=1,
+            Q=Q_cur,
+            clusters=[init_ci],
+            assignments=_assignments([init_ci]),
+        )
     ]
-
     # ── Greedy cut loop: add one cluster per iteration ────────────────
     for step in range(cfg.C_max - 1):
         best_dQ = float("-inf")
@@ -300,32 +324,43 @@ def greedy_prune(
                     continue
 
                 ci_a = _cluster_info(
-                    set_a, sector_idx, eggs_epic, dengue_epic,
-                    pop_vector, year_ids, cfg,
+                    set_a,
+                    sector_idx,
+                    eggs_epic,
+                    dengue_epic,
+                    pop_vector,
+                    year_ids,
+                    cfg,
                 )
                 # Guard: too few valid observation pairs in child A
                 if ci_a.n_valid_pairs < cfg.N_min:
                     continue
 
                 ci_b = _cluster_info(
-                    set_b, sector_idx, eggs_epic, dengue_epic,
-                    pop_vector, year_ids, cfg,
+                    set_b,
+                    sector_idx,
+                    eggs_epic,
+                    dengue_epic,
+                    pop_vector,
+                    year_ids,
+                    cfg,
                 )
                 # Guard: too few valid observation pairs in child B
                 if ci_b.n_valid_pairs < cfg.N_min:
                     continue
 
                 # How much Q would change if we make this cut
-                new_contrib = (
-                    (ci_a.pop / POP_TOTAL) * ci_a.q_c
-                    + (ci_b.pop / POP_TOTAL) * ci_b.q_c
-                )
+                new_contrib = (ci_a.pop / POP_TOTAL) * ci_a.q_c + (
+                    ci_b.pop / POP_TOTAL
+                ) * ci_b.q_c
                 dQ = new_contrib - old_contrib
 
                 # Track best cut; secondary sort on (t_idx, u, v) for ties
                 key = (t_idx, min(u, v), max(u, v))
                 if dQ > best_dQ or (
-                    dQ == best_dQ and best_key is not None and key < best_key
+                    dQ == best_dQ
+                    and best_key is not None
+                    and key < best_key
                 ):
                     best_dQ = dQ
                     best_key = key
@@ -335,7 +370,8 @@ def greedy_prune(
         if best_key is None:
             logger.warning(
                 "No valid cut at C=%d — stopping at C=%d",
-                step + 2, step + 1,
+                step + 2,
+                step + 1,
             )
             break
 
@@ -353,17 +389,25 @@ def greedy_prune(
         cluster_infos.append(ci_b)
 
         # Recompute global Q from scratch (correlations don't decompose)
-        Q_cur = sum(
-            (ci.pop / POP_TOTAL) * ci.q_c for ci in cluster_infos
-        )
+        Q_cur = sum((ci.pop / POP_TOTAL) * ci.q_c for ci in cluster_infos)
+        # TODO make sure the correlations are calculated again
         logger.info(
             "Cut %d: tree %d edge (%s,%s) → Q=%.4f (ΔQ=%.4f, C=%d)",
-            step + 1, t_idx, ua, ub, Q_cur, best_dQ, step + 2,
+            step + 1,
+            t_idx,
+            ua,
+            ub,
+            Q_cur,
+            best_dQ,
+            step + 2,
         )
-        snapshots.append(Snapshot(
-            C=step + 2, Q=Q_cur,
-            clusters=list(cluster_infos),
-            assignments=_assignments(cluster_infos),
-        ))
+        snapshots.append(
+            Snapshot(
+                C=step + 2,
+                Q=Q_cur,
+                clusters=list(cluster_infos),
+                assignments=_assignments(cluster_infos),
+            )
+        )
 
     return snapshots

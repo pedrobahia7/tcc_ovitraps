@@ -137,8 +137,6 @@ stages:
       - skater
     deps:
       - src/skater/
-      - scripts/skater_dashboard.py
-      - scripts/skater_structure_dashboard.py
       - ${all.paths.data.dvc.add_population_info.centroids_idw}
       - ${all.paths.data.dvc.add_population_info.dengue_per_capita}
       - ${all.paths.data.dvc.process_population_data.sectors_geojson}
