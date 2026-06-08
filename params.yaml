@@ -43,3 +43,19 @@ all:
           folder: test/data/raw/
           diagnosis_raw_data: test/data/raw/diagnosis_raw_data.txt
           diagnosis_raw_comparison: test/data/raw/diagnosis_raw_comparison.txt
+
+skater:
+  mst_cost: egg_corr_dist
+  prune_obj: eggs_dengue_corr
+  k_min: 2
+  k_max: 6
+  C_max: 30
+  N_min: 20
+  S_min: 3
+  mst_min_overlap: 10
+  epidemic_years:
+    - "2012_13"
+    - "2015_16"
+    - "2018_19"
+    - "2023_24"
+  seed: 42
