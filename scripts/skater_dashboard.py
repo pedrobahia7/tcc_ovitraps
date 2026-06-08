@@ -1,10 +1,14 @@
 """SKATER results dashboard — two interactive HTML files.
 
 dashboard_map.html
-  Choropleth map of BH census sectors coloured by cluster assignment.
-  A slider lets you sweep through C=2..C_max to see how the partition
-  evolves.  Uses a single Choroplethmap trace + slider 'restyle' (updates
-  only the z array, not the full GeoJSON) to keep file size to ~14 MB.
+  Choropleth map of BH census sectors coloured by cluster assignment,
+  with ovitrap locations shown as fixed black dots.  A slider sweeps
+  C=2..C_max and simultaneously updates:
+    1. The choropleth z-array (cluster colours on the map).
+    2. A 5-panel bar chart below the map showing q_c per cluster for
+       the window [C-2, C-1, C, C+1, C+2].  The center panel (C)
+       renders at full opacity; neighbours at 70 %.  All panels share
+       a fixed y-axis range for direct comparison.
 
 dashboard_analysis.html
   Two-panel view:
@@ -42,6 +46,7 @@ EGGS_PATH = Path(
 DENGUE_PATH = Path(
     "data/dvc/add_population_info/dengue_per_capita.csv"
 )
+OVITRAP_PATH = Path("data/processed/ovitraps_data.csv")
 BH_CENTER = {"lat": -19.917, "lon": -43.934}
 
 # Biweek year prefixes that count as epidemic years in BH
@@ -80,6 +85,24 @@ def _load_geojson() -> dict:
     """Load the BH census sector GeoJSON FeatureCollection."""
     with open(GEOJSON_PATH) as fh:
         return json.load(fh)
+
+
+def _load_ovitrap_locations() -> pd.DataFrame:
+    """Load unique ovitrap deployment coordinates.
+
+    Reads every row of ovitraps_data.csv but keeps only the first
+    occurrence of each trap ID so each physical trap contributes
+    one dot to the map.
+
+    Returns:
+        DataFrame [idarmad, latitude, longitude] — one row per trap.
+    """
+    df = pd.read_csv(
+        OVITRAP_PATH,
+        usecols=["idarmad", "latitude", "longitude"],
+        low_memory=False,
+    )
+    return df.drop_duplicates("idarmad").reset_index(drop=True)
 
 
 def _load_sector_series() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -142,38 +165,123 @@ def _z_for_c(asgn: pd.DataFrame, sector_order: list[str], c: int) -> list:
     return [float(df.get(s, 0)) for s in sector_order]
 
 
-def build_map_figure(
-    asgn: pd.DataFrame, geojson: dict, diag: pd.DataFrame
-) -> go.Figure:
-    """Build the cluster choropleth map with a C-value slider.
+def _build_bar_traces(
+    diag: pd.DataFrame,
+    c_values: list[int],
+) -> tuple[list[go.Bar], dict[tuple[int, int], int]]:
+    """Pre-build all bar traces for the 5-panel q_c window view.
 
-    Uses a single Choroplethmap trace.  The slider updates only the z
-    array (cluster ID per sector) via Plotly 'restyle' — this avoids
-    embedding the full GeoJSON once per C value, keeping file size small.
+    For each (c_shown, position) pair that appears in any valid slider
+    window, one go.Bar trace is created.  All traces start hidden; the
+    slider step reveals exactly the 5 traces for the active window.
+
+    position ∈ {1..5}: 1=C-2, 2=C-1, 3=C (center), 4=C+1, 5=C+2.
+    Bars are sorted by q_c descending and coloured by cluster_id.
+    Opacity is 1.0 for the center panel and 0.7 for neighbour panels.
 
     Args:
-        asgn:    Cluster assignments DataFrame [C, sector_id, cluster_id].
-        geojson: GeoJSON FeatureCollection used as the map base.
-        diag:    Cluster diagnostics (unused here, available for extension).
+        diag:     Cluster diagnostics [C, cluster_id, q_c, n_sectors, …].
+        c_values: Sorted list of available C values.
 
     Returns:
-        A go.Figure with choropleth + slider layout.
+        traces:    List of go.Bar, all initially hidden.
+        trace_map: Mapping {(c_shown, pos): index_in_traces}.
+    """
+    c_min, c_max = min(c_values), max(c_values)
+    _suf = {1: "", 2: "2", 3: "3", 4: "4", 5: "5"}
+    traces: list[go.Bar] = []
+    trace_map: dict[tuple[int, int], int] = {}
+
+    for c_shown in c_values:
+        c_diag = (
+            diag[diag["C"] == c_shown]
+            .sort_values("q_c", ascending=False)
+            .reset_index(drop=True)
+        )
+        cluster_ids = c_diag["cluster_id"].tolist()
+        q_vals = c_diag["q_c"].tolist()
+        n_sec = c_diag["n_sectors"].tolist()
+        colors = [CLUSTER_COLORS[cid % 30] for cid in cluster_ids]
+        x_lbl = [str(cid) for cid in cluster_ids]
+
+        for pos in range(1, 6):
+            # c_sel is the slider value that would put c_shown at this pos
+            c_sel = c_shown - pos + 3
+            if c_sel < c_min or c_sel > c_max:
+                continue
+
+            suf = _suf[pos]
+            trace = go.Bar(
+                x=x_lbl,
+                y=q_vals,
+                marker_color=colors,
+                opacity=1.0 if pos == 3 else 0.7,
+                name=f"C={c_shown}",
+                xaxis=f"x{suf}",
+                yaxis=f"y{suf}",
+                visible=False,
+                customdata=list(zip(cluster_ids, n_sec)),
+                hovertemplate=(
+                    "cluster %{customdata[0]}<br>"
+                    "q_c=%{y:.3f}<br>"
+                    "sectors=%{customdata[1]}"
+                    "<extra></extra>"
+                ),
+                showlegend=False,
+            )
+            trace_map[(c_shown, pos)] = len(traces)
+            traces.append(trace)
+
+    return traces, trace_map
+
+
+def build_combined_figure(
+    asgn: pd.DataFrame,
+    geojson: dict,
+    diag: pd.DataFrame,
+    ovitrap_locs: pd.DataFrame,
+) -> go.Figure:
+    """Build the combined map + ovitrap dots + q_c bar chart figure.
+
+    Layout (manual axis domains, no make_subplots):
+      • Choropleth map occupies y=[0.32, 1.0] of figure height.
+      • Slider sits between map and bars at y≈0.30.
+      • 5 bar subplots occupy y=[0.0, 0.25], equally spaced in x.
+
+    The slider (method='update') simultaneously:
+      1. Swaps the choropleth z-array for the selected C.
+      2. Toggles bar trace visibility for the [C-2,C-1,C,C+1,C+2] window.
+      3. Updates each panel's x-axis title to show which C is displayed.
+
+    Center panel renders at full opacity; neighbour panels at 70 %.
+    All bar panels share a fixed y-axis range for direct comparison.
+    Edge C values (C=2, C=30) leave out-of-range panels empty.
+
+    Args:
+        asgn:         Cluster assignments [C, sector_id, cluster_id].
+        geojson:      GeoJSON FeatureCollection for BH sectors.
+        diag:         Cluster diagnostics [C, cluster_id, q_c, n_sectors, …].
+        ovitrap_locs: Unique ovitrap locations [idarmad, latitude, longitude].
+
+    Returns:
+        go.Figure ready to write as standalone HTML.
     """
     c_values = sorted(asgn["C"].unique().tolist())
+    c_min, c_max = c_values[0], c_values[-1]
     c0 = c_values[0]
     n_max = int(asgn["cluster_id"].max()) + 1
+    max_qc = float(diag["q_c"].max())
 
     # GeoJSON sector order determines which z value maps to which polygon
     sector_order = [
         str(f["properties"]["CD_SETOR"]) for f in geojson["features"]
     ]
 
-    z_init = _z_for_c(asgn, sector_order, c0)
-
+    # ── Fixed map traces ──────────────────────────────────────────────
     choro = go.Choroplethmap(
         geojson=geojson,
         locations=sector_order,
-        z=z_init,
+        z=_z_for_c(asgn, sector_order, c0),
         featureidkey="properties.CD_SETOR",
         colorscale=_discrete_colorscale(n_max),
         zmin=0,
@@ -182,37 +290,127 @@ def build_map_figure(
         marker_line_width=0.1,
         showscale=False,
         name="Clusters",
-        hovertemplate="<b>%{location}</b><br>cluster %{z:.0f}<extra></extra>",
+        hovertemplate=(
+            "<b>%{location}</b><br>cluster %{z:.0f}<extra></extra>"
+        ),
     )
 
-    # Each slider step only swaps the z array — not the whole trace
-    steps = [
-        {
-            "label": str(c),
-            "method": "restyle",
-            "args": [{"z": [_z_for_c(asgn, sector_order, c)]}],
-        }
-        for c in c_values
-    ]
+    scatter_traps = go.Scattermap(
+        lat=ovitrap_locs["latitude"],
+        lon=ovitrap_locs["longitude"],
+        mode="markers",
+        marker={"size": 4, "color": "black", "opacity": 0.7},
+        name="Ovitraps",
+        customdata=ovitrap_locs["idarmad"],
+        hovertemplate=(
+            "Ovitrap %{customdata}<br>"
+            "lat=%{lat:.4f}, lon=%{lon:.4f}"
+            "<extra></extra>"
+        ),
+        showlegend=True,
+    )
 
-    fig = go.Figure(data=[choro])
+    # ── Bar traces for 5-panel q_c window ────────────────────────────
+    bar_traces, trace_map = _build_bar_traces(diag, c_values)
+    n_bars = len(bar_traces)
+
+    # Reveal the initial window (c0 as center)
+    for pos in range(1, 6):
+        key = (c0 + pos - 3, pos)
+        if key in trace_map:
+            bar_traces[trace_map[key]].visible = True
+
+    # ── Slider steps ──────────────────────────────────────────────────
+    _suf = {1: "", 2: "2", 3: "3", 4: "4", 5: "5"}
+    steps = []
+
+    for c_sel in c_values:
+        z = _z_for_c(asgn, sector_order, c_sel)
+
+        bar_vis = [False] * n_bars
+        for pos in range(1, 6):
+            key = (c_sel + pos - 3, pos)
+            if key in trace_map:
+                bar_vis[trace_map[key]] = True
+
+        # Index 0=choro, 1=ovitraps always True; rest are bar traces
+        vis = [True, True] + bar_vis
+
+        layout_upd: dict = {"title.text": f"SKATER — C={c_sel}"}
+        for pos in range(1, 6):
+            c_shown = c_sel + pos - 3
+            ax_key = f"xaxis{_suf[pos]}.title.text"
+            if c_min <= c_shown <= c_max:
+                label = (
+                    f"<b>C = {c_shown}</b>" if pos == 3
+                    else f"C = {c_shown}"
+                )
+                layout_upd[ax_key] = label
+            else:
+                layout_upd[ax_key] = ""
+
+        steps.append({
+            "label": str(c_sel),
+            "method": "update",
+            "args": [{"z": [z], "visible": vis}, layout_upd],
+        })
+
+    # ── Bar subplot axis domains — 5 equal panels, gap=0.025 ─────────
+    # panel width = (1 - 4×0.025) / 5 = 0.18; total = 5×0.18 + 4×0.025 = 1.0
+    # bar_y top set to 0.20 so slider labels at y=0.30 have blank space above
+    pw, gap = 0.18, 0.025
+    bar_y = [0.0, 0.20]
+
+    ax_layout: dict = {}
+    for pos in range(1, 6):
+        suf = _suf[pos]
+        x0 = round((pos - 1) * (pw + gap), 4)
+        x1 = round(x0 + pw, 4)
+        ax_layout[f"xaxis{suf}"] = {
+            "domain": [x0, x1],
+            "anchor": f"y{suf}",
+            "title": {"text": ""},  # filled by slider on each step
+            "tickvals": [],         # hide cluster-id ticks — too many
+        }
+        ax_layout[f"yaxis{suf}"] = {
+            "domain": bar_y,
+            "anchor": f"x{suf}",
+            "range": [0.0, max_qc * 1.05],
+            "title": {"text": "q_c"} if pos == 1 else {"text": ""},
+            "showticklabels": pos == 1,
+        }
+
+    # ── Assemble figure ───────────────────────────────────────────────
+    fig = go.Figure(data=[choro, scatter_traps, *bar_traces])
+
     fig.update_layout(
+        **ax_layout,
         map={
             "style": "open-street-map",
             "zoom": 11,
             "center": BH_CENTER,
+            "domain": {"x": [0, 1], "y": [0.32, 1.0]},
         },
         sliders=[{
             "active": 0,
             "steps": steps,
             "x": 0.05,
             "len": 0.9,
-            "y": 0.0,
-            "currentvalue": {"prefix": "C = ", "visible": True},
+            "y": 0.30,
+            "yanchor": "top",
+            "currentvalue": {
+                "prefix": "C = ",
+                "visible": True,
+                "xanchor": "center",
+            },
         }],
-        height=900,
-        margin={"t": 60, "b": 80, "l": 20, "r": 20},
-        title=f"SKATER Clusters — C={c0}",
+        height=1400,
+        margin={"t": 60, "b": 20, "l": 50, "r": 20},
+        title={"text": f"SKATER — C={c0}", "x": 0.5},
+        legend={
+            "x": 0.01, "y": 0.99,
+            "xanchor": "left", "yanchor": "top",
+        },
     )
     return fig
 
@@ -453,10 +651,11 @@ def main() -> None:
     logger.info("Loading SKATER results…")
     asgn, traj, diag = _load_results()
     geojson = _load_geojson()
+    ovitrap_locs = _load_ovitrap_locations()
     eggs, dengue = _load_sector_series()
 
     logger.info("Building map dashboard…")
-    fig_map = build_map_figure(asgn, geojson, diag)
+    fig_map = build_combined_figure(asgn, geojson, diag, ovitrap_locs)
     out_map = RESULTS / "dashboard_map.html"
     fig_map.write_html(str(out_map))
     logger.info("Saved %s", out_map)
