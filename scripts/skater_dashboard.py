@@ -665,6 +665,118 @@ def build_analysis_figure(
     return fig
 
 
+# ── Stop condition banner ─────────────────────────────────────────────
+
+_BANNER_BG: dict[str, str] = {
+    "c_max": "#d0e8ff",
+    "no_valid_cut_geometry": "#fff3cd",
+    "no_valid_cut_local_degradation": "#fff3cd",
+    "global_degradation": "#f8d7da",
+}
+_BANNER_BORDER: dict[str, str] = {
+    "c_max": "#5b9bd5",
+    "no_valid_cut_geometry": "#e6a817",
+    "no_valid_cut_local_degradation": "#e6a817",
+    "global_degradation": "#c0392b",
+}
+
+
+def _load_stop_info(results_dir: Path) -> dict | None:
+    """Load stop_info.json from a run directory, or None if absent.
+
+    Returns None for old runs that predate stop-condition tracking so
+    the dashboard degrades gracefully without raising an error.
+
+    Args:
+        results_dir: Run-specific output directory.
+
+    Returns:
+        Parsed dict or None.
+    """
+    p = results_dir / "stop_info.json"
+    if not p.exists():
+        return None
+    with open(p) as fh:
+        return json.load(fh)
+
+
+def _stop_banner_html(stop_info: dict) -> str:
+    """Render a color-coded HTML banner describing why the run stopped.
+
+    Args:
+        stop_info: Dict loaded from stop_info.json with keys
+                   reason, C_final, best_dQ, threshold.
+
+    Returns:
+        An HTML <div> string ready to embed at the top of a dashboard page.
+    """
+    reason = stop_info.get("reason", "unknown")
+    c_final = stop_info.get("C_final", "?")
+    best_dq = stop_info.get("best_dQ")
+    threshold = stop_info.get("threshold")
+
+    if reason == "c_max":
+        msg = f"Run completed normally — C_max={c_final} reached."
+    elif reason == "no_valid_cut_geometry":
+        msg = (
+            f"Stopped early at C={c_final} — "
+            "S_min / N_min constraints exhausted all candidate cuts."
+        )
+    elif reason == "no_valid_cut_local_degradation":
+        msg = (
+            f"Stopped early at C={c_final} — "
+            "local degradation guard rejected every remaining cut."
+        )
+    elif reason == "global_degradation" and best_dq is not None:
+        thr_str = f"{threshold:.4f}" if threshold is not None else "?"
+        msg = (
+            f"Stopped early at C={c_final} — "
+            f"best ΔQ={best_dq:.4f} below threshold={thr_str}."
+        )
+    else:
+        msg = f"Stopped at C={c_final} — reason: {reason}."
+
+    bg = _BANNER_BG.get(reason, "#f0f0f0")
+    border = _BANNER_BORDER.get(reason, "#999")
+    style = (
+        f"background:{bg};border-left:5px solid {border};"
+        "padding:12px 18px;margin-bottom:18px;"
+        "font-family:sans-serif;font-size:14px;"
+        "border-radius:3px;line-height:1.5"
+    )
+    return f"<div style='{style}'><b>Stop condition:</b> {msg}</div>"
+
+
+def _write_dashboard_html(
+    fig: go.Figure,
+    out: Path,
+    title: str,
+    banner_html: str,
+) -> None:
+    """Assemble a standalone HTML page with an optional banner above the figure.
+
+    Args:
+        fig:         Plotly figure to embed.
+        out:         Output file path.
+        title:       <title> tag text.
+        banner_html: HTML string prepended above the figure (empty → no banner).
+    """
+    fig_html = fig.to_html(full_html=False, include_plotlyjs=True)
+    page = "\n".join([
+        "<!DOCTYPE html><html>",
+        "<head><meta charset='utf-8'>",
+        f"<title>{title}</title>",
+        "<style>body{font-family:sans-serif;padding:16px;"
+        "max-width:1600px;margin:auto}</style>",
+        "</head><body>",
+        banner_html,
+        fig_html,
+        "</body></html>",
+    ])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(page, encoding="utf-8")
+
+
 # ── Entry point ───────────────────────────────────────────────────────
 
 def main() -> None:
@@ -680,18 +792,55 @@ def main() -> None:
     )
     logger.info("Metric config: %s | run=%s", metric_label, run_label)
 
+    # ── Fall back to first valid run if configured label is missing ───
+    def _is_valid_run(d: Path) -> bool:
+        return (
+            d.is_dir()
+            and (d / "cluster_assignments.csv").exists()
+            and (d / "q_trajectory.csv").exists()
+            and (d / "cluster_diagnostics.csv").exists()
+        )
+
+    if not _is_valid_run(results_dir):
+        valid_runs = sorted(
+            d for d in RESULTS_BASE.iterdir() if _is_valid_run(d)
+        )
+        if not valid_runs:
+            logger.error(
+                "No valid run found under %s. Run `dvc repro skater` first.",
+                RESULTS_BASE,
+            )
+            raise SystemExit(1)
+        fallback = valid_runs[0]
+        logger.warning(
+            "Run '%s' not found — falling back to '%s'.",
+            run_label, fallback.name,
+        )
+        results_dir = fallback
+        run_label = fallback.name
+
     logger.info("Loading SKATER results…")
     asgn, traj, diag = _load_results(results_dir)
     geojson = _load_geojson()
     ovitrap_locs = _load_ovitrap_locations()
     eggs, dengue = _load_sector_series()
 
+    stop_info = _load_stop_info(results_dir)
+    if stop_info:
+        logger.info(
+            "Stop condition: %s (C_final=%d)",
+            stop_info["reason"], stop_info["C_final"],
+        )
+    else:
+        logger.info("No stop_info.json found — banner suppressed.")
+    banner = _stop_banner_html(stop_info) if stop_info else ""
+
     logger.info("Building map dashboard…")
     fig_map = build_combined_figure(
         asgn, geojson, diag, ovitrap_locs, metric_label=metric_label
     )
     out_map = results_dir / "dashboard_map.html"
-    fig_map.write_html(str(out_map))
+    _write_dashboard_html(fig_map, out_map, "SKATER Map", banner)
     logger.info("Saved %s", out_map)
 
     logger.info("Building analysis dashboard…")
@@ -699,7 +848,7 @@ def main() -> None:
         traj, asgn, eggs, dengue, diag, metric_label=metric_label
     )
     out_ana = results_dir / "dashboard_analysis.html"
-    fig_ana.write_html(str(out_ana))
+    _write_dashboard_html(fig_ana, out_ana, "SKATER Analysis", banner)
     logger.info("Saved %s", out_ana)
 
 

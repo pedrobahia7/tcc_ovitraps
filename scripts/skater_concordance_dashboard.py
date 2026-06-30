@@ -12,7 +12,7 @@ Output:
   results/skater/concordance_dashboard.html — single interactive HTML.
 
 Run manually (NOT a DVC stage):
-  python scripts/concordance_dashboard.py
+  python scripts/skater_concordance_dashboard.py
 
 Inputs:
   results/skater/*/cluster_assignments.csv — per-run sector assignments.

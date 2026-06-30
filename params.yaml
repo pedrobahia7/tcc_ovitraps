@@ -48,7 +48,7 @@ skater:
   # run_label — run's output subdirectory.
   #   Results are written to results/skater/<run_label>/.
   #   Change before each dvc repro to accumulate runs for concordance analysis.
-  run_label: default
+  run_label: spearman_3
   
   # mst_cost — dissimilarity used to weight edges before Prim builds the MST.
   #   egg_corr_dist  : 1 − Pearson(eggs_i, eggs_j) over ALL biweeks.
@@ -75,6 +75,12 @@ skater:
   #   case_ssd        : −Σ_t Σ_s (dengue[s,t] − mean_t)².
   #                     Minimises within-cluster dengue variance (Assunção 2006, cases only).
   prune_obj: corr_q_spearman
+  # k_min / k_max — lag search window (biweeks) for correlation objectives.
+  #   The pruning objective tests every integer lag k in [k_min, k_max] and
+  #   keeps the best signed correlation.  One biweek ≈ 2 weeks, so k=2..6
+  #   covers a 4–12-week lead time of eggs before dengue onset.
+  #   Only applies to corr_q / corr_q_spearman objectives; SSD objectives
+  #   ignore these and always use lag=0.
   k_min: 2
   k_max: 6
 
@@ -90,7 +96,7 @@ skater:
   #   false : disabled (default, backward-compatible).
   #   true  : acts as an additional per-cut guard; if every remaining
   #           cut is rejected the algorithm stops naturally.
-  stop_local_degradation: false
+  stop_local_degradation: true
 
   # global_degradation_threshold — stop when the best available cut
   #   would change global Q by less than this value (best_dQ < threshold).
@@ -98,15 +104,40 @@ skater:
   #   0.0   : stop as soon as any cut decreases Q.
   #   > 0   : require a minimum improvement per step.
   #   < 0   : tolerate mild degradation before stopping.
-  global_degradation_threshold: null
+  global_degradation_threshold: 0
 
 
+  # N_min — minimum valid (eggs, dengue) observation pairs a cluster must
+  #   have after a cut.  Cuts that would leave either child below this are
+  #   rejected.  For correlation objectives: counts (eggs[t-k], dengue[t])
+  #   pairs that are both non-NaN across all epidemic biweeks and lags.
+  #   For SSD objectives: counts non-NaN entries in the sector submatrix.
   N_min: 20
+
+  # S_min — minimum number of census sectors per cluster after a cut.
+  #   Prevents degenerate singletons or tiny fragments.  A cut that would
+  #   leave either child with fewer than S_min sectors is always rejected,
+  #   regardless of data density.
   S_min: 3
+
+  # mst_min_overlap — minimum biweeks where both sectors have non-NaN eggs
+  #   before computing the pairwise dissimilarity weight.  Below this, the
+  #   edge weight falls back to 2.0 (maximum dissimilarity) so data-sparse
+  #   pairs are pushed to the MST fringe and cut first.
   mst_min_overlap: 10
+
+  # epidemic_years — dengue epidemic seasons used to filter biweeks.
+  #   Biweeks whose label starts with one of these prefixes are kept as
+  #   "epidemic biweeks" for the pruning objective and dengue data loading.
+  #   Off-season dengue signal is too flat/noisy for a meaningful lag
+  #   correlation.  Each entry matches the biweek column prefix format.
   epidemic_years:
     - "2012_13"
     - "2015_16"
     - "2018_19"
     - "2023_24"
+
+  # seed — global random seed fixed for numpy and Python random.
+  #   Ensures the MST (Prim's tie-breaking) and pruning (sorted-edge
+  #   tie-breaking) are fully reproducible across runs.
   seed: 42

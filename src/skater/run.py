@@ -32,7 +32,7 @@ from .adjacency import build_adjacency
 from .config import load_config
 from .data import load_data
 from .mst import build_mst
-from .prune import Snapshot, greedy_prune
+from .prune import Snapshot, StopInfo, greedy_prune
 
 logger = logging.getLogger(__name__)
 RESULTS_BASE = Path("results/skater")
@@ -163,8 +163,8 @@ def main() -> None:
     # Map sector IDs to row indices (needed by pruning functions)
     sector_idx = {s: i for i, s in enumerate(data.sector_list)}
 
-    # Run greedy pruning → one Snapshot per C value
-    snapshots = greedy_prune(
+    # Run greedy pruning → one Snapshot per C value + termination metadata
+    snapshots, stop_info = greedy_prune(
         mst=mst,
         sector_idx=sector_idx,
         eggs_epic=data.eggs_epic,
@@ -182,6 +182,23 @@ def main() -> None:
     with open(results_dir / "run_params.json", "w") as fh:
         json.dump(cfg.model_dump(), fh, indent=2)
     logger.info("Saved run_params.json (run_label=%s)", cfg.run_label)
+
+    # Termination metadata — written after pruning so reason is known
+    with open(results_dir / "stop_info.json", "w") as fh:
+        json.dump(
+            {
+                "reason": stop_info.reason,
+                "C_final": stop_info.C_final,
+                "best_dQ": stop_info.best_dQ,
+                "threshold": stop_info.threshold,
+            },
+            fh,
+            indent=2,
+        )
+    logger.info(
+        "Saved stop_info.json (reason=%s, C_final=%d)",
+        stop_info.reason, stop_info.C_final,
+    )
 
     _save_assignments(snapshots, results_dir)
     _save_trajectory(snapshots, results_dir)

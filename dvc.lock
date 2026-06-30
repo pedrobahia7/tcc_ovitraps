@@ -676,17 +676,20 @@ stages:
       size: 10763766
     - path: src/skater/
       hash: md5
-      md5: 2f0e1fbaf10157818932d21be5e735da.dir
-      size: 128254
-      nfiles: 16
+      md5: 86af613346afe40bd39485fc1795c821.dir
+      size: 146423
+      nfiles: 18
     params:
       params.yaml:
         skater:
+          run_label: spearman_30
           mst_cost: egg_spearman
           prune_obj: corr_q_spearman
           k_min: 2
           k_max: 6
           C_max: 30
+          stop_local_degradation: false
+          global_degradation_threshold:
           N_min: 20
           S_min: 3
           mst_min_overlap: 10
@@ -697,8 +700,8 @@ stages:
           - '2023_24'
           seed: 42
     outs:
-    - path: results/skater/
+    - path: results/skater/spearman_30/
       hash: md5
-      md5: e0f8fc0b98ebf4c43485fdd441b43364.dir
-      size: 256936066
-      nfiles: 57
+      md5: bf973f8e30a9634efe04f589dd25e92f.dir
+      size: 40006389
+      nfiles: 10

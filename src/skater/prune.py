@@ -76,6 +76,32 @@ class Snapshot:
     assignments: dict[str, int] = field(default_factory=dict)
 
 
+@dataclass
+class StopInfo:
+    """Termination metadata returned alongside snapshots by greedy_prune.
+
+    Attributes:
+        reason:    One of:
+                     'c_max'                        — C_max ceiling reached.
+                     'no_valid_cut_geometry'         — S_min / N_min guards
+                       exhausted every candidate cut.
+                     'no_valid_cut_local_degradation'— local degradation guard
+                       rejected every cut that passed geometry guards.
+                     'global_degradation'            — best ΔQ fell below the
+                       configured threshold.
+        C_final:   Last C value achieved (equals len(snapshots)).
+        best_dQ:   ΔQ of the candidate cut that triggered the stop.
+                   Only set for 'global_degradation'; None otherwise.
+        threshold: The configured global_degradation_threshold value.
+                   Only set for 'global_degradation'; None otherwise.
+    """
+
+    reason: str
+    C_final: int
+    best_dQ: float | None = None
+    threshold: float | None = None
+
+
 # ── Internal helpers ──────────────────────────────────────────────────
 
 
@@ -226,7 +252,7 @@ def greedy_prune(
     pop_vector: np.ndarray,
     year_ids: np.ndarray,
     cfg: SkaterConfig,
-) -> list[Snapshot]:
+) -> tuple[list[Snapshot], StopInfo]:
     """Run greedy global SKATER pruning from C=1 to C=cfg.C_max.
 
     At each step, every edge in every current subtree is a candidate cut.
@@ -281,11 +307,20 @@ def greedy_prune(
             assignments=_assignments([init_ci]),
         )
     ]
+
+    # ── Stop tracking — updated on each break, default is c_max ──────
+    stop_reason = "c_max"
+    stop_dQ: float | None = None
+    stop_threshold: float | None = None
+
     # ── Greedy cut loop: add one cluster per iteration ────────────────
     for step in range(c_max - 1):
         best_dQ = float("-inf")
         best_key: tuple[int, str, str] | None = None
         best_cis: tuple[ClusterInfo, ClusterInfo] | None = None
+        # True when at least one cut passed S_min+N_min guards this step;
+        # used to distinguish geometry exhaustion from local-degradation stop.
+        any_geom_valid = False
 
         # Search every edge in every current subtree
         for t_idx, (tree, t_ci) in enumerate(zip(trees, cluster_infos)):
@@ -327,6 +362,9 @@ def greedy_prune(
                 if ci_b.n_valid_pairs < cfg.N_min:
                     continue
 
+                # Both geometry guards passed — local degradation is next
+                any_geom_valid = True
+
                 # Guard: local metric degradation — both children worse
                 # than their parent. Cuts that raise at least one child
                 # score are still allowed (purity concentration).
@@ -351,12 +389,15 @@ def greedy_prune(
                     best_key = key
                     best_cis = (ci_a, ci_b)
 
-        # No valid cut found — stop early
+        # No valid cut found — classify stop reason and exit
         if best_key is None:
+            stop_reason = (
+                "no_valid_cut_local_degradation" if any_geom_valid
+                else "no_valid_cut_geometry"
+            )
             logger.warning(
-                "No valid cut at C=%d — stopping at C=%d",
-                step + 2,
-                step + 1,
+                "No valid cut at C=%d (%s) — stopping at C=%d",
+                step + 2, stop_reason, step + 1,
             )
             break
 
@@ -366,6 +407,9 @@ def greedy_prune(
             cfg.global_degradation_threshold is not None
             and best_dQ < cfg.global_degradation_threshold
         ):
+            stop_reason = "global_degradation"
+            stop_dQ = best_dQ
+            stop_threshold = cfg.global_degradation_threshold
             logger.warning(
                 "Global degradation at C=%d "
                 "(best_dQ=%.4f < threshold=%.4f) — stopping at C=%d",
@@ -411,4 +455,14 @@ def greedy_prune(
             )
         )
 
-    return snapshots
+    stop_info = StopInfo(
+        reason=stop_reason,
+        C_final=len(snapshots),
+        best_dQ=stop_dQ,
+        threshold=stop_threshold,
+    )
+    logger.info(
+        "Pruning finished — reason=%s C_final=%d",
+        stop_info.reason, stop_info.C_final,
+    )
+    return snapshots, stop_info
