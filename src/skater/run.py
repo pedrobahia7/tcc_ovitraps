@@ -148,7 +148,16 @@ def main() -> None:
     adjacency = build_adjacency(
         data.geojson, sector_filter=set(data.sector_list)
     )
-    mst = build_mst(adjacency, data.eggs_all, data.sector_list, cfg)
+
+    # ── Select data matrix for MST cost based on config ───────────────
+    # egg_corr_dist uses all biweeks (more data, better signal).
+    # case_corr_dist uses epidemic biweeks only (no all-biweek dengue data).
+    if cfg.mst_cost == "case_corr_dist":
+        mst_data = data.dengue_epic
+    else:
+        mst_data = data.eggs_all
+
+    mst = build_mst(adjacency, mst_data, data.sector_list, cfg)
 
     # Map sector IDs to row indices (needed by pruning functions)
     sector_idx = {s: i for i, s in enumerate(data.sector_list)}

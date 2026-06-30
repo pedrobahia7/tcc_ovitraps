@@ -37,13 +37,17 @@ class ClusterInfo:
 
     Attributes:
         sectors:       Frozen set of sector IDs belonging to this cluster.
-        q_c:           Cluster's contribution score — best signed Pearson r
-                       between lagged cluster-mean eggs and pop-weighted
-                       dengue rate, over epidemic years only.
-        best_k:        The lag (biweeks) that produced q_c.
+        q_c:           Cluster's contribution score.  Meaning depends on
+                       cfg.prune_obj:
+                         'corr_q'   → best signed Pearson r (lagged eggs→dengue)
+                         'egg_ssd'  → negative within-cluster egg SSD
+                         'case_ssd' → negative within-cluster dengue SSD
+        best_k:        The lag (biweeks) that produced q_c for correlation
+                       objectives.  Always 0 for SSD objectives.
         pop:           Total population of the cluster (sum of sector medians).
-        n_valid_pairs: Number of valid (eggs[t-k], dengue[t]) pairs available
-                       for correlation, used to enforce the N_min guard.
+        n_valid_pairs: Data-density count used to enforce the N_min guard.
+                       For correlation: number of valid (eggs[t-k], dengue[t]) pairs.
+                       For SSD: number of non-NaN entries in the relevant submatrix.
     """
 
     sectors: frozenset[str]
@@ -115,12 +119,15 @@ def _aggregate(
     eggs_epic: np.ndarray,
     dengue_epic: np.ndarray,
     pop_vector: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, float]:
-    """Aggregate per-sector matrices into a single cluster time series.
+) -> tuple[np.ndarray, np.ndarray, float, np.ndarray, np.ndarray]:
+    """Aggregate per-sector matrices into cluster time series and submatrices.
 
     Eggs: simple nanmean across sectors (each ovitrap has equal weight).
     Dengue: population-weighted mean to avoid small sectors dominating
             the rate signal.
+
+    Also returns the raw sector submatrices so SSD-based pruning objectives
+    can compute within-cluster variance directly.
 
     Args:
         sector_set:   Sector IDs to aggregate.
@@ -130,15 +137,17 @@ def _aggregate(
         pop_vector:   (n_sectors,) median population per sector.
 
     Returns:
-        (eggs_agg, dengue_agg, pop_total):
+        (eggs_agg, dengue_agg, pop_total, eggs_sub, dengue_sub):
           eggs_agg   — (n_epic_biweeks,) cluster-mean egg counts.
           dengue_agg — (n_epic_biweeks,) pop-weighted dengue rate.
           pop_total  — sum of all sector populations in this cluster.
+          eggs_sub   — (n_sub, n_epic_biweeks) raw sector egg values.
+          dengue_sub — (n_sub, n_epic_biweeks) raw sector dengue values.
     """
     idxs = np.array([sector_idx[s] for s in sector_set], dtype=int)
-    eggs_sub = eggs_epic[idxs, :]  # (n_sub, n_epic_bw)
+    eggs_sub = eggs_epic[idxs, :]    # (n_sub, n_epic_bw)
     dengue_sub = dengue_epic[idxs, :]  # (n_sub, n_epic_bw)
-    pop_sub = pop_vector[idxs]  # (n_sub,)
+    pop_sub = pop_vector[idxs]       # (n_sub,)
 
     with np.errstate(all="ignore"):
         eggs_agg = np.nanmean(eggs_sub, axis=0)  # (n_epic_bw,)
@@ -154,39 +163,7 @@ def _aggregate(
         with np.errstate(all="ignore"):
             dengue_agg = np.nanmean(dengue_sub, axis=0)
 
-    return eggs_agg, dengue_agg, pop_total
-
-
-def _count_valid_pairs(
-    eggs_agg: np.ndarray,
-    dengue_agg: np.ndarray,
-    year_ids: np.ndarray,
-    k_min: int,
-    k_max: int,
-) -> int:
-    """Count the maximum valid (eggs[t-k], dengue[t]) pairs over all lags.
-
-    Used to enforce the N_min guard before accepting a cut.  A pair is
-    'valid' when neither value is NaN.  Computed within each epidemic year
-    to respect the year-boundary protection rule.
-
-    Returns:
-        Maximum valid-pair count across lags k_min..k_max.
-    """
-    best = 0
-    for k in range(k_min, k_max + 1):
-        count = 0
-        for yr in np.unique(year_ids):
-            mask = year_ids == yr
-            ye, yd = eggs_agg[mask], dengue_agg[mask]
-            n = len(ye)
-            if n <= k:
-                continue
-            # Count biweeks where both lagged egg and current dengue are present
-            valid = (~np.isnan(ye[:-k])) & (~np.isnan(yd[k:]))
-            count += int(valid.sum())
-        best = max(best, count)
-    return best
+    return eggs_agg, dengue_agg, pop_total, eggs_sub, dengue_sub
 
 
 def _cluster_info(
@@ -200,37 +177,33 @@ def _cluster_info(
 ) -> ClusterInfo:
     """Compute and return the full ClusterInfo for a candidate sector set.
 
-    If the cluster has fewer than N_min valid observation pairs, q_c is
-    set to 0.0 to mark it as non-contributing (the cut guard will reject
-    it anyway).
+    Delegates to the prune_fn selected by cfg.prune_obj.  The function
+    returns n_valid_pairs alongside q_c — validity counting is now the
+    responsibility of each pruning objective (correlation objectives count
+    lag pairs; SSD objectives count non-NaN entries in the submatrix).
+
+    If n_valid_pairs < N_min, q_c is zeroed so the cluster does not
+    contribute positively to Q (the cut guard in greedy_prune also checks
+    this and will reject the cut entirely).
     """
     prune_fn = PRUNE_OBJ[cfg.prune_obj]
 
-    # Aggregate sector-level data into a single cluster time series
-    eggs_agg, dengue_agg, pop = _aggregate(
+    # ── Aggregate sector-level data into cluster series + submatrices ──
+    eggs_agg, dengue_agg, pop, eggs_sub, dengue_sub = _aggregate(
         sector_set, sector_idx, eggs_epic, dengue_epic, pop_vector
     )
 
-    # Check data density before computing correlation
-    n_valid = _count_valid_pairs(
-        eggs_agg, dengue_agg, year_ids, cfg.k_min, cfg.k_max
+    # ── Compute objective, lag, and data-density in one call ──────────
+    q_c, best_k, n_valid = prune_fn(
+        eggs_agg, dengue_agg,
+        eggs_sub, dengue_sub,
+        year_ids, cfg.k_min, cfg.k_max, cfg.N_min,
     )
-    if n_valid < cfg.N_min:
-        return ClusterInfo(
-            sectors=sector_set,
-            q_c=0.0,
-            best_k=cfg.k_min,
-            pop=pop,
-            n_valid_pairs=n_valid,
-        )
 
-    # Compute the best lagged correlation
-    q_c, best_k = prune_fn(
-        eggs_agg, dengue_agg, year_ids, cfg.k_min, cfg.k_max, cfg.N_min
-    )
     return ClusterInfo(
         sectors=sector_set,
-        q_c=q_c,
+        # Zero q_c for data-sparse clusters so they don't reward cuts
+        q_c=0.0 if n_valid < cfg.N_min else q_c,
         best_k=best_k,
         pop=pop,
         n_valid_pairs=n_valid,

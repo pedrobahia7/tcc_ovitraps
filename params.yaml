@@ -45,8 +45,31 @@ all:
           diagnosis_raw_comparison: test/data/raw/diagnosis_raw_comparison.txt
 
 skater:
-  mst_cost: egg_corr_dist
-  prune_obj: eggs_dengue_corr
+  # mst_cost — dissimilarity used to weight edges before Prim builds the MST.
+  #   egg_corr_dist  : 1 − Pearson(eggs_i, eggs_j) over ALL biweeks.
+  #                    Scale-invariant; preferred for eggs (more data).
+  #   case_corr_dist : 1 − Pearson(dengue_i, dengue_j) over EPIDEMIC biweeks.
+  #                    Scale-invariant; for cases-only runs.
+  #   egg_spearman   : 1 − Spearman(eggs_i, eggs_j) over all biweeks.
+  #                    Rank-based; robust to outliers, scale-invariant.
+  #   case_spearman  : 1 − Spearman(dengue_i, dengue_j) over epidemic biweeks.
+  #                    Rank-based; for cases-only runs.
+  #   egg_euclidean  : ‖eggs_i − eggs_j‖₂ over all biweeks.
+  #                    Scale-sensitive (Assunção 2006 paper-faithful, eggs).
+  #   case_euclidean : ‖cases_i − cases_j‖₂ over epidemic biweeks.
+  #                    Scale-sensitive (Assunção 2006 paper-faithful, cases).
+  mst_cost: egg_spearman
+
+  # prune_obj — objective maximised by greedy pruning (higher = better cut).
+  #   corr_q          : best signed Pearson(eggs[t-k], dengue[t]) across lags k_min..k_max.
+  #                     Custom objective coupling egg dynamics to epidemic timing.
+  #   corr_q_spearman : best signed Spearman(eggs[t-k], dengue[t]) across lags.
+  #                     Rank-based; robust to outliers in egg or case counts.
+  #   egg_ssd         : −Σ_t Σ_s (eggs[s,t] − mean_t)².
+  #                     Minimises within-cluster egg variance (Assunção 2006, eggs only).
+  #   case_ssd        : −Σ_t Σ_s (dengue[s,t] − mean_t)².
+  #                     Minimises within-cluster dengue variance (Assunção 2006, cases only).
+  prune_obj: corr_q_spearman
   k_min: 2
   k_max: 6
   C_max: 30

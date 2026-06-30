@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import yaml
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -158,6 +159,7 @@ def build_structure_figure(
     mst: pd.DataFrame,
     cent: pd.DataFrame,
     geojson: dict,
+    mst_cost: str = "",
 ) -> go.Figure:
     """Build the four-layer structure map as a Plotly Figure.
 
@@ -170,10 +172,12 @@ def build_structure_figure(
     Toggle buttons in the layout control which layers are visible.
 
     Args:
-        adj:     Queen contiguity edges DataFrame [src, dst].
-        mst:     MST edges DataFrame [src, dst, weight].
-        cent:    Centroid DataFrame indexed by sector_id.
-        geojson: GeoJSON FeatureCollection for boundary extraction.
+        adj:      Queen contiguity edges DataFrame [src, dst].
+        mst:      MST edges DataFrame [src, dst, weight].
+        cent:     Centroid DataFrame indexed by sector_id.
+        geojson:  GeoJSON FeatureCollection for boundary extraction.
+        mst_cost: Cost function name to show in the figure title, e.g.
+                  'egg_corr_dist'.  Empty → no suffix.
 
     Returns:
         A go.Figure ready to be written to HTML.
@@ -246,7 +250,8 @@ def build_structure_figure(
             "center": BH_CENTER,
         },
         title=(
-            f"Neighbourhood structure — {adj.shape[0]:,} adjacency edges, "
+            f"Neighbourhood structure [{mst_cost or 'egg_corr_dist'}]"
+            f" — {adj.shape[0]:,} adjacency edges, "
             f"{mst.shape[0]:,} MST edges, "
             f"{len(geojson['features']):,} sectors"
         ),
@@ -293,6 +298,11 @@ def build_structure_figure(
 
 def main() -> None:
     """Load data, build figure, write HTML dashboard."""
+    # ── Read mst_cost from params for title annotation ────────────────
+    with open("params.yaml") as fh:
+        _params = yaml.safe_load(fh).get("skater", {})
+    mst_cost = _params.get("mst_cost", "egg_corr_dist")
+
     logger.info("Loading data…")
     cent = _load_centroids()
     adj, mst = _load_edges()
@@ -301,7 +311,7 @@ def main() -> None:
         "adj=%d edges, mst=%d edges, %d centroids, %d sectors",
         len(adj), len(mst), len(cent), len(geojson["features"]),
     )
-    fig = build_structure_figure(adj, mst, cent, geojson)
+    fig = build_structure_figure(adj, mst, cent, geojson, mst_cost=mst_cost)
     out = RESULTS / "dashboard_structure.html"
     fig.write_html(str(out))
     logger.info("Saved %s (%.1f MB)", out, out.stat().st_size / 1e6)

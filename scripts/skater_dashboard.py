@@ -29,6 +29,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import yaml
 from plotly.subplots import make_subplots
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -240,6 +241,7 @@ def build_combined_figure(
     geojson: dict,
     diag: pd.DataFrame,
     ovitrap_locs: pd.DataFrame,
+    metric_label: str = "",
 ) -> go.Figure:
     """Build the combined map + ovitrap dots + q_c bar chart figure.
 
@@ -262,6 +264,8 @@ def build_combined_figure(
         geojson:      GeoJSON FeatureCollection for BH sectors.
         diag:         Cluster diagnostics [C, cluster_id, q_c, n_sectors, …].
         ovitrap_locs: Unique ovitrap locations [idarmad, latitude, longitude].
+        metric_label: Short string appended to all slider titles, e.g.
+                      'mst=egg_corr_dist | obj=corr_q'.  Empty → no suffix.
 
     Returns:
         go.Figure ready to write as standalone HTML.
@@ -336,7 +340,10 @@ def build_combined_figure(
         # Index 0=choro, 1=ovitraps always True; rest are bar traces
         vis = [True, True] + bar_vis
 
-        layout_upd: dict = {"title.text": f"SKATER — C={c_sel}"}
+        _suffix = f" | {metric_label}" if metric_label else ""
+        layout_upd: dict = {
+            "title.text": f"SKATER — C={c_sel}{_suffix}"
+        }
         for pos in range(1, 6):
             c_shown = c_sel + pos - 3
             ax_key = f"xaxis{_suf[pos]}.title.text"
@@ -406,7 +413,13 @@ def build_combined_figure(
         }],
         height=1400,
         margin={"t": 60, "b": 20, "l": 50, "r": 20},
-        title={"text": f"SKATER — C={c0}", "x": 0.5},
+        title={
+            "text": (
+                f"SKATER — C={c0}"
+                + (f" | {metric_label}" if metric_label else "")
+            ),
+            "x": 0.5,
+        },
         legend={
             "x": 0.01, "y": 0.99,
             "xanchor": "left", "yanchor": "top",
@@ -480,6 +493,7 @@ def build_analysis_figure(
     eggs: pd.DataFrame,
     dengue: pd.DataFrame,
     diag: pd.DataFrame,
+    metric_label: str = "",
 ) -> go.Figure:
     """Build the two-panel analysis figure (Q trajectory + time series).
 
@@ -609,12 +623,13 @@ def build_analysis_figure(
         for idx in vis_map[c]:
             series_vis[idx - n_q_traces] = True
         vis += series_vis
+        _suffix = f" | {metric_label}" if metric_label else ""
         buttons.append({
             "label": f"C = {c}",
             "method": "update",
             "args": [
                 {"visible": vis},
-                {"title": f"SKATER Analysis — C={c}"},
+                {"title": f"SKATER Analysis — C={c}{_suffix}"},
             ],
         })
 
@@ -622,8 +637,9 @@ def build_analysis_figure(
     for idx in vis_map[c_values[0]]:
         all_series_traces[idx - n_q_traces].visible = True
 
+    _suffix = f" | {metric_label}" if metric_label else ""
     fig.update_layout(
-        title=f"SKATER Analysis — C={c_values[0]}",
+        title=f"SKATER Analysis — C={c_values[0]}{_suffix}",
         height=1100,
         xaxis2_title="Biweek",
         yaxis2_title="Normalised value",
@@ -648,6 +664,15 @@ def build_analysis_figure(
 
 def main() -> None:
     """Load all data, build both figures, write HTML files."""
+    # ── Read metric config for dashboard title annotations ────────────
+    with open("params.yaml") as fh:
+        _params = yaml.safe_load(fh).get("skater", {})
+    metric_label = (
+        f"mst={_params.get('mst_cost', '?')} | "
+        f"obj={_params.get('prune_obj', '?')}"
+    )
+    logger.info("Metric config: %s", metric_label)
+
     logger.info("Loading SKATER results…")
     asgn, traj, diag = _load_results()
     geojson = _load_geojson()
@@ -655,13 +680,17 @@ def main() -> None:
     eggs, dengue = _load_sector_series()
 
     logger.info("Building map dashboard…")
-    fig_map = build_combined_figure(asgn, geojson, diag, ovitrap_locs)
+    fig_map = build_combined_figure(
+        asgn, geojson, diag, ovitrap_locs, metric_label=metric_label
+    )
     out_map = RESULTS / "dashboard_map.html"
     fig_map.write_html(str(out_map))
     logger.info("Saved %s", out_map)
 
     logger.info("Building analysis dashboard…")
-    fig_ana = build_analysis_figure(traj, asgn, eggs, dengue, diag)
+    fig_ana = build_analysis_figure(
+        traj, asgn, eggs, dengue, diag, metric_label=metric_label
+    )
     out_ana = RESULTS / "dashboard_analysis.html"
     fig_ana.write_html(str(out_ana))
     logger.info("Saved %s", out_ana)

@@ -22,18 +22,42 @@ class SkaterConfig(BaseModel):
     """
 
     # ── Strategy selectors ────────────────────────────────────────────
-    mst_cost: Literal["egg_corr_dist"] = Field(
+    mst_cost: Literal[
+        "egg_corr_dist", "case_corr_dist",
+        "egg_spearman", "case_spearman",
+        "egg_euclidean", "case_euclidean",
+    ] = Field(
         "egg_corr_dist",
         description=(
             "Which dissimilarity metric to use when building the MST. "
-            "'egg_corr_dist' = 1 − Pearson(eggs_i, eggs_j)."
+            "Valid values: "
+            "'egg_corr_dist'  — 1 − Pearson(eggs_i, eggs_j) over all biweeks; "
+            "'case_corr_dist' — 1 − Pearson(dengue_i, dengue_j) over epidemic "
+            "biweeks only, lag=0; "
+            "'egg_spearman'   — 1 − Spearman(eggs_i, eggs_j) over all biweeks; "
+            "'case_spearman'  — 1 − Spearman(dengue_i, dengue_j) over epidemic "
+            "biweeks only; "
+            "'egg_euclidean'  — L2‖eggs_i − eggs_j‖, all biweeks "
+            "(Assunção 2006 paper-style); "
+            "'case_euclidean' — L2‖cases_i − cases_j‖, epidemic biweeks "
+            "(paper-style, cases-only run)."
         ),
     )
-    prune_obj: Literal["eggs_dengue_corr"] = Field(
-        "eggs_dengue_corr",
+    prune_obj: Literal[
+        "corr_q", "corr_q_spearman", "egg_ssd", "case_ssd", "eggs_dengue_corr"
+    ] = Field(
+        "corr_q",
         description=(
             "Which objective to maximise during greedy pruning. "
-            "'eggs_dengue_corr' = best signed Pearson(lagged_eggs, dengue_rate)."
+            "Valid values: "
+            "'corr_q'          — best signed Pearson(lagged_eggs, dengue_rate) (custom); "
+            "'corr_q_spearman' — best signed Spearman(lagged_eggs, dengue_rate), "
+            "rank-based and outlier-robust; "
+            "'egg_ssd'         — negative within-cluster SSD of egg time series "
+            "(Assunção 2006 paper-style, eggs-only run); "
+            "'case_ssd'        — negative within-cluster SSD of dengue-rate time series "
+            "(paper-style, cases-only run); "
+            "'eggs_dengue_corr' — backwards-compat alias for 'corr_q'."
         ),
     )
 

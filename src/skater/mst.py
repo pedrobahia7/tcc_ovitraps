@@ -24,16 +24,16 @@ logger = logging.getLogger(__name__)
 
 def build_mst(
     adjacency: nx.Graph,
-    eggs_all: np.ndarray,
+    data_matrix: np.ndarray,
     sector_list: list[str],
     cfg: SkaterConfig,
 ) -> nx.Graph:
-    """Build a population-weighted MST over the adjacency graph.
+    """Build a weighted MST over the adjacency graph using cfg.mst_cost.
 
     Steps:
       1. Remove any adjacency nodes not present in sector_list (sectors
          that were excluded from data loading due to missing eggs/dengue).
-      2. Assign an edge weight = cfg.mst_cost(eggs_i, eggs_j) to every
+      2. Assign an edge weight = cfg.mst_cost(row_i, row_j) to every
          pair of adjacent sectors.
       3. Run Prim's algorithm to extract the MST.
 
@@ -42,10 +42,12 @@ def build_mst(
 
     Args:
         adjacency:   Queen contiguity graph from build_adjacency().
-        eggs_all:    (n_sectors, n_all_biweeks) IDW egg matrix — all years,
-                     aligned to sector_list row order.
+        data_matrix: (n_sectors, n_biweeks) matrix whose rows feed the MST
+                     cost function.  Caller selects the appropriate matrix:
+                       'egg_corr_dist'  → pass data.eggs_all (all biweeks)
+                       'case_corr_dist' → pass data.dengue_epic (epidemic only)
         sector_list: Ordered list of sector IDs.  Determines row indices
-                     into eggs_all.
+                     into data_matrix.
         cfg:         Pipeline config; cfg.mst_cost selects the cost function.
 
     Returns:
@@ -53,7 +55,7 @@ def build_mst(
     """
     cost_fn = MST_COST[cfg.mst_cost]
 
-    # Build a fast index: sector_id → row in eggs_all
+    # Build a fast index: sector_id → row in data_matrix
     sector_idx = {s: i for i, s in enumerate(sector_list)}
     sector_set = set(sector_list)
 
@@ -82,7 +84,7 @@ def build_mst(
             # Defensive fallback — should not happen after the drop above
             w = 2.0
         else:
-            w = cost_fn(eggs_all[i], eggs_all[j], cfg.mst_min_overlap)
+            w = cost_fn(data_matrix[i], data_matrix[j], cfg.mst_min_overlap)
         weighted.add_edge(u, v, weight=w)
 
     # ── Run Prim's MST on the weighted graph ──────────────────────────
