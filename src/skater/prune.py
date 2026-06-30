@@ -252,8 +252,13 @@ def greedy_prune(
     """
     POP_TOTAL = float(pop_vector.sum())
 
-    # ── Initialise with the full MST as a single cluster ──────────────
+    # ── Resolve effective C_max ───────────────────────────────────────
+    # None means "run until another condition fires"; use n_sectors as a
+    # theoretical ceiling (each sector its own cluster is the maximum).
     all_sectors = frozenset(mst.nodes())
+    c_max: int = cfg.C_max if cfg.C_max is not None else len(all_sectors)
+
+    # ── Initialise with the full MST as a single cluster ──────────────
     init_ci = _cluster_info(
         all_sectors,
         sector_idx,
@@ -277,7 +282,7 @@ def greedy_prune(
         )
     ]
     # ── Greedy cut loop: add one cluster per iteration ────────────────
-    for step in range(cfg.C_max - 1):
+    for step in range(c_max - 1):
         best_dQ = float("-inf")
         best_key: tuple[int, str, str] | None = None
         best_cis: tuple[ClusterInfo, ClusterInfo] | None = None
@@ -322,6 +327,13 @@ def greedy_prune(
                 if ci_b.n_valid_pairs < cfg.N_min:
                     continue
 
+                # Guard: local metric degradation — both children worse
+                # than their parent. Cuts that raise at least one child
+                # score are still allowed (purity concentration).
+                if cfg.stop_local_degradation:
+                    if ci_a.q_c < q_t and ci_b.q_c < q_t:
+                        continue
+
                 # How much Q would change if we make this cut
                 new_contrib = (ci_a.pop / POP_TOTAL) * ci_a.q_c + (
                     ci_b.pop / POP_TOTAL
@@ -344,6 +356,22 @@ def greedy_prune(
             logger.warning(
                 "No valid cut at C=%d — stopping at C=%d",
                 step + 2,
+                step + 1,
+            )
+            break
+
+        # Guard: global metric degradation — best available cut falls
+        # below the configured dQ threshold.
+        if (
+            cfg.global_degradation_threshold is not None
+            and best_dQ < cfg.global_degradation_threshold
+        ):
+            logger.warning(
+                "Global degradation at C=%d "
+                "(best_dQ=%.4f < threshold=%.4f) — stopping at C=%d",
+                step + 2,
+                best_dQ,
+                cfg.global_degradation_threshold,
                 step + 1,
             )
             break

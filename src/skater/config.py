@@ -7,7 +7,7 @@ other module receives — no magic strings scattered through the codebase.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field
@@ -72,9 +72,39 @@ class SkaterConfig(BaseModel):
     )
 
     # ── Stopping conditions ───────────────────────────────────────────
-    C_max: int = Field(
-        30, ge=2,
-        description="Maximum number of clusters to produce.",
+    C_max: Optional[int] = Field(
+        30,
+        ge=2,
+        description=(
+            "Hard ceiling on the number of clusters produced. "
+            "None = no ceiling — the algorithm runs until another "
+            "stopping condition fires (global degradation, local "
+            "degradation, or no valid cut remains)."
+        ),
+    )
+    stop_local_degradation: bool = Field(
+        False,
+        description=(
+            "Reject any candidate cut where BOTH resulting child "
+            "clusters score strictly below their parent (q_a < q_parent "
+            "AND q_b < q_parent). Cuts that raise at least one child's "
+            "score are still allowed — concentrating purity into one "
+            "child at the expense of the other is acceptable. "
+            "If every remaining cut is rejected this way the algorithm "
+            "stops, just as when no valid cut exists."
+        ),
+    )
+    global_degradation_threshold: Optional[float] = Field(
+        None,
+        description=(
+            "Stop the algorithm when the best available cut would change "
+            "the global objective Q by less than this value "
+            "(i.e. best_dQ < threshold). "
+            "None = condition disabled. "
+            "0.0 = stop as soon as any cut decreases Q. "
+            "Positive values enforce a minimum improvement per step; "
+            "negative values tolerate mild degradation before stopping."
+        ),
     )
     N_min: int = Field(
         20, ge=1,

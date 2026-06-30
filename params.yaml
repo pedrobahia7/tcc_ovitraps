@@ -72,7 +72,29 @@ skater:
   prune_obj: corr_q_spearman
   k_min: 2
   k_max: 6
+
+  # ── Stopping conditions ──────────────────────────────────────────────
+  # C_max — hard ceiling on number of clusters produced.
+  #   integer : stop after producing this many clusters.
+  #   null    : no ceiling; run until another condition fires.
   C_max: 30
+
+  # stop_local_degradation — reject cuts where BOTH child clusters score
+  #   below their parent (q_a < q_parent AND q_b < q_parent).
+  #   Cuts that concentrate purity into one child are still allowed.
+  #   false : disabled (default, backward-compatible).
+  #   true  : acts as an additional per-cut guard; if every remaining
+  #           cut is rejected the algorithm stops naturally.
+  stop_local_degradation: false
+
+  # global_degradation_threshold — stop when the best available cut
+  #   would change global Q by less than this value (best_dQ < threshold).
+  #   null  : condition disabled (default, backward-compatible).
+  #   0.0   : stop as soon as any cut decreases Q.
+  #   > 0   : require a minimum improvement per step.
+  #   < 0   : tolerate mild degradation before stopping.
+  global_degradation_threshold: null
+
   N_min: 20
   S_min: 3
   mst_min_overlap: 10
