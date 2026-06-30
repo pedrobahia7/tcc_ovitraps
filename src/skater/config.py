@@ -153,6 +153,19 @@ class SkaterConfig(BaseModel):
         description="Global random seed for numpy and Python random.",
     )
 
+    # ── Run identity ──────────────────────────────────────────────────
+    run_label: str = Field(
+        "default",
+        pattern=r"^[A-Za-z0-9_][A-Za-z0-9_\-]*$",
+        description=(
+            "Label for this run's output subdirectory. "
+            "Results are written to results/skater/<run_label>/. "
+            "Change before each dvc repro to preserve multiple runs "
+            "on disk for concordance analysis. "
+            "Allowed characters: letters, digits, underscores, hyphens."
+        ),
+    )
+
 
 def load_config(
     params_path: Path = Path("params.yaml"),

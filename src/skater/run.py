@@ -19,6 +19,7 @@ Output files:
 """
 from __future__ import annotations
 
+import json
 import logging
 import random
 from pathlib import Path
@@ -34,7 +35,7 @@ from .mst import build_mst
 from .prune import Snapshot, greedy_prune
 
 logger = logging.getLogger(__name__)
-RESULTS = Path("results/skater")
+RESULTS_BASE = Path("results/skater")
 
 
 # ── Reproducibility ───────────────────────────────────────────────────
@@ -173,13 +174,22 @@ def main() -> None:
         cfg=cfg,
     )
 
-    # Persist all outputs
-    RESULTS.mkdir(parents=True, exist_ok=True)
-    _save_assignments(snapshots, RESULTS)
-    _save_trajectory(snapshots, RESULTS)
-    _save_diagnostics(snapshots, RESULTS)
-    _save_graph_structures(adjacency, mst, RESULTS)
-    logger.info("SKATER done — C=%d snapshots in %s", len(snapshots), RESULTS)
+    # ── Persist all outputs ───────────────────────────────────────────
+    results_dir = RESULTS_BASE / cfg.run_label
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    # Snapshot of config for concordance analysis identification
+    with open(results_dir / "run_params.json", "w") as fh:
+        json.dump(cfg.model_dump(), fh, indent=2)
+    logger.info("Saved run_params.json (run_label=%s)", cfg.run_label)
+
+    _save_assignments(snapshots, results_dir)
+    _save_trajectory(snapshots, results_dir)
+    _save_diagnostics(snapshots, results_dir)
+    _save_graph_structures(adjacency, mst, results_dir)
+    logger.info(
+        "SKATER done — C=%d snapshots in %s", len(snapshots), results_dir
+    )
 
 
 if __name__ == "__main__":

@@ -36,7 +36,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 # ── File paths ────────────────────────────────────────────────────────
-RESULTS = Path("results/skater")
+RESULTS_BASE = Path("results/skater")
 GEOJSON_PATH = Path(
     "data/dvc/process_population_data/"
     "bh_sectors_2022_with_populations.geojson"
@@ -66,8 +66,13 @@ CLUSTER_COLORS = [
 
 # ── Data loaders ──────────────────────────────────────────────────────
 
-def _load_results() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def _load_results(
+    results_dir: Path,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load the three CSV outputs produced by src/skater/run.py.
+
+    Args:
+        results_dir: Run-specific output directory (results/skater/<run_label>/).
 
     Returns:
         asgn: cluster_assignments.csv — sector → cluster_id per C value.
@@ -75,10 +80,10 @@ def _load_results() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         diag: cluster_diagnostics.csv — per-cluster stats (q_c, best_k, …).
     """
     asgn = pd.read_csv(
-        RESULTS / "cluster_assignments.csv", dtype={"sector_id": str}
+        results_dir / "cluster_assignments.csv", dtype={"sector_id": str}
     )
-    traj = pd.read_csv(RESULTS / "q_trajectory.csv")
-    diag = pd.read_csv(RESULTS / "cluster_diagnostics.csv")
+    traj = pd.read_csv(results_dir / "q_trajectory.csv")
+    diag = pd.read_csv(results_dir / "cluster_diagnostics.csv")
     return asgn, traj, diag
 
 
@@ -664,17 +669,19 @@ def build_analysis_figure(
 
 def main() -> None:
     """Load all data, build both figures, write HTML files."""
-    # ── Read metric config for dashboard title annotations ────────────
+    # ── Read metric config and run_label for path resolution ──────────
     with open("params.yaml") as fh:
         _params = yaml.safe_load(fh).get("skater", {})
+    run_label = _params.get("run_label", "default")
+    results_dir = RESULTS_BASE / run_label
     metric_label = (
         f"mst={_params.get('mst_cost', '?')} | "
         f"obj={_params.get('prune_obj', '?')}"
     )
-    logger.info("Metric config: %s", metric_label)
+    logger.info("Metric config: %s | run=%s", metric_label, run_label)
 
     logger.info("Loading SKATER results…")
-    asgn, traj, diag = _load_results()
+    asgn, traj, diag = _load_results(results_dir)
     geojson = _load_geojson()
     ovitrap_locs = _load_ovitrap_locations()
     eggs, dengue = _load_sector_series()
@@ -683,7 +690,7 @@ def main() -> None:
     fig_map = build_combined_figure(
         asgn, geojson, diag, ovitrap_locs, metric_label=metric_label
     )
-    out_map = RESULTS / "dashboard_map.html"
+    out_map = results_dir / "dashboard_map.html"
     fig_map.write_html(str(out_map))
     logger.info("Saved %s", out_map)
 
@@ -691,7 +698,7 @@ def main() -> None:
     fig_ana = build_analysis_figure(
         traj, asgn, eggs, dengue, diag, metric_label=metric_label
     )
-    out_ana = RESULTS / "dashboard_analysis.html"
+    out_ana = results_dir / "dashboard_analysis.html"
     fig_ana.write_html(str(out_ana))
     logger.info("Saved %s", out_ana)
 

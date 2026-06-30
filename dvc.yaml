@@ -141,5 +141,5 @@ stages:
       - ${all.paths.data.dvc.add_population_info.dengue_per_capita}
       - ${all.paths.data.dvc.process_population_data.sectors_geojson}
     outs:
-      - results/skater/:
+      - results/skater/${skater.run_label}/:
           persist: true

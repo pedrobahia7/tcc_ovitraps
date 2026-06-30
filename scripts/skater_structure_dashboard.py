@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 # ── File paths ────────────────────────────────────────────────────────
-RESULTS = Path("results/skater")
+RESULTS_BASE = Path("results/skater")
 CENTROIDS_PATH = Path(
     "data/dvc/add_population_info/sector_centroids_with_idw.csv"
 )
@@ -64,8 +64,13 @@ def _load_geojson() -> dict:
         return json.load(fh)
 
 
-def _load_edges() -> tuple[pd.DataFrame, pd.DataFrame]:
+def _load_edges(
+    results_dir: Path,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Load the adjacency and MST edge lists saved by src/skater/run.py.
+
+    Args:
+        results_dir: Run-specific output directory (results/skater/<run_label>/).
 
     Returns:
         adj: DataFrame with columns [src, dst] — all Queen contiguity edges.
@@ -73,11 +78,11 @@ def _load_edges() -> tuple[pd.DataFrame, pd.DataFrame]:
              egg_corr_dist weights (0 = identical egg dynamics, 2 = max diff).
     """
     adj = pd.read_csv(
-        RESULTS / "adjacency_edges.csv",
+        results_dir / "adjacency_edges.csv",
         dtype={"src": str, "dst": str},
     )
     mst = pd.read_csv(
-        RESULTS / "mst_edges.csv",
+        results_dir / "mst_edges.csv",
         dtype={"src": str, "dst": str},
     )
     return adj, mst
@@ -298,21 +303,23 @@ def build_structure_figure(
 
 def main() -> None:
     """Load data, build figure, write HTML dashboard."""
-    # ── Read mst_cost from params for title annotation ────────────────
+    # ── Read mst_cost and run_label from params ───────────────────────
     with open("params.yaml") as fh:
         _params = yaml.safe_load(fh).get("skater", {})
     mst_cost = _params.get("mst_cost", "egg_corr_dist")
+    run_label = _params.get("run_label", "default")
+    results_dir = RESULTS_BASE / run_label
 
-    logger.info("Loading data…")
+    logger.info("Loading data… (run=%s)", run_label)
     cent = _load_centroids()
-    adj, mst = _load_edges()
+    adj, mst = _load_edges(results_dir)
     geojson = _load_geojson()
     logger.info(
         "adj=%d edges, mst=%d edges, %d centroids, %d sectors",
         len(adj), len(mst), len(cent), len(geojson["features"]),
     )
     fig = build_structure_figure(adj, mst, cent, geojson, mst_cost=mst_cost)
-    out = RESULTS / "dashboard_structure.html"
+    out = results_dir / "dashboard_structure.html"
     fig.write_html(str(out))
     logger.info("Saved %s (%.1f MB)", out, out.stat().st_size / 1e6)
 

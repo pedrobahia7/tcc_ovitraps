@@ -45,6 +45,11 @@ all:
           diagnosis_raw_comparison: test/data/raw/diagnosis_raw_comparison.txt
 
 skater:
+  # run_label — run's output subdirectory.
+  #   Results are written to results/skater/<run_label>/.
+  #   Change before each dvc repro to accumulate runs for concordance analysis.
+  run_label: default
+  
   # mst_cost — dissimilarity used to weight edges before Prim builds the MST.
   #   egg_corr_dist  : 1 − Pearson(eggs_i, eggs_j) over ALL biweeks.
   #                    Scale-invariant; preferred for eggs (more data).
@@ -94,6 +99,7 @@ skater:
   #   > 0   : require a minimum improvement per step.
   #   < 0   : tolerate mild degradation before stopping.
   global_degradation_threshold: null
+
 
   N_min: 20
   S_min: 3
