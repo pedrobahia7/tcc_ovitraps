@@ -25,7 +25,7 @@ from functools import partial
 from typing import Callable, Literal
 
 import numpy as np
-from scipy.stats import spearmanr
+from scipy.stats import rankdata
 
 # ── Type aliases ──────────────────────────────────────────────────────
 # MstCostFn:  (series_i, series_j, min_overlap) → dissimilarity ∈ [0, 2]
@@ -50,6 +50,25 @@ PruneObjFn = Callable[
     ],
     tuple[float, int, int],  # (q_c, best_k, n_valid_pairs)
 ]
+
+
+# ── Helpers ───────────────────────────────────────────────────────────
+
+def _fast_spearmanr(x: np.ndarray, y: np.ndarray) -> float:
+    """Spearman r via rankdata + corrcoef — avoids scipy p-value overhead.
+
+    Equivalent to scipy.stats.spearmanr(x, y).statistic but ~10x faster
+    for small arrays because it skips p-value computation and per-call
+    input validation.
+
+    Args:
+        x: First array.
+        y: Second array, same shape as x.
+
+    Returns:
+        Spearman correlation coefficient in [-1, 1].
+    """
+    return float(np.corrcoef(rankdata(x), rankdata(y))[0, 1])
 
 
 # ── MST cost functions ────────────────────────────────────────────────
@@ -144,12 +163,12 @@ def egg_spearman(
     Computes  cost = 1 − Spearman(eggs_i, eggs_j)  on biweeks where
     both series are non-NaN.  Spearman is monotone-invariant and robust
     to outlier traps, treating the data as ordinal after ranking.
-    Tied ranks are handled by scipy.stats.spearmanr (average method).
+    Tied ranks handled by scipy.stats.rankdata (average method).
 
     Range: [0, 2].  Returns 2.0 in degenerate cases:
       - fewer than `min_overlap` shared non-NaN biweeks
       - constant series (zero rank variance)
-      - spearmanr returns NaN for any other reason
+      - _fast_spearmanr returns NaN for any other reason
 
     Args:
         eggs_i:      IDW egg counts for sector i, shape (n_biweeks,).
@@ -165,7 +184,7 @@ def egg_spearman(
     xi, xj = eggs_i[mask], eggs_j[mask]
     if xi.std() < 1e-12 or xj.std() < 1e-12:
         return 2.0
-    r = float(spearmanr(xi, xj).statistic)
+    r = _fast_spearmanr(xi, xj)
     return 2.0 if np.isnan(r) else float(1.0 - r)
 
 
@@ -196,7 +215,7 @@ def case_spearman(
     xi, xj = cases_i[mask], cases_j[mask]
     if xi.std() < 1e-12 or xj.std() < 1e-12:
         return 2.0
-    r = float(spearmanr(xi, xj).statistic)
+    r = _fast_spearmanr(xi, xj)
     return 2.0 if np.isnan(r) else float(1.0 - r)
 
 
@@ -300,7 +319,7 @@ def best_lag_corr(
         n_min:      Minimum valid (eggs, dengue) pairs required across all
                     years before a lag is accepted.
         method:     Correlation method — 'pearson' (default) uses np.corrcoef;
-                    'spearman' uses scipy.stats.spearmanr for rank-based r.
+                    'spearman' uses _fast_spearmanr (rankdata + corrcoef).
 
     Returns:
         (best_r, best_k, n_valid_pairs):
@@ -352,7 +371,7 @@ def best_lag_corr(
 
         # ── Compute correlation by chosen method ──────────────────────
         if method == "spearman":
-            r = float(spearmanr(ae[valid], ad[valid]).statistic)
+            r = _fast_spearmanr(ae[valid], ad[valid])
         else:
             r = float(np.corrcoef(ae[valid], ad[valid])[0, 1])
 
