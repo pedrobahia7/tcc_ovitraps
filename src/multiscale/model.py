@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from scipy.stats import spearmanr
 from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
@@ -90,21 +91,31 @@ def naive_prediction(df: pd.DataFrame) -> np.ndarray:
 
 
 def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
-    """Compute RMSE, MAE, R² and MAPE for one prediction set.
+    """Compute RMSE, MAE, R², MAPE and Spearman r for one prediction set.
 
     Args:
         y_true: Observed EB rates.
         y_pred: Predicted EB rates.
 
     Returns:
-        Dict with keys rmse, mae, r2, mape.  All-NaN-safe only for
-        non-empty inputs; caller guarantees len >= 1.
+        Dict with keys rmse, mae, r2, mape, spearman.  r2 and spearman
+        are NaN when len(y_true) < 2 or either array is constant (no
+        rank variation to correlate).
     """
+    can_correlate = (
+        len(y_true) > 1
+        and np.std(y_true) > 0
+        and np.std(y_pred) > 0
+    )
     return {
         "rmse": float(np.sqrt(mean_squared_error(y_true, y_pred))),
         "mae": float(mean_absolute_error(y_true, y_pred)),
         "r2": float(r2_score(y_true, y_pred)) if len(y_true) > 1 else float("nan"),
         "mape": float(
             np.mean(np.abs((y_true - y_pred) / (y_true + 1e-8))) * 100
+        ),
+        "spearman": (
+            float(spearmanr(y_true, y_pred).statistic)
+            if can_correlate else float("nan")
         ),
     }

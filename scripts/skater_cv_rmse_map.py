@@ -2,28 +2,36 @@
 
 dashboard_rmse_map.html
   Choropleth map of BH census sectors coloured by held-out MLP RMSE of
-  the region (SKATER cluster) each sector belongs to, with ovitrap
-  locations shown as fixed black dots.  A dropdown selects which
-  leave-one-epidemic-year-out fold to inspect (each fold has its own
-  SKATER partition — geometry differs across folds even at the same
-  C); a slider then sweeps that fold's available C values.  Colour
-  scale (RMSE) is fixed globally across every fold/C combination so
-  shades are directly comparable.
+  the region (SKATER cluster) each sector belongs to.  A dropdown
+  selects which leave-one-epidemic-year-out fold to inspect (each fold
+  has its own SKATER partition — geometry differs across folds even at
+  the same C); a slider then sweeps that fold's available C values.
+  Colour scale (RMSE) is fixed globally across every fold/C combination
+  so shades are directly comparable.  Clicking a sector shows that
+  region's predicted-vs-actual EB rate over the held-out epidemic year
+  (small matplotlib PNG, pre-rendered — keeps the interactive Plotly
+  side lightweight) in a side panel.
 
 Inputs:
   results/multiscale/partitions/fold_<year>/cluster_assignments.csv
   results/multiscale/skater_cv/metrics_skater.csv
+  results/multiscale/skater_cv/predictions.csv
   data/dvc/process_population_data/bh_sectors_2022_with_populations.geojson
-  data/processed/ovitraps_data.csv
 Outputs:
   results/multiscale/skater_cv/rmse_map.html
 """
 from __future__ import annotations
 
+import base64
+import io
 import json
 import logging
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -33,11 +41,11 @@ logger = logging.getLogger(__name__)
 # ── File paths ────────────────────────────────────────────────────────
 PARTITIONS_BASE = Path("results/multiscale/partitions")
 METRICS_PATH = Path("results/multiscale/skater_cv/metrics_skater.csv")
+PREDICTIONS_PATH = Path("results/multiscale/skater_cv/predictions.csv")
 GEOJSON_PATH = Path(
     "data/dvc/process_population_data/"
     "bh_sectors_2022_with_populations.geojson"
 )
-OVITRAP_PATH = Path("data/processed/ovitraps_data.csv")
 OUT_PATH = Path("results/multiscale/skater_cv/rmse_map.html")
 BH_CENTER = {"lat": -19.917, "lon": -43.934}
 
@@ -48,20 +56,6 @@ def _load_geojson() -> dict:
     """Load the BH census sector GeoJSON FeatureCollection."""
     with open(GEOJSON_PATH) as fh:
         return json.load(fh)
-
-
-def _load_ovitrap_locations() -> pd.DataFrame:
-    """Load unique ovitrap deployment coordinates.
-
-    Returns:
-        DataFrame [idarmad, latitude, longitude] — one row per trap.
-    """
-    df = pd.read_csv(
-        OVITRAP_PATH,
-        usecols=["idarmad", "latitude", "longitude"],
-        low_memory=False,
-    )
-    return df.drop_duplicates("idarmad").reset_index(drop=True)
 
 
 def _load_metrics() -> pd.DataFrame:
@@ -81,6 +75,23 @@ def _load_metrics() -> pd.DataFrame:
     return df
 
 
+def _load_predictions() -> pd.DataFrame:
+    """Load raw held-out predictions with cluster_id parsed out.
+
+    Returns:
+        predictions.csv rows [unit, fold_year, C, biweek, y_true, y_pred]
+        plus an added integer `cluster_id` column (see `_load_metrics`).
+    """
+    df = pd.read_csv(PREDICTIONS_PATH)
+    df["cluster_id"] = df["unit"].str.split("__c").str[1].astype(int)
+    return df
+
+
+def _image_key(fold_year: str, c_value: int, cluster_id: int) -> str:
+    """Build the lookup key shared by customdata and the IMAGES map."""
+    return f"{fold_year}|{c_value}|{cluster_id}"
+
+
 def _load_fold_assignments(fold_year: str) -> pd.DataFrame:
     """Load one fold's sector → cluster_id assignments, all C values.
 
@@ -94,36 +105,106 @@ def _load_fold_assignments(fold_year: str) -> pd.DataFrame:
     return pd.read_csv(path, dtype={"sector_id": str})
 
 
+# ── Predict-vs-target panel images ──────────────────────────────────────
+
+def _render_prediction_png(group: pd.DataFrame, title: str) -> str:
+    """Render one region-fold's actual-vs-predicted time series as a PNG.
+
+    Uses matplotlib (not Plotly) so the image is a small raster blob
+    instead of another interactive trace — keeps the ~30-region panel
+    gallery from bloating the already-large map HTML.
+
+    Args:
+        group: Rows for one (fold, C, cluster) [biweek, y_true, y_pred],
+               any order.
+        title: Short title drawn above the plot.
+
+    Returns:
+        A `data:image/png;base64,...` URI string.
+    """
+    sub = group.sort_values("biweek")
+    fig, ax = plt.subplots(figsize=(4.2, 2.3), dpi=90)
+    ax.plot(sub["biweek"], sub["y_true"], label="actual", linewidth=1.5)
+    ax.plot(
+        sub["biweek"], sub["y_pred"], label="predicted",
+        linewidth=1.5, linestyle="--",
+    )
+    ax.set_title(title, fontsize=9)
+    ax.set_ylabel("EB rate", fontsize=8)
+    ax.tick_params(axis="both", labelsize=6)
+    ax.set_xticks(ax.get_xticks()[::max(1, len(sub) // 6)])
+    ax.tick_params(axis="x", rotation=45)
+    ax.legend(fontsize=7, loc="upper right")
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    plt.close(fig)
+    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _build_prediction_images(predictions: pd.DataFrame) -> dict[str, str]:
+    """Pre-render every (fold, C, cluster) predict-vs-target PNG.
+
+    Args:
+        predictions: Output of `_load_predictions` — [unit, fold_year, C,
+                     cluster_id, biweek, y_true, y_pred].
+
+    Returns:
+        Mapping `_image_key(fold_year, C, cluster_id)` → PNG data URI.
+    """
+    images: dict[str, str] = {}
+    for (fold_year, c_value, cid), group in predictions.groupby(
+        ["fold_year", "C", "cluster_id"]
+    ):
+        title = f"{fold_year} — C={c_value} — cluster {cid}"
+        images[_image_key(fold_year, c_value, cid)] = _render_prediction_png(
+            group, title
+        )
+    logger.info("Rendered %d predict-vs-target PNGs", len(images))
+    return images
+
+
 # ── Per-(fold, C) frame construction ────────────────────────────────────
 
 def _frame_for_c(
+    fold_year: str,
+    c_value: int,
     asgn_c: pd.DataFrame,
     metrics_c: pd.DataFrame,
     sector_order: list[str],
-) -> tuple[list[float], list[str]]:
-    """Build the RMSE z-array and hover text for one (fold, C) frame.
+) -> tuple[list[float], list[str], list[str]]:
+    """Build the RMSE z-array, hover text and click keys for one frame.
 
     Args:
+        fold_year:    e.g. '2015_16' — used to build the click image key.
+        c_value:      Number of clusters in this frame.
         asgn_c:       Assignments filtered to one C [sector_id, cluster_id].
         metrics_c:    Metrics filtered to the same fold and C
-                      [cluster_id, mlp_rmse, mlp_mae, mlp_r2, naive_rmse,
-                      n_sectors, pop].
+                      [cluster_id, mlp_rmse, mlp_mae, mlp_r2, mlp_spearman,
+                      naive_rmse, n_sectors, pop].
         sector_order: Sector IDs in the order GeoJSON features appear.
 
     Returns:
-        z:    RMSE per sector, aligned to sector_order.
-        text: Hover text per sector, aligned to sector_order.
+        z:          RMSE per sector, aligned to sector_order.
+        text:       Hover text per sector, aligned to sector_order.
+        customdata: Predict-vs-target image key per sector ("" if no
+                    data), aligned to sector_order — read by the click
+                    handler to look up the panel PNG.
     """
     cluster_of = asgn_c.set_index("sector_id")["cluster_id"]
     stats = metrics_c.set_index("cluster_id")
 
     z: list[float] = []
     text: list[str] = []
+    customdata: list[str] = []
     for sector_id in sector_order:
         cid = int(cluster_of.get(sector_id, -1))
         if cid not in stats.index:
             z.append(float("nan"))
             text.append(f"<b>{sector_id}</b><br>no data")
+            customdata.append("")
             continue
         row = stats.loc[cid]
         z.append(float(row["mlp_rmse"]))
@@ -133,11 +214,14 @@ def _frame_for_c(
             f"RMSE={row['mlp_rmse']:.3f}<br>"
             f"MAE={row['mlp_mae']:.3f}<br>"
             f"R²={row['mlp_r2']:.3f}<br>"
+            f"Spearman r={row['mlp_spearman']:.3f}<br>"
             f"naive RMSE={row['naive_rmse']:.3f}<br>"
             f"sectors={int(row['n_sectors'])}<br>"
-            f"pop={row['pop']:.0f}"
+            f"pop={row['pop']:.0f}<br>"
+            f"<i>click for predict-vs-actual</i>"
         )
-    return z, text
+        customdata.append(_image_key(fold_year, c_value, cid))
+    return z, text, customdata
 
 
 # ── Figure assembly ──────────────────────────────────────────────────
@@ -145,7 +229,6 @@ def _frame_for_c(
 def build_figure(
     metrics: pd.DataFrame,
     geojson: dict,
-    ovitrap_locs: pd.DataFrame,
 ) -> go.Figure:
     """Build the fold-dropdown + C-slider RMSE choropleth figure.
 
@@ -157,9 +240,8 @@ def build_figure(
     across every fold/C combination.
 
     Args:
-        metrics:      Full metrics_skater.csv + parsed cluster_id.
-        geojson:      GeoJSON FeatureCollection for BH sectors.
-        ovitrap_locs: Unique ovitrap locations [idarmad, latitude, longitude].
+        metrics: Full metrics_skater.csv + parsed cluster_id.
+        geojson: GeoJSON FeatureCollection for BH sectors.
 
     Returns:
         go.Figure ready to write as standalone HTML.
@@ -173,7 +255,7 @@ def build_figure(
 
     # ── Precompute every (fold, C) frame ───────────────────────────────
     fold_c_values: dict[str, list[int]] = {}
-    frames: dict[tuple[str, int], tuple[list[float], list[str]]] = {}
+    frames: dict[tuple[str, int], tuple[list[float], list[str], list[str]]] = {}
     for fold_year in folds:
         asgn = _load_fold_assignments(fold_year)
         fold_metrics = metrics[metrics["fold_year"] == fold_year]
@@ -183,12 +265,12 @@ def build_figure(
             asgn_c = asgn[asgn["C"] == c_value]
             metrics_c = fold_metrics[fold_metrics["C"] == c_value]
             frames[(fold_year, c_value)] = _frame_for_c(
-                asgn_c, metrics_c, sector_order
+                fold_year, c_value, asgn_c, metrics_c, sector_order
             )
 
     fold0 = folds[0]
     c0 = fold_c_values[fold0][0]
-    z0, text0 = frames[(fold0, c0)]
+    z0, text0, customdata0 = frames[(fold0, c0)]
 
     # ── Fixed map traces ──────────────────────────────────────────────
     choro = go.Choroplethmap(
@@ -196,6 +278,7 @@ def build_figure(
         locations=sector_order,
         z=z0,
         text=text0,
+        customdata=customdata0,
         hovertemplate="%{text}<extra></extra>",
         featureidkey="properties.CD_SETOR",
         colorscale="RdYlGn_r",
@@ -208,30 +291,18 @@ def build_figure(
         name="RMSE",
     )
 
-    scatter_traps = go.Scattermap(
-        lat=ovitrap_locs["latitude"],
-        lon=ovitrap_locs["longitude"],
-        mode="markers",
-        marker={"size": 4, "color": "black", "opacity": 0.7},
-        name="Ovitraps",
-        customdata=ovitrap_locs["idarmad"],
-        hovertemplate=(
-            "Ovitrap %{customdata}<br>"
-            "lat=%{lat:.4f}, lon=%{lon:.4f}"
-            "<extra></extra>"
-        ),
-        showlegend=True,
-    )
-
     # ── One slider per fold, only the active fold's slider visible ────
     def _slider_for_fold(fold_year: str, visible: bool) -> dict:
         steps = []
         for c_value in fold_c_values[fold_year]:
-            z, text = frames[(fold_year, c_value)]
+            z, text, customdata = frames[(fold_year, c_value)]
             steps.append({
                 "label": str(c_value),
                 "method": "restyle",
-                "args": [{"z": [z], "text": [text]}, [0]],
+                "args": [
+                    {"z": [z], "text": [text], "customdata": [customdata]},
+                    [0],
+                ],
             })
         return {
             "active": 0,
@@ -262,17 +333,21 @@ def build_figure(
     buttons = []
     for i, fold_year in enumerate(folds):
         c_first = fold_c_values[fold_year][0]
-        z, text = frames[(fold_year, c_first)]
+        z, text, customdata = frames[(fold_year, c_first)]
         layout_upd = {
             f"sliders[{j}].visible": (j == i) for j in range(len(folds))
         }
         buttons.append({
             "label": fold_year,
             "method": "update",
-            "args": [{"z": [z], "text": [text]}, layout_upd, [0]],
+            "args": [
+                {"z": [z], "text": [text], "customdata": [customdata]},
+                layout_upd,
+                [0],
+            ],
         })
 
-    fig = go.Figure(data=[choro, scatter_traps])
+    fig = go.Figure(data=[choro])
     fig.update_layout(
         map={
             "style": "open-street-map",
@@ -296,24 +371,101 @@ def build_figure(
             "text": f"SKATER-CV — held-out region RMSE — {fold0}, C={c0}",
             "x": 0.5,
         },
-        legend={"x": 0.01, "y": 0.99, "xanchor": "left", "yanchor": "top"},
     )
     return fig
+
+
+# ── Page assembly ─────────────────────────────────────────────────────
+
+_CLICK_JS = """
+<script>
+const mapDiv = document.getElementById('rmse-map');
+const panelImg = document.getElementById('predict-img');
+const panelCaption = document.getElementById('predict-caption');
+mapDiv.on('plotly_click', function(evt) {
+  const pt = evt.points[0];
+  // Choroplethmap click events don't reliably echo a restyled
+  // `customdata` in evt.points[].customdata (stale after slider/dropdown
+  // restyles even though the map colour/hover — driven by the same
+  // restyle — updates correctly). Read the live trace data instead,
+  // which restyle always keeps in sync.
+  const liveCustomdata = mapDiv.data && mapDiv.data[0] &&
+    mapDiv.data[0].customdata;
+  const key = pt && liveCustomdata && liveCustomdata[pt.pointIndex];
+  if (!key || !(key in IMAGES)) {
+    panelCaption.textContent = 'No prediction data for this sector.';
+    panelImg.style.display = 'none';
+    return;
+  }
+  const [foldYear, cValue, cluster] = key.split('|');
+  panelImg.src = IMAGES[key];
+  panelImg.style.display = 'block';
+  panelCaption.textContent =
+    `Fold ${foldYear} — C=${cValue} — cluster ${cluster}`;
+});
+</script>
+"""
+
+
+def _assemble_page(fig: go.Figure, images: dict[str, str]) -> str:
+    """Wrap the map figure with a click-driven predict-vs-target panel.
+
+    Args:
+        fig:    The RMSE choropleth figure from build_figure().
+        images: `_image_key(...)` → PNG data URI, from
+                _build_prediction_images().
+
+    Returns:
+        Full standalone HTML page.
+    """
+    map_html = fig.to_html(
+        full_html=False, include_plotlyjs="cdn", div_id="rmse-map"
+    )
+    images_json = json.dumps(images)
+
+    return "\n".join([
+        "<!DOCTYPE html><html>",
+        "<head><meta charset='utf-8'>",
+        "<title>SKATER-CV RMSE map</title>",
+        "<style>",
+        "body{font-family:sans-serif;margin:0;padding:12px}",
+        ".layout{display:flex;gap:16px;align-items:flex-start}",
+        "#map-col{flex:3;min-width:0}",
+        "#panel-col{flex:1;min-width:280px;position:sticky;top:12px;"
+        "border:1px solid #ccc;border-radius:6px;padding:10px}",
+        "#predict-img{max-width:100%;display:none}",
+        "#predict-caption{font-size:13px;color:#333;margin-top:6px}",
+        "</style>",
+        "</head><body>",
+        "<div class='layout'>",
+        f"<div id='map-col'>{map_html}</div>",
+        "<div id='panel-col'>",
+        "<h3>Predict vs actual</h3>",
+        "<p id='predict-caption'>Click a sector on the map.</p>",
+        "<img id='predict-img'>",
+        "</div>",
+        "</div>",
+        f"<script>const IMAGES = {images_json};</script>",
+        _CLICK_JS,
+        "</body></html>",
+    ])
 
 
 # ── Entry point ─────────────────────────────────────────────────────
 
 def main() -> None:
     """Build and write the SKATER-CV RMSE choropleth HTML."""
-    logger.info("Loading metrics, geojson, ovitrap locations")
+    logger.info("Loading metrics, geojson, predictions")
     metrics = _load_metrics()
     geojson = _load_geojson()
-    ovitrap_locs = _load_ovitrap_locations()
+    predictions = _load_predictions()
 
-    fig = build_figure(metrics, geojson, ovitrap_locs)
+    fig = build_figure(metrics, geojson)
+    images = _build_prediction_images(predictions)
+    page = _assemble_page(fig, images)
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    fig.write_html(OUT_PATH)
+    OUT_PATH.write_text(page, encoding="utf-8")
     logger.info("RMSE map → %s", OUT_PATH)
 
 

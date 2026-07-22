@@ -16,8 +16,11 @@ Inputs (results/multiscale/partitions/fold_<year>/):
   cluster_assignments.csv, fold_meta.json, stop_info.json
 Outputs (results/multiscale/skater_cv/):
   metrics_skater.csv — per-(fold, C, region) test metrics + naive.
-  skater_by_c.csv    — population-weighted mean test RMSE per C.
+  skater_by_c.csv    — population-weighted mean test RMSE/Spearman per C.
   folds_stop_info.csv — SKATER termination reason / final C per fold.
+  predictions.csv    — raw [unit, fold_year, C, biweek, y_true, y_pred]
+    rows for every region-fold, used to render the predict-vs-target
+    panel in scripts/skater_cv_rmse_map.py.
 """
 from __future__ import annotations
 
@@ -39,14 +42,15 @@ _OUT_DIR = Path("results/multiscale/skater_cv")
 
 
 def _per_c_summary(records: pd.DataFrame) -> pd.DataFrame:
-    """Population-weighted mean test RMSE per C, pooled across folds.
+    """Population-weighted mean test RMSE/Spearman per C, pooled across folds.
 
     Args:
-        records: metrics_skater rows (must contain C, pop, *_rmse).
+        records: metrics_skater rows (must contain C, pop, *_rmse,
+            mlp_spearman).
 
     Returns:
         DataFrame [C, n_regions, n_folds, pop_wt_rmse, naive_pop_wt_rmse,
-        mean_r2] sorted by C.
+        mean_r2, pop_wt_spearman] sorted by C.
     """
     rows = []
     for c_value, cdf in records.groupby("C"):
@@ -61,6 +65,9 @@ def _per_c_summary(records: pd.DataFrame) -> pd.DataFrame:
                     np.average(cdf["naive_rmse"], weights=w)
                 ),
                 "mean_r2": float(cdf["mlp_r2"].mean()),
+                "pop_wt_spearman": float(
+                    np.average(cdf["mlp_spearman"], weights=w)
+                ),
             }
         )
     return pd.DataFrame(rows).sort_values("C").reset_index(drop=True)
@@ -92,6 +99,7 @@ def main() -> None:
     _OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     all_records: list[dict] = []
+    all_predictions: list[pd.DataFrame] = []
     stop_rows: list[dict] = []
 
     for fold_dir in fold_dirs:
@@ -117,7 +125,7 @@ def main() -> None:
         for c_value, cdf in asg.groupby("C"):
             for cid, gg in cdf.groupby("cluster_id"):
                 members = gg["sector_id"].tolist()
-                rec = evaluate_unit_fold(
+                rec, pred_df = evaluate_unit_fold(
                     unit_key=f"C{c_value}__c{cid}",
                     members=members,
                     data=data,
@@ -125,9 +133,11 @@ def main() -> None:
                     fold_years=cv_cfg.fold_years,
                     test_year=test_year,
                     extra={"C": int(c_value)},
+                    return_predictions=True,
                 )
                 if rec is not None:
                     all_records.append(rec)
+                    all_predictions.append(pred_df)
         logger.info(
             "  fold %s: %d region records so far", test_year, len(all_records)
         )
@@ -140,6 +150,10 @@ def main() -> None:
     pd.DataFrame(stop_rows).to_csv(
         _OUT_DIR / "folds_stop_info.csv", index=False
     )
+
+    predictions = pd.concat(all_predictions, ignore_index=True)
+    predictions.to_csv(_OUT_DIR / "predictions.csv", index=False)
+    logger.info("Saved predictions.csv (%d rows)", len(predictions))
 
     by_c = _per_c_summary(records)
     by_c.to_csv(_OUT_DIR / "skater_by_c.csv", index=False)

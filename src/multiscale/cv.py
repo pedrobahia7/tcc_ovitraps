@@ -39,7 +39,7 @@ def _fit_eval_fold(
     test_year: str,
     cfg: MultiscaleConfig,
     base_record: dict,
-) -> dict | None:
+) -> tuple[dict, pd.DataFrame] | None:
     """Train on non-test fold years, evaluate on the held-out year.
 
     Args:
@@ -50,7 +50,9 @@ def _fit_eval_fold(
                      are copied into the returned record.
 
     Returns:
-        A metric record dict, or None if train/test rows are too few.
+        (record, predictions) — record is the metric dict; predictions
+        is a [biweek, y_true, y_pred] DataFrame of the held-out year's
+        raw MLP predictions. None if train/test rows are too few.
     """
     train_df = feats[feats["year"] != test_year]
     test_df = feats[feats["year"] == test_year]
@@ -64,7 +66,7 @@ def _fit_eval_fold(
 
     mlp_m = compute_metrics(y_true, y_mlp)
     naive_m = compute_metrics(y_true, y_naive)
-    return {
+    record = {
         **base_record,
         "fold_year": test_year,
         "n_train": len(train_df),
@@ -73,9 +75,16 @@ def _fit_eval_fold(
         "mlp_mae": mlp_m["mae"],
         "mlp_r2": mlp_m["r2"],
         "mlp_mape": mlp_m["mape"],
+        "mlp_spearman": mlp_m["spearman"],
         "naive_rmse": naive_m["rmse"],
         "naive_mae": naive_m["mae"],
     }
+    predictions = pd.DataFrame({
+        "biweek": test_df["biweek"].to_numpy(),
+        "y_true": y_true,
+        "y_pred": y_mlp,
+    })
+    return record, predictions
 
 
 def _unit_feats(
@@ -118,11 +127,11 @@ def evaluate_unit(
     unit_pop = float(data.pop[[data.idx[s] for s in members]].sum())
     base = {"scale": scale, "unit": unit_key, "n_sectors": len(members),
             "pop": unit_pop}
-    records = [
-        rec
-        for test_year in fold_years
-        if (rec := _fit_eval_fold(feats, test_year, cfg, base)) is not None
-    ]
+    records = []
+    for test_year in fold_years:
+        result = _fit_eval_fold(feats, test_year, cfg, base)
+        if result is not None:
+            records.append(result[0])
     return records
 
 
@@ -134,7 +143,8 @@ def evaluate_unit_fold(
     fold_years: list[str],
     test_year: str,
     extra: dict | None = None,
-) -> dict | None:
+    return_predictions: bool = False,
+) -> dict | None | tuple[dict | None, pd.DataFrame | None]:
     """Evaluate one unit for a single, pre-determined held-out year.
 
     Used by the SKATER-CV stage, where the partition is learned per fold
@@ -149,17 +159,34 @@ def evaluate_unit_fold(
                     test_year).
         test_year:  The single held-out epidemic year for this partition.
         extra:      Optional extra fields merged into the record (e.g. C).
+        return_predictions: If True, also return the held-out year's raw
+                    [unit, fold_year, C, biweek, y_true, y_pred] rows
+                    (`extra` fields are merged into every row) — used to
+                    render the predict-vs-target panel on the RMSE map.
 
     Returns:
-        A metric record dict, or None if unusable.
+        The metric record dict (or None if unusable). If
+        return_predictions is True, returns (record, predictions)
+        instead, with predictions=None when record is None.
     """
     feats = _unit_feats(members, data, cfg, fold_years)
     if feats.empty:
-        return None
+        return (None, None) if return_predictions else None
+
     unit_pop = float(data.pop[[data.idx[s] for s in members]].sum())
     base = {"scale": "skater", "unit": unit_key, "n_sectors": len(members),
             "pop": unit_pop, **(extra or {})}
-    return _fit_eval_fold(feats, test_year, cfg, base)
+    result = _fit_eval_fold(feats, test_year, cfg, base)
+    if result is None:
+        return (None, None) if return_predictions else None
+
+    record, predictions = result
+    if not return_predictions:
+        return record
+    predictions = predictions.assign(
+        unit=unit_key, fold_year=test_year, **(extra or {})
+    )
+    return record, predictions
 
 
 def run_scale(
@@ -206,15 +233,16 @@ def run_scale(
 def pop_weighted_summary(records: pd.DataFrame) -> pd.DataFrame:
     """Collapse per-unit-per-fold records to per-scale summary rows.
 
-    Computes population-weighted mean test RMSE across units per fold,
-    then averages over folds, for both the MLP and the naive baseline.
+    Computes population-weighted mean test RMSE and Spearman r across
+    units per fold, then averages over folds, for both the MLP and the
+    naive baseline (naive has no Spearman column).
 
     Args:
         records: Output of run_scale (or a concat across scales).
 
     Returns:
         DataFrame [scale, n_units, mean_n_sectors, pop_wt_rmse,
-        naive_pop_wt_rmse, mean_r2] — one row per scale.
+        naive_pop_wt_rmse, mean_r2, pop_wt_spearman] — one row per scale.
     """
     if records.empty:
         return pd.DataFrame()
@@ -226,11 +254,12 @@ def pop_weighted_summary(records: pd.DataFrame) -> pd.DataFrame:
 
     out = []
     for scale, sdf in records.groupby("scale"):
-        # Per fold: population-weighted mean RMSE across units
-        per_fold_mlp, per_fold_naive = [], []
+        # Per fold: population-weighted mean RMSE/Spearman across units
+        per_fold_mlp, per_fold_naive, per_fold_spearman = [], [], []
         for _, fdf in sdf.groupby("fold_year"):
             per_fold_mlp.append(_wmean(fdf, "mlp_rmse"))
             per_fold_naive.append(_wmean(fdf, "naive_rmse"))
+            per_fold_spearman.append(_wmean(fdf, "mlp_spearman"))
         out.append(
             {
                 "scale": scale,
@@ -239,6 +268,7 @@ def pop_weighted_summary(records: pd.DataFrame) -> pd.DataFrame:
                 "pop_wt_rmse": float(np.mean(per_fold_mlp)),
                 "naive_pop_wt_rmse": float(np.mean(per_fold_naive)),
                 "mean_r2": float(sdf["mlp_r2"].mean()),
+                "pop_wt_spearman": float(np.mean(per_fold_spearman)),
             }
         )
     return pd.DataFrame(out)
