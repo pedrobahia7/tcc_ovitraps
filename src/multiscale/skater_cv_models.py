@@ -12,9 +12,14 @@ recomputing any SKATER partition.
 
 Run:  python -m src.multiscale.skater_cv_models
 
-Inputs (results/multiscale/partitions/fold_<year>/):
+Both the input partitions and this stage's own outputs are namespaced
+by params.yaml[skater].run_label — same convention as the all-years
+`skater` stage — so sweeping S_min (or any other skater param) across
+multiple run_labels keeps every sweep's results on disk side by side.
+
+Inputs (results/multiscale/partitions/<run_label>/fold_<year>/):
   cluster_assignments.csv, fold_meta.json, stop_info.json
-Outputs (results/multiscale/skater_cv/):
+Outputs (results/multiscale/skater_cv/<run_label>/):
   metrics_skater.csv — per-(fold, C, region) test metrics + naive.
   skater_by_c.csv    — population-weighted mean test RMSE/Spearman per C.
   folds_stop_info.csv — SKATER termination reason / final C per fold.
@@ -32,13 +37,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.skater.config import load_config as load_skater_config
+
 from .aggregate import load_sector_data
 from .config import load_multiscale_config, load_skater_cv_config
 from .cv import evaluate_unit_fold
 
 logger = logging.getLogger(__name__)
 _PART_BASE = Path("results/multiscale/partitions")
-_OUT_DIR = Path("results/multiscale/skater_cv")
+_OUT_BASE = Path("results/multiscale/skater_cv")
 
 
 def _per_c_summary(records: pd.DataFrame) -> pd.DataFrame:
@@ -73,9 +80,9 @@ def _per_c_summary(records: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("C").reset_index(drop=True)
 
 
-def _fold_dirs() -> list[Path]:
+def _fold_dirs(part_dir: Path) -> list[Path]:
     """Return the per-fold partition directories, sorted by name."""
-    return sorted(p for p in _PART_BASE.glob("fold_*") if p.is_dir())
+    return sorted(p for p in part_dir.glob("fold_*") if p.is_dir())
 
 
 def main() -> None:
@@ -85,18 +92,21 @@ def main() -> None:
     )
     cfg = load_multiscale_config()
     cv_cfg = load_skater_cv_config()
+    run_label = load_skater_config().run_label
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
 
-    fold_dirs = _fold_dirs()
+    part_dir = _PART_BASE / run_label
+    out_dir = _OUT_BASE / run_label
+    fold_dirs = _fold_dirs(part_dir)
     if not fold_dirs:
         raise FileNotFoundError(
-            f"No fold partitions under {_PART_BASE}. "
+            f"No fold partitions under {part_dir}. "
             "Run `python -m src.multiscale.skater_partitions` first."
         )
 
     data = load_sector_data()
-    _OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     all_records: list[dict] = []
     all_predictions: list[pd.DataFrame] = []
@@ -144,19 +154,19 @@ def main() -> None:
 
     # ── Persist ───────────────────────────────────────────────────────
     records = pd.DataFrame(all_records)
-    records.to_csv(_OUT_DIR / "metrics_skater.csv", index=False)
+    records.to_csv(out_dir / "metrics_skater.csv", index=False)
     logger.info("Saved metrics_skater.csv (%d rows)", len(records))
 
     pd.DataFrame(stop_rows).to_csv(
-        _OUT_DIR / "folds_stop_info.csv", index=False
+        out_dir / "folds_stop_info.csv", index=False
     )
 
     predictions = pd.concat(all_predictions, ignore_index=True)
-    predictions.to_csv(_OUT_DIR / "predictions.csv", index=False)
+    predictions.to_csv(out_dir / "predictions.csv", index=False)
     logger.info("Saved predictions.csv (%d rows)", len(predictions))
 
     by_c = _per_c_summary(records)
-    by_c.to_csv(_OUT_DIR / "skater_by_c.csv", index=False)
+    by_c.to_csv(out_dir / "skater_by_c.csv", index=False)
     logger.info("Saved skater_by_c.csv\n%s", by_c.to_string(index=False))
 
 

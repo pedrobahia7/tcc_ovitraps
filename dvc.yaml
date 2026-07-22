@@ -144,6 +144,7 @@ stages:
   skater_cv_partitions:
     cmd:
       - python -m src.multiscale.skater_partitions
+      - python scripts/skater_cv_concordance_dashboard.py
     params:
       - skater
       - skater_cv
@@ -151,6 +152,7 @@ stages:
       - src/skater/
       - src/multiscale/skater_partitions.py
       - src/multiscale/config.py
+      - scripts/skater_cv_concordance_dashboard.py
       - ${all.paths.data.dvc.add_population_info.dengue_per_capita}
       - ${all.paths.data.dvc.add_population_info.centroids_idw}
       - ${all.paths.data.dvc.process_population_data.sectors_geojson}
@@ -165,6 +167,7 @@ stages:
       - python -m src.multiscale.skater_cv_models
       - python scripts/multiscale_dashboard.py
     params:
+      - skater
       - multiscale
       - skater_cv
     deps:
@@ -177,8 +180,4 @@ stages:
       - ${all.paths.data.dvc.process_population_data.sectors_geojson}
     outs:
       - results/multiscale/skater_cv/:
-          persist: true
-      - results/multiscale/summary.csv:
-          persist: true
-      - results/multiscale/multiscale_tradeoff.html:
           persist: true

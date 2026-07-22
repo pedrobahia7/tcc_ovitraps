@@ -7,12 +7,19 @@ spatial units (log axis), with the SKATER curve over C spanning the
 region between the coarse (city) and fine (sector) administrative
 baselines.
 
+The SKATER-CV side is namespaced by params.yaml[skater].run_label —
+same convention as the all-years `skater` stage — so this always
+renders whichever run is currently configured (e.g. one S_min value of
+a sweep). Baselines (city/district/sector) don't depend on SKATER at
+all, so they stay at a single flat location.
+
 Inputs:
   results/multiscale/baselines/summary_baselines.csv
-  results/multiscale/skater_cv/skater_by_c.csv
+  results/multiscale/skater_cv/<run_label>/skater_by_c.csv
 Outputs:
-  results/multiscale/summary.csv           — master per-scale/per-C table.
-  results/multiscale/multiscale_tradeoff.html — interactive figure.
+  results/multiscale/skater_cv/<run_label>/summary.csv — master
+    per-scale/per-C table.
+  results/multiscale/skater_cv/<run_label>/multiscale_tradeoff.html
 """
 from __future__ import annotations
 
@@ -21,15 +28,21 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
+import yaml
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 _BASE = Path("results/multiscale")
 _BASELINES = _BASE / "baselines" / "summary_baselines.csv"
-_SKATER = _BASE / "skater_cv" / "skater_by_c.csv"
-_SUMMARY_OUT = _BASE / "summary.csv"
-_HTML_OUT = _BASE / "multiscale_tradeoff.html"
+
+
+def _load_run_label() -> str:
+    """Read params.yaml[skater].run_label — same source as the all-years
+    dashboard, so this script always targets the currently configured run.
+    """
+    with open("params.yaml") as fh:
+        return yaml.safe_load(fh)["skater"]["run_label"]
 
 # Number of spatial units per fixed baseline scale (x-axis position).
 _BASELINE_X = {"city": 1, "district": 9}
@@ -137,16 +150,20 @@ def build_figure(master: pd.DataFrame) -> go.Figure:
 
 def main() -> None:
     """Build the master summary CSV and the trade-off dashboard."""
+    cv_dir = _BASE / "skater_cv" / _load_run_label()
+    summary_out = cv_dir / "summary.csv"
+    html_out = cv_dir / "multiscale_tradeoff.html"
+
     baselines = pd.read_csv(_BASELINES)
-    skater = pd.read_csv(_SKATER)
+    skater = pd.read_csv(cv_dir / "skater_by_c.csv")
 
     master = build_master_summary(baselines, skater)
-    master.to_csv(_SUMMARY_OUT, index=False)
-    logger.info("Saved %s\n%s", _SUMMARY_OUT, master.to_string(index=False))
+    master.to_csv(summary_out, index=False)
+    logger.info("Saved %s\n%s", summary_out, master.to_string(index=False))
 
     fig = build_figure(master)
-    fig.write_html(str(_HTML_OUT))
-    logger.info("Saved %s", _HTML_OUT)
+    fig.write_html(str(html_out))
+    logger.info("Saved %s", html_out)
 
 
 if __name__ == "__main__":

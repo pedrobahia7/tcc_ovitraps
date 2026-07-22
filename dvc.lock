@@ -760,6 +760,7 @@ stages:
   skater_cv_partitions:
     cmd:
     - python -m src.multiscale.skater_partitions
+    - python scripts/skater_cv_concordance_dashboard.py
     deps:
     - path: data/dvc/add_population_info/dengue_per_capita.csv
       hash: md5
@@ -774,14 +775,18 @@ stages:
       hash: md5
       md5: 479a5d3f31facc2e3a4127f11a270d08
       size: 10763766
+    - path: scripts/skater_cv_concordance_dashboard.py
+      hash: md5
+      md5: f3a9c645b0feb130f56b1bccca9cab48
+      size: 14921
     - path: src/multiscale/config.py
       hash: md5
       md5: 3a4f1fc4841d3d6b42281f3ce461c1cc
       size: 5797
     - path: src/multiscale/skater_partitions.py
       hash: md5
-      md5: 5132bc6fa20146ad385f9481c5bd0c31
-      size: 4634
+      md5: 3f8b99b8a0495d357de0546ac0a0f31f
+      size: 4953
     - path: src/skater/
       hash: md5
       md5: d71d067264f75eb83b21805b60c78618.dir
@@ -790,7 +795,7 @@ stages:
     params:
       params.yaml:
         skater:
-          run_label: spearman_30
+          run_label: spearman_500
           mst_cost: egg_spearman
           prune_obj: corr_q_spearman
           k_min: 2
@@ -799,7 +804,7 @@ stages:
           stop_local_degradation: true
           global_degradation_threshold: 0
           N_min: 20
-          S_min: 30
+          S_min: 500
           mst_min_overlap: 10
           epidemic_years:
           - '2012_13'
@@ -813,14 +818,14 @@ stages:
           - '2018_19'
           - '2023_24'
           cv_stop_local_degradation: false
-          cv_global_degradation_threshold: 0.0
-          cv_c_max:
+          cv_global_degradation_threshold:
+          cv_c_max: 30
     outs:
     - path: results/multiscale/partitions/
       hash: md5
-      md5: 468134278b1b32afe9cf9961611018b7.dir
-      size: 3510429
-      nfiles: 24
+      md5: 7357b4f9c7bd6a3fe0429b27dd2ae50b.dir
+      size: 57617051
+      nfiles: 154
   skater_cv_models:
     cmd:
     - python -m src.multiscale.skater_cv_models
@@ -841,23 +846,23 @@ stages:
       size: 10763766
     - path: results/multiscale/baselines/
       hash: md5
-      md5: 12b1ab50b51c51ac038d802ce9472dd8.dir
-      size: 2449230
+      md5: 8e67c3e73b0651f4da2b873aba43f389.dir
+      size: 2747823
       nfiles: 4
     - path: results/multiscale/partitions/
       hash: md5
-      md5: 468134278b1b32afe9cf9961611018b7.dir
-      size: 3510429
-      nfiles: 24
+      md5: 7357b4f9c7bd6a3fe0429b27dd2ae50b.dir
+      size: 57617051
+      nfiles: 154
     - path: scripts/multiscale_dashboard.py
       hash: md5
-      md5: 1ed7c788d690043264548a7048dfaccb
-      size: 5230
+      md5: 1a20c92ca58e7faa0d3ad5fb2fa09180
+      size: 5901
     - path: src/multiscale/
       hash: md5
-      md5: dcee1a26522c53b9d9f404197efd9c50.dir
-      size: 103378
-      nfiles: 19
+      md5: 33c23fc1c3ba48d4e04663963b46aa0b.dir
+      size: 156516
+      nfiles: 26
     params:
       params.yaml:
         multiscale:
@@ -874,25 +879,35 @@ stages:
           - 3
           - 4
           seed: 42
+        skater:
+          run_label: spearman_500
+          mst_cost: egg_spearman
+          prune_obj: corr_q_spearman
+          k_min: 2
+          k_max: 6
+          C_max: 30
+          stop_local_degradation: true
+          global_degradation_threshold: 0
+          N_min: 20
+          S_min: 500
+          mst_min_overlap: 10
+          epidemic_years:
+          - '2012_13'
+          - '2015_16'
+          - '2018_19'
+          - '2023_24'
+          seed: 42
         skater_cv:
           fold_years:
           - '2015_16'
           - '2018_19'
           - '2023_24'
           cv_stop_local_degradation: false
-          cv_global_degradation_threshold: 0.0
-          cv_c_max:
+          cv_global_degradation_threshold:
+          cv_c_max: 30
     outs:
-    - path: results/multiscale/multiscale_tradeoff.html
-      hash: md5
-      md5: 95cb58939bba8365ffa4743efbf59daa
-      size: 4851574
     - path: results/multiscale/skater_cv/
       hash: md5
-      md5: 3324fd5427f1a1a1af2b9d02b501736b.dir
-      size: 5438
-      nfiles: 3
-    - path: results/multiscale/summary.csv
-      hash: md5
-      md5: b1b4704402bf17e9ee8e70ed7dd2d1b6
-      size: 601
+      md5: ee78e212c2678fa8e653023b9132b629.dir
+      size: 924135253
+      nfiles: 39

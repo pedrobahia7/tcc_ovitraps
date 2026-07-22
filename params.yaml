@@ -56,12 +56,11 @@ skater_cv:
     - "2023_24"
 
   # Per-fold SKATER stop overrides — override params.yaml[skater] so the
-  #   sole rule is "run until no split improves Q".  Main skater untouched.
-  #   Set cv_global_degradation_threshold: null + cv_c_max: 30 to instead
-  #   force C=2..30 (allowing Q to decrease past its peak).
+  #   sole rule is "run until C=30" (global-degradation early stop
+  #   disabled — Q may decrease past its peak).  Main skater untouched.
   cv_stop_local_degradation: false
-  cv_global_degradation_threshold: 0.0
-  cv_c_max: null
+  cv_global_degradation_threshold: null
+  cv_c_max: 30
 
 multiscale:
   # ── Frozen MLP architecture (model stages only) ─────────────────────

@@ -10,11 +10,15 @@ SKATER.
 
 SKATER strategy parameters (mst_cost, prune_obj, N_min, S_min, seed, …)
 come from params.yaml[skater]; only `epidemic_years` and the stop
-conditions are overridden per fold via params.yaml[skater_cv].
+conditions are overridden per fold via params.yaml[skater_cv].  Outputs
+are namespaced by params.yaml[skater].run_label — same convention as
+the all-years `skater` stage — so sweeping S_min (or any other skater
+param) across multiple run_labels keeps every sweep's results on disk
+side by side instead of overwriting.
 
 Run:  python -m src.multiscale.skater_partitions
 
-Outputs (results/multiscale/partitions/fold_<year>/):
+Outputs (results/multiscale/partitions/<run_label>/fold_<year>/):
   cluster_assignments.csv, q_trajectory.csv, cluster_diagnostics.csv,
   adjacency_edges.csv, mst_edges.csv, run_params.json, stop_info.json,
   fold_meta.json (test_year + train_years).
@@ -114,7 +118,7 @@ def main() -> None:
         skdata = load_data(skcfg)
         mst_matrix = _strict_mst_matrix(skdata, skcfg.mst_cost, test_year)
 
-        out_dir = _OUT_BASE / f"fold_{test_year}"
+        out_dir = _OUT_BASE / base.run_label / f"fold_{test_year}"
         run_pipeline(skcfg, skdata, adjacency, out_dir, mst_matrix)
 
         with open(out_dir / "fold_meta.json", "w") as fh:
@@ -123,7 +127,9 @@ def main() -> None:
                 indent=2,
             )
 
-    logger.info("All fold partitions written under %s", _OUT_BASE)
+    logger.info(
+        "All fold partitions written under %s", _OUT_BASE / base.run_label
+    )
 
 
 if __name__ == "__main__":
