@@ -31,6 +31,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import yaml
 from plotly.subplots import make_subplots
+from scipy.stats import pearsonr, spearmanr
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -433,6 +434,99 @@ def build_combined_figure(
     return fig
 
 
+# ── Size vs metric correlation ────────────────────────────────────────
+
+def _size_metric_correlations(
+    diag: pd.DataFrame, c_values: list[int], n_min: int
+) -> pd.DataFrame:
+    """Compute per-C Pearson/Spearman correlation between n_sectors and q_c.
+
+    Clusters with n_valid_pairs < n_min are excluded — their q_c is
+    force-zeroed by prune.py's data-sparsity guard, not a real measurement,
+    and would bias both coefficients.
+
+    Args:
+        diag:     Cluster diagnostics [C, cluster_id, q_c, n_sectors, n_valid_pairs].
+        c_values: Sorted list of C values present in diag.
+        n_min:    N_min threshold used by the originating run.
+
+    Returns:
+        DataFrame [C, pearson_r, spearman_rho, n_points_used]. Coefficients
+        are NaN when fewer than 2 non-zeroed clusters exist at that C.
+    """
+    records = []
+    for c in c_values:
+        real = diag[(diag["C"] == c) & (diag["n_valid_pairs"] >= n_min)]
+        n_used = len(real)
+        pr = sr = float("nan")
+        if n_used >= 2:
+            x, y = real["n_sectors"].to_numpy(dtype=float), real["q_c"].to_numpy(dtype=float)
+            if x.std() > 1e-12 and y.std() > 1e-12:
+                pr = float(pearsonr(x, y)[0])
+                sr = float(spearmanr(x, y).statistic)
+        records.append({
+            "C": c, "pearson_r": pr, "spearman_rho": sr,
+            "n_points_used": n_used,
+        })
+    return pd.DataFrame(records)
+
+
+def _ols_trend(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Fit a degree-1 OLS line and return its two plottable endpoints.
+
+    Args:
+        x: Predictor values (n_sectors).
+        y: Response values (q_c).
+
+    Returns:
+        (x_line, y_line): two-point arrays spanning [x.min(), x.max()],
+        or empty arrays when fewer than 2 distinct x values exist.
+    """
+    if len(x) < 2 or np.ptp(x) < 1e-12:
+        return np.array([]), np.array([])
+    slope, intercept = np.polyfit(x, y, 1)
+    x_line = np.array([x.min(), x.max()])
+    return x_line, slope * x_line + intercept
+
+
+def _corr_text(stats_by_c: pd.DataFrame, c: int) -> str:
+    """Render the in-plot correlation annotation text for one C.
+
+    Args:
+        stats_by_c: _size_metric_correlations() output, indexed by C.
+        c:          The C value to describe.
+
+    Returns:
+        e.g. "Pearson r=0.312, Spearman ρ=0.341" or a fallback message
+        when too few non-zeroed clusters exist.
+    """
+    if c not in stats_by_c.index or pd.isna(stats_by_c.loc[c, "pearson_r"]):
+        return "not enough non-zeroed clusters for correlation"
+    r = stats_by_c.loc[c]
+    return (
+        f"Pearson r={r['pearson_r']:.3f}, "
+        f"Spearman ρ={r['spearman_rho']:.3f}"
+    )
+
+
+def _size_x_range(c_diag: pd.DataFrame) -> list[float]:
+    """Compute a padded n_sectors x-axis range for one C's clusters.
+
+    Rows 3-4 rescale their x-axis every time C changes (small clusters at
+    high C would otherwise be squeezed into a sliver of a fixed wide axis).
+
+    Args:
+        c_diag: Cluster diagnostics rows for a single C value.
+
+    Returns:
+        [x_min, x_max] with ~10% padding, floored at 0.
+    """
+    x_vals = c_diag["n_sectors"].to_numpy(dtype=float)
+    x_min, x_max = float(x_vals.min()), float(x_vals.max())
+    pad = max((x_max - x_min) * 0.1, 1.0)
+    return [max(0.0, x_min - pad), x_max + pad]
+
+
 # ── View 2: Q trajectory + per-cluster time series ────────────────────
 
 def _agg_cluster_series(
@@ -498,28 +592,44 @@ def build_analysis_figure(
     eggs: pd.DataFrame,
     dengue: pd.DataFrame,
     diag: pd.DataFrame,
+    stats: pd.DataFrame,
+    n_min: int,
     metric_label: str = "",
 ) -> go.Figure:
-    """Build the two-panel analysis figure (Q trajectory + time series).
+    """Build the four-panel analysis figure (Q trajectory + 3 C-synced views).
 
-    All time-series traces are created upfront but start hidden.
-    The dropdown menu shows/hides the subset corresponding to the chosen C.
+    Rows:
+      1. Q-vs-C trajectory — static, always visible.
+      2. Per-cluster eggs/dengue series for the selected C.
+      3. Size (n_sectors) vs metric (q_c) scatter for the selected C, with
+         an OLS trend line and the Pearson/Spearman coefficients in the
+         title. Clusters with n_valid_pairs < n_min (guard-zeroed q_c) are
+         drawn hollow/grey and excluded from both the trend line and the
+         coefficients.
+      4. Cluster-size rug for the selected C — one semi-transparent tick
+         per cluster at its n_sectors value, same grey treatment for
+         guard-zeroed clusters.
 
-    Eggs and dengue are both min-max normalised to [0,1] per cluster so
-    they can be plotted on the same axis.  Eggs = solid line, dengue = dotted.
-    Matching colours link each eggs trace to its dengue counterpart.
+    Rows 2-4 are all driven by a single shared slider so they never show
+    conflicting C values.
 
     Args:
-        traj:   Q-trajectory DataFrame [C, Q].
-        asgn:   Cluster assignments [C, sector_id, cluster_id].
-        eggs:   Raw sector egg series.
-        dengue: Raw sector dengue series.
-        diag:   Per-cluster diagnostics.
+        traj:         Q-trajectory DataFrame [C, Q].
+        asgn:         Cluster assignments [C, sector_id, cluster_id].
+        eggs:         Raw sector egg series.
+        dengue:       Raw sector dengue series.
+        diag:         Per-cluster diagnostics [C, cluster_id, q_c, n_sectors,
+                      pop, n_valid_pairs].
+        stats:        _size_metric_correlations() output.
+        n_min:        N_min threshold used to classify guard-zeroed clusters.
+        metric_label: Short string appended to the title, e.g.
+                      'mst=egg_spearman | obj=corr_q_spearman'.
 
     Returns:
-        A go.Figure with two subplots and a C-value dropdown.
+        A go.Figure with four subplots and one shared C slider.
     """
     c_values = sorted(asgn["C"].unique().tolist())
+    stats_by_c = stats.set_index("C")
 
     # Identify epidemic biweeks for filtering the time series plot
     epic_bws = set(
@@ -528,13 +638,16 @@ def build_analysis_figure(
     )
 
     fig = make_subplots(
-        rows=2, cols=1,
-        subplot_titles=["Q-vs-C trajectory", "Per-cluster series"],
-        vertical_spacing=0.12,
-        row_heights=[0.3, 0.7],
+        rows=4, cols=1,
+        subplot_titles=[
+            "Q-vs-C trajectory", "Per-cluster series",
+            "Size vs Metric (q_c)", "Cluster size distribution",
+        ],
+        vertical_spacing=0.09,
+        row_heights=[0.15, 0.28, 0.32, 0.17],
     )
 
-    # ── Top panel: Q trajectory ───────────────────────────────────────
+    # ── Row 1: Q trajectory — static, no C dependence ─────────────────
     fig.add_trace(
         go.Scatter(
             x=traj["C"], y=traj["Q"],
@@ -546,19 +659,31 @@ def build_analysis_figure(
         ),
         row=1, col=1,
     )
+    n_fixed = 1
 
-    # ── Bottom panel: per-cluster time series ─────────────────────────
-    # Build all traces upfront (hidden), then use the dropdown to reveal
-    # only the C-value subset the user selects.
-    all_series_traces: list[go.Scatter] = []
-    # vis_map[c] = list of trace indices (in all_series_traces) for that C
+    # ── q_c y-axis stays fixed on row 3 so correlation strength is
+    # comparable across C; n_sectors x-axis (rows 3-4) rescales per C.
+    q_c_min, q_c_max = float(diag["q_c"].min()), float(diag["q_c"].max())
+    q_c_pad = (q_c_max - q_c_min) * 0.08 or 0.05
+
+    # ── Build every C-dependent trace upfront, hidden by default ──────
+    dyn_traces: list[tuple[int, go.Scatter | go.Histogram]] = []
+    # vis_map[c] = list of dyn_traces indices belonging to that C
     vis_map: dict[int, list[int]] = {}
+    x_range_map: dict[int, list[float]] = {}
+    # Positions (within dyn_traces) of every C's size-histogram trace —
+    # the bin-size dropdown restyles all of these together, regardless
+    # of which C the shared slider currently shows.
+    hist_positions: list[int] = []
 
     for c in c_values:
+        start = len(dyn_traces)
+        c_diag = diag[diag["C"] == c]
+        x_range_map[c] = _size_x_range(c_diag)
+
+        # -- Row 2: per-cluster eggs/dengue series (unchanged logic) ----
         series = _agg_cluster_series(asgn, eggs, dengue, c, diag)
-        # Show only epidemic biweeks where the lagged correlation was computed
         epic = series[series["biweek"].isin(epic_bws)].copy()
-        n_new = 0
 
         for cid in sorted(epic["cluster_id"].unique()):
             sub = epic[epic["cluster_id"] == cid].sort_values("biweek")
@@ -566,101 +691,249 @@ def build_analysis_figure(
             qc = float(sub["q_c"].iloc[0]) if not sub.empty else 0.0
             color = CLUSTER_COLORS[cid % 30]
 
-            # Min-max normalise eggs to [0,1] for overlay with dengue
             e_vals = sub["eggs"].values
             e_norm = (e_vals - np.nanmin(e_vals)) / (
                 np.nanmax(e_vals) - np.nanmin(e_vals) + 1e-12
             )
-            all_series_traces.append(
-                go.Scatter(
-                    x=sub["biweek"], y=e_norm,
-                    mode="lines",
-                    line={"color": color, "dash": "solid"},
-                    name=f"C={c} cid={cid} eggs",
-                    visible=False,
-                    legendgroup=f"c{c}_cid{cid}",
-                    showlegend=True,
-                    hovertemplate=(
-                        f"Cluster {cid} eggs (norm)<br>"
-                        f"lag={bk} q={qc:.3f}<extra></extra>"
-                    ),
-                )
-            )
+            dyn_traces.append((2, go.Scatter(
+                x=sub["biweek"], y=e_norm,
+                mode="lines",
+                line={"color": color, "dash": "solid"},
+                name=f"C={c} cid={cid} eggs",
+                visible=False,
+                legendgroup=f"c{c}_cid{cid}",
+                showlegend=True,
+                hovertemplate=(
+                    f"Cluster {cid} eggs (norm)<br>"
+                    f"lag={bk} q={qc:.3f}<extra></extra>"
+                ),
+            )))
 
-            # Min-max normalise dengue to [0,1]; same colour, dotted line
             d_vals = sub["dengue"].values
             d_norm = (d_vals - np.nanmin(d_vals)) / (
                 np.nanmax(d_vals) - np.nanmin(d_vals) + 1e-12
             )
-            all_series_traces.append(
-                go.Scatter(
-                    x=sub["biweek"], y=d_norm,
-                    mode="lines",
-                    line={"color": color, "dash": "dot"},
-                    name=f"C={c} cid={cid} dengue",
-                    visible=False,
-                    legendgroup=f"c{c}_cid{cid}",
-                    showlegend=False,
-                    hovertemplate=(
-                        f"Cluster {cid} dengue (norm, lag={bk})"
-                        f"<extra></extra>"
-                    ),
-                )
-            )
-            n_new += 2
+            dyn_traces.append((2, go.Scatter(
+                x=sub["biweek"], y=d_norm,
+                mode="lines",
+                line={"color": color, "dash": "dot"},
+                name=f"C={c} cid={cid} dengue",
+                visible=False,
+                legendgroup=f"c{c}_cid{cid}",
+                showlegend=False,
+                hovertemplate=(
+                    f"Cluster {cid} dengue (norm, lag={bk})<extra></extra>"
+                ),
+            )))
 
-        # Record which trace indices belong to this C value
-        vis_map[c] = list(range(
-            len(all_series_traces) - n_new, len(all_series_traces)
-        ))
+        # -- Row 3: size vs q_c scatter + OLS trend ----------------------
+        is_real = c_diag["n_valid_pairs"] >= n_min
+        real, zeroed = c_diag[is_real], c_diag[~is_real]
 
-    for tr in all_series_traces:
-        fig.add_trace(tr, row=2, col=1)
+        dyn_traces.append((3, go.Scatter(
+            x=real["n_sectors"], y=real["q_c"], mode="markers",
+            marker={
+                "color": [CLUSTER_COLORS[int(cid) % 30] for cid in real["cluster_id"]],
+                "size": 9,
+            },
+            name=f"C={c} clusters", visible=False, showlegend=False,
+            customdata=np.stack(
+                [real["cluster_id"], real["pop"], real["n_valid_pairs"]], axis=-1
+            ) if len(real) else None,
+            hovertemplate=(
+                "cluster %{customdata[0]:.0f}<br>"
+                "n_sectors=%{x}<br>q_c=%{y:.3f}<br>"
+                "pop=%{customdata[1]:.0f}<br>"
+                "n_valid_pairs=%{customdata[2]:.0f}<extra></extra>"
+            ),
+        )))
+        dyn_traces.append((3, go.Scatter(
+            x=zeroed["n_sectors"], y=zeroed["q_c"], mode="markers",
+            marker={
+                "color": "rgba(0,0,0,0)",
+                "line": {"color": "#999999", "width": 1.5},
+                "size": 9,
+            },
+            name=f"C={c} guard-zeroed", visible=False, showlegend=False,
+            customdata=np.stack(
+                [zeroed["cluster_id"], zeroed["n_valid_pairs"]], axis=-1
+            ) if len(zeroed) else None,
+            hovertemplate=(
+                "cluster %{customdata[0]:.0f}<br>"
+                "n_sectors=%{x}<br>q_c=0 (zeroed — "
+                "n_valid_pairs=%{customdata[1]:.0f} < N_min)<extra></extra>"
+            ),
+        )))
+        x_line, y_line = _ols_trend(
+            real["n_sectors"].to_numpy(dtype=float),
+            real["q_c"].to_numpy(dtype=float),
+        )
+        dyn_traces.append((3, go.Scatter(
+            x=x_line, y=y_line, mode="lines",
+            line={"color": "#444444", "dash": "dash", "width": 1.5},
+            name=f"C={c} trend", visible=False, showlegend=False,
+            hoverinfo="skip",
+        )))
 
-    # ── Dropdown: show/hide traces for selected C ─────────────────────
-    # The Q trace (index 0) is always visible; series traces follow.
-    n_q_traces = 1
-    n_total_series = len(all_series_traces)
-    buttons = []
+        # -- Row 4: cluster-size histogram + rug -------------------------
+        # xbins.size=1 (default) puts every distinct n_sectors value in
+        # its own bin; the bin-size dropdown below can widen this.
+        dyn_traces.append((4, go.Histogram(
+            x=c_diag["n_sectors"],
+            xbins={"size": 1}, autobinx=False,
+            marker={"color": "#8fb8de", "opacity": 0.6},
+            name=f"C={c} size histogram", visible=False, showlegend=False,
+            hovertemplate="n_sectors=%{x}<br>count=%{y}<extra></extra>",
+        )))
+        hist_positions.append(len(dyn_traces) - 1)
+        dyn_traces.append((4, go.Scatter(
+            x=real["n_sectors"], y=[0] * len(real), mode="markers",
+            marker={
+                "symbol": "line-ns", "size": 22, "opacity": 0.5,
+                "color": [CLUSTER_COLORS[int(cid) % 30] for cid in real["cluster_id"]],
+                "line": {"width": 3},
+            },
+            name=f"C={c} sizes", visible=False, showlegend=False,
+            customdata=real["cluster_id"].to_numpy(),
+            hovertemplate="cluster %{customdata:.0f}<br>n_sectors=%{x}<extra></extra>",
+        )))
+        dyn_traces.append((4, go.Scatter(
+            x=zeroed["n_sectors"], y=[0] * len(zeroed), mode="markers",
+            marker={
+                "symbol": "line-ns", "size": 22, "opacity": 0.5,
+                "color": "#999999", "line": {"width": 3},
+            },
+            name=f"C={c} sizes (zeroed)", visible=False, showlegend=False,
+            customdata=zeroed["cluster_id"].to_numpy(),
+            hovertemplate=(
+                "cluster %{customdata:.0f}<br>"
+                "n_sectors=%{x} (guard-zeroed)<extra></extra>"
+            ),
+        )))
+
+        vis_map[c] = list(range(start, len(dyn_traces)))
+
+    # Pre-reveal the first C value's traces, then add everything to fig
+    c0 = c_values[0]
+    for idx in vis_map[c0]:
+        dyn_traces[idx][1].visible = True
+    for row_idx, tr in dyn_traces:
+        fig.add_trace(tr, row=row_idx, col=1)
+
+    # ── In-plot correlation annotation, anchored inside row 3 ─────────
+    # Index 4: make_subplots already created 4 subplot-title annotations
+    # (indices 0-3) — this is appended right after them.
+    fig.add_annotation(
+        xref="x3 domain", yref="y3 domain",
+        x=0.02, y=0.98, xanchor="left", yanchor="top",
+        text=_corr_text(stats_by_c, c0),
+        showarrow=False,
+        font={"size": 12, "color": "#333333"},
+        bgcolor="rgba(255,255,255,0.75)",
+        bordercolor="#cccccc", borderwidth=1,
+    )
+    corr_annotation_idx = len(fig.layout.annotations) - 1
+
+    # ── Bin-size / density dropdown for row 4's histogram ──────────────
+    # Restyles every C's histogram trace at once (via absolute trace
+    # indices) regardless of which one the C slider currently shows.
+    # method="update" (3-arg form) lets each button also fix the y-axis
+    # title, since count and density share the same underlying trace.
+    hist_trace_indices = [n_fixed + p for p in hist_positions]
+    bin_sizes = [1, 2, 3, 5, 10]
+    bin_buttons = [
+        {
+            "label": "bin=1 (per size, default)" if b == 1 else f"bin={b}",
+            "method": "update",
+            "args": [
+                {"xbins.size": b, "autobinx": False, "histnorm": ""},
+                {"yaxis4.title.text": "count"},
+                hist_trace_indices,
+            ],
+        }
+        for b in bin_sizes
+    ]
+    bin_buttons.append({
+        "label": "density",
+        "method": "update",
+        "args": [
+            {"xbins.size": 1, "autobinx": False, "histnorm": "probability density"},
+            {"yaxis4.title.text": "density"},
+            hist_trace_indices,
+        ],
+    })
+
+    # ── Shared slider: drives rows 2-4 together ────────────────────────
+    n_dyn = len(dyn_traces)
+    _suffix = f" | {metric_label}" if metric_label else ""
+    steps = []
     for c in c_values:
-        vis = [True]  # keep Q trace visible
-        series_vis = [False] * n_total_series
+        vis = [True] * n_fixed + [False] * n_dyn
         for idx in vis_map[c]:
-            series_vis[idx - n_q_traces] = True
-        vis += series_vis
-        _suffix = f" | {metric_label}" if metric_label else ""
-        buttons.append({
-            "label": f"C = {c}",
+            vis[n_fixed + idx] = True
+        steps.append({
+            "label": str(c),
             "method": "update",
             "args": [
                 {"visible": vis},
-                {"title": f"SKATER Analysis — C={c}{_suffix}"},
+                {
+                    "title.text": f"SKATER Analysis — C={c}{_suffix}",
+                    "xaxis3.range": x_range_map[c],
+                    "xaxis4.range": x_range_map[c],
+                    f"annotations[{corr_annotation_idx}].text": _corr_text(stats_by_c, c),
+                },
             ],
         })
 
-    # Pre-reveal the first C value's traces
-    for idx in vis_map[c_values[0]]:
-        all_series_traces[idx - n_q_traces].visible = True
+    fig.update_xaxes(range=x_range_map[c0], row=3, col=1, title_text="n_sectors")
+    fig.update_yaxes(
+        range=[q_c_min - q_c_pad, q_c_max + q_c_pad], row=3, col=1, title_text="q_c"
+    )
+    fig.update_xaxes(range=x_range_map[c0], row=4, col=1, title_text="n_sectors")
+    fig.update_yaxes(row=4, col=1, title_text="count")
 
-    _suffix = f" | {metric_label}" if metric_label else ""
+    # Label for the bin-size dropdown, anchored beside it
+    fig.add_annotation(
+        xref="paper", yref="paper",
+        x=1.01, y=0.30, xanchor="left", yanchor="bottom",
+        text="Histogram bin size:", showarrow=False,
+        font={"size": 10, "color": "#333333"},
+    )
+
     fig.update_layout(
-        title=f"SKATER Analysis — C={c_values[0]}{_suffix}",
-        height=1100,
+        title=f"SKATER Analysis — C={c0}{_suffix}",
+        height=1600,
         xaxis2_title="Biweek",
         yaxis2_title="Normalised value",
         xaxis_title="C (number of clusters)",
         yaxis_title="Q",
+        legend={
+            "x": 1.01, "y": 1.0,
+            "xanchor": "left", "yanchor": "top",
+            "font": {"size": 9},
+        },
         updatemenus=[{
             "type": "dropdown",
             "direction": "down",
             "showactive": True,
-            "buttons": buttons,
-            "x": 0.01,
-            "xanchor": "left",
-            "y": 0.62,
-            "yanchor": "top",
+            "buttons": bin_buttons,
+            "x": 1.01, "xanchor": "left",
+            "y": 0.28, "yanchor": "top",
         }],
-        margin={"t": 80, "b": 60, "l": 60, "r": 20},
+        sliders=[{
+            "active": 0,
+            "steps": steps,
+            "x": 0.05,
+            "len": 0.9,
+            "y": -0.04,
+            "yanchor": "top",
+            "currentvalue": {
+                "prefix": "C = ",
+                "visible": True,
+                "xanchor": "center",
+            },
+        }],
+        margin={"t": 80, "b": 80, "l": 60, "r": 100},
     )
     return fig
 
@@ -825,6 +1098,22 @@ def main() -> None:
     ovitrap_locs = _load_ovitrap_locations()
     eggs, dengue = _load_sector_series()
 
+    # ── Resolve N_min for guard-zeroed classification ─────────────────
+    # Prefer the run's own archived config so backfilled old runs with a
+    # different N_min aren't misclassified against today's params.yaml.
+    run_params_path = results_dir / "run_params.json"
+    if run_params_path.exists():
+        with open(run_params_path) as fh:
+            _run_params = json.load(fh)
+        n_min = _run_params.get("N_min", _params.get("N_min", 20))
+    else:
+        n_min = _params.get("N_min", 20)
+
+    c_values = sorted(diag["C"].unique().tolist())
+    stats = _size_metric_correlations(diag, c_values, n_min)
+    stats.to_csv(results_dir / "size_metric_correlation.csv", index=False)
+    logger.info("Saved size_metric_correlation.csv (N_min=%d)", n_min)
+
     stop_info = _load_stop_info(results_dir)
     if stop_info:
         logger.info(
@@ -845,7 +1134,7 @@ def main() -> None:
 
     logger.info("Building analysis dashboard…")
     fig_ana = build_analysis_figure(
-        traj, asgn, eggs, dengue, diag, metric_label=metric_label
+        traj, asgn, eggs, dengue, diag, stats, n_min, metric_label=metric_label
     )
     out_ana = results_dir / "dashboard_analysis.html"
     _write_dashboard_html(fig_ana, out_ana, "SKATER Analysis", banner)

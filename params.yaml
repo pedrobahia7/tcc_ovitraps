@@ -44,11 +44,54 @@ all:
           diagnosis_raw_data: test/data/raw/diagnosis_raw_data.txt
           diagnosis_raw_comparison: test/data/raw/diagnosis_raw_comparison.txt
 
+skater_cv:
+  # ── Cross-validation + per-fold SKATER stop (partition stage) ────────
+  # fold_years — epidemic years for leave-one-year-out CV.  Each is held
+  #   out once as the test fold; SKATER + MLP train on the rest.  Drives
+  #   the per-fold SKATER partitions (held-out year strictly excluded
+  #   from both MST cost and pruning).  Changing these re-runs partitions.
+  fold_years:
+    - "2015_16"
+    - "2018_19"
+    - "2023_24"
+
+  # Per-fold SKATER stop overrides — override params.yaml[skater] so the
+  #   sole rule is "run until no split improves Q".  Main skater untouched.
+  #   Set cv_global_degradation_threshold: null + cv_c_max: 30 to instead
+  #   force C=2..30 (allowing Q to decrease past its peak).
+  cv_stop_local_degradation: false
+  cv_global_degradation_threshold: 0.0
+  cv_c_max: null
+
+multiscale:
+  # ── Frozen MLP architecture (model stages only) ─────────────────────
+  # Reused for every unit at every scale, no per-unit hyper-parameter
+  #   search, so only spatial aggregation varies.  Changing these re-runs
+  #   only the MLP stages, never the SKATER partitions.
+  hidden_layer_sizes:
+    - 32
+    - 16
+  alpha: 0.01
+  max_iter: 5000
+
+  # Feature lag windows (biweeks).  eb_lags = unit EB dengue-rate lags;
+  #   egg_lags = unit IDW egg lags (incubation window).  Target is the
+  #   current-biweek unit EB rate.  Plus week_sin/week_cos seasonality.
+  eb_lags:
+    - 1
+    - 2
+    - 3
+  egg_lags:
+    - 3
+    - 4
+
+  seed: 42
+
 skater:
   # run_label — run's output subdirectory.
   #   Results are written to results/skater/<run_label>/.
   #   Change before each dvc repro to accumulate runs for concordance analysis.
-  run_label: spearman_3
+  run_label: spearman_30
   
   # mst_cost — dissimilarity used to weight edges before Prim builds the MST.
   #   egg_corr_dist  : 1 − Pearson(eggs_i, eggs_j) over ALL biweeks.
@@ -118,7 +161,7 @@ skater:
   #   Prevents degenerate singletons or tiny fragments.  A cut that would
   #   leave either child with fewer than S_min sectors is always rejected,
   #   regardless of data density.
-  S_min: 3
+  S_min: 30
 
   # mst_min_overlap — minimum biweeks where both sectors have non-NaN eggs
   #   before computing the pairwise dissimilarity weight.  Below this, the

@@ -676,9 +676,9 @@ stages:
       size: 10763766
     - path: src/skater/
       hash: md5
-      md5: 86af613346afe40bd39485fc1795c821.dir
-      size: 146423
-      nfiles: 18
+      md5: d71d067264f75eb83b21805b60c78618.dir
+      size: 213658
+      nfiles: 24
     params:
       params.yaml:
         skater:
@@ -688,10 +688,10 @@ stages:
           k_min: 2
           k_max: 6
           C_max: 30
-          stop_local_degradation: false
-          global_degradation_threshold:
+          stop_local_degradation: true
+          global_degradation_threshold: 0
           N_min: 20
-          S_min: 3
+          S_min: 30
           mst_min_overlap: 10
           epidemic_years:
           - '2012_13'
@@ -702,6 +702,197 @@ stages:
     outs:
     - path: results/skater/spearman_30/
       hash: md5
-      md5: bf973f8e30a9634efe04f589dd25e92f.dir
-      size: 40006389
-      nfiles: 10
+      md5: 6b3eb7b58dd82f4c9f4db217acd3d1b9.dir
+      size: 40160155
+      nfiles: 11
+  mlp_baselines:
+    cmd:
+    - python -m src.multiscale.baselines
+    deps:
+    - path: data/dvc/add_population_info/dengue_per_capita.csv
+      hash: md5
+      md5: b48c88d887bddc952b1f98fc0692838f
+      size: 145913819
+    - path: data/dvc/add_population_info/sector_centroids_with_idw.csv
+      hash: md5
+      md5: 9b8d893cb840535c5f8aa1bd9872bc12
+      size: 261142185
+    - path: 
+        data/dvc/process_population_data/bh_sectors_2022_with_populations.geojson
+      hash: md5
+      md5: 479a5d3f31facc2e3a4127f11a270d08
+      size: 10763766
+    - path: src/multiscale/
+      hash: md5
+      md5: dcee1a26522c53b9d9f404197efd9c50.dir
+      size: 103378
+      nfiles: 19
+    params:
+      params.yaml:
+        multiscale:
+          hidden_layer_sizes:
+          - 32
+          - 16
+          alpha: 0.01
+          max_iter: 5000
+          eb_lags:
+          - 1
+          - 2
+          - 3
+          egg_lags:
+          - 3
+          - 4
+          seed: 42
+        skater_cv:
+          fold_years:
+          - '2015_16'
+          - '2018_19'
+          - '2023_24'
+          cv_stop_local_degradation: false
+          cv_global_degradation_threshold: 0.0
+          cv_c_max:
+    outs:
+    - path: results/multiscale/baselines/
+      hash: md5
+      md5: 12b1ab50b51c51ac038d802ce9472dd8.dir
+      size: 2449230
+      nfiles: 4
+  skater_cv_partitions:
+    cmd:
+    - python -m src.multiscale.skater_partitions
+    deps:
+    - path: data/dvc/add_population_info/dengue_per_capita.csv
+      hash: md5
+      md5: b48c88d887bddc952b1f98fc0692838f
+      size: 145913819
+    - path: data/dvc/add_population_info/sector_centroids_with_idw.csv
+      hash: md5
+      md5: 9b8d893cb840535c5f8aa1bd9872bc12
+      size: 261142185
+    - path: 
+        data/dvc/process_population_data/bh_sectors_2022_with_populations.geojson
+      hash: md5
+      md5: 479a5d3f31facc2e3a4127f11a270d08
+      size: 10763766
+    - path: src/multiscale/config.py
+      hash: md5
+      md5: 3a4f1fc4841d3d6b42281f3ce461c1cc
+      size: 5797
+    - path: src/multiscale/skater_partitions.py
+      hash: md5
+      md5: 5132bc6fa20146ad385f9481c5bd0c31
+      size: 4634
+    - path: src/skater/
+      hash: md5
+      md5: d71d067264f75eb83b21805b60c78618.dir
+      size: 213658
+      nfiles: 24
+    params:
+      params.yaml:
+        skater:
+          run_label: spearman_30
+          mst_cost: egg_spearman
+          prune_obj: corr_q_spearman
+          k_min: 2
+          k_max: 6
+          C_max: 30
+          stop_local_degradation: true
+          global_degradation_threshold: 0
+          N_min: 20
+          S_min: 30
+          mst_min_overlap: 10
+          epidemic_years:
+          - '2012_13'
+          - '2015_16'
+          - '2018_19'
+          - '2023_24'
+          seed: 42
+        skater_cv:
+          fold_years:
+          - '2015_16'
+          - '2018_19'
+          - '2023_24'
+          cv_stop_local_degradation: false
+          cv_global_degradation_threshold: 0.0
+          cv_c_max:
+    outs:
+    - path: results/multiscale/partitions/
+      hash: md5
+      md5: 468134278b1b32afe9cf9961611018b7.dir
+      size: 3510429
+      nfiles: 24
+  skater_cv_models:
+    cmd:
+    - python -m src.multiscale.skater_cv_models
+    - python scripts/multiscale_dashboard.py
+    deps:
+    - path: data/dvc/add_population_info/dengue_per_capita.csv
+      hash: md5
+      md5: b48c88d887bddc952b1f98fc0692838f
+      size: 145913819
+    - path: data/dvc/add_population_info/sector_centroids_with_idw.csv
+      hash: md5
+      md5: 9b8d893cb840535c5f8aa1bd9872bc12
+      size: 261142185
+    - path: 
+        data/dvc/process_population_data/bh_sectors_2022_with_populations.geojson
+      hash: md5
+      md5: 479a5d3f31facc2e3a4127f11a270d08
+      size: 10763766
+    - path: results/multiscale/baselines/
+      hash: md5
+      md5: 12b1ab50b51c51ac038d802ce9472dd8.dir
+      size: 2449230
+      nfiles: 4
+    - path: results/multiscale/partitions/
+      hash: md5
+      md5: 468134278b1b32afe9cf9961611018b7.dir
+      size: 3510429
+      nfiles: 24
+    - path: scripts/multiscale_dashboard.py
+      hash: md5
+      md5: 1ed7c788d690043264548a7048dfaccb
+      size: 5230
+    - path: src/multiscale/
+      hash: md5
+      md5: dcee1a26522c53b9d9f404197efd9c50.dir
+      size: 103378
+      nfiles: 19
+    params:
+      params.yaml:
+        multiscale:
+          hidden_layer_sizes:
+          - 32
+          - 16
+          alpha: 0.01
+          max_iter: 5000
+          eb_lags:
+          - 1
+          - 2
+          - 3
+          egg_lags:
+          - 3
+          - 4
+          seed: 42
+        skater_cv:
+          fold_years:
+          - '2015_16'
+          - '2018_19'
+          - '2023_24'
+          cv_stop_local_degradation: false
+          cv_global_degradation_threshold: 0.0
+          cv_c_max:
+    outs:
+    - path: results/multiscale/multiscale_tradeoff.html
+      hash: md5
+      md5: 95cb58939bba8365ffa4743efbf59daa
+      size: 4851574
+    - path: results/multiscale/skater_cv/
+      hash: md5
+      md5: 3324fd5427f1a1a1af2b9d02b501736b.dir
+      size: 5438
+      nfiles: 3
+    - path: results/multiscale/summary.csv
+      hash: md5
+      md5: b1b4704402bf17e9ee8e70ed7dd2d1b6
+      size: 601

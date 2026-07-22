@@ -107,25 +107,19 @@ stages:
       - ${all.paths.test.data.raw.diagnosis_raw_data}:
           persist: true
 
-  mlp_bh_rate_predictor:
+  mlp_baselines:
     cmd:
-      - python src/mlp_bh_rate_predictor.py
-      - python scripts/mlp_bh_dashboard.py
-      - python scripts/sector_mlp_dashboard.py
+      - python -m src.multiscale.baselines
+    params:
+      - multiscale
+      - skater_cv
     deps:
-      - src/mlp_bh_rate_predictor.py
-      - scripts/mlp_bh_dashboard.py
-      - scripts/sector_mlp_dashboard.py
-      - utils/project_utils.py
-      - ${all.paths.data.dvc.add_population_info.dengue_citywide_per_capita}
-      - ${all.paths.data.dvc.add_population_info.ovitraps}
+      - src/multiscale/
       - ${all.paths.data.dvc.add_population_info.dengue_per_capita}
       - ${all.paths.data.dvc.add_population_info.centroids_idw}
       - ${all.paths.data.dvc.process_population_data.sectors_geojson}
     outs:
-      - results/mlp_bh_rate_predictor/:
-          persist: true
-      - results/sector_mlp_dashboard.html:
+      - results/multiscale/baselines/:
           persist: true
 
   skater:
@@ -142,4 +136,49 @@ stages:
       - ${all.paths.data.dvc.process_population_data.sectors_geojson}
     outs:
       - results/skater/${skater.run_label}/:
+          persist: true
+
+  # Expensive, deterministic: per-fold SKATER partitions (skater-ALL
+  # layout). Depends only on skater strategy + CV params — NOT the MLP —
+  # so tuning the model never recomputes these.
+  skater_cv_partitions:
+    cmd:
+      - python -m src.multiscale.skater_partitions
+    params:
+      - skater
+      - skater_cv
+    deps:
+      - src/skater/
+      - src/multiscale/skater_partitions.py
+      - src/multiscale/config.py
+      - ${all.paths.data.dvc.add_population_info.dengue_per_capita}
+      - ${all.paths.data.dvc.add_population_info.centroids_idw}
+      - ${all.paths.data.dvc.process_population_data.sectors_geojson}
+    outs:
+      - results/multiscale/partitions/:
+          persist: true
+
+  # Cheap, frequently re-tuned: MLP per region from cached partitions +
+  # the cross-scale trade-off dashboard. No SKATER rerun.
+  skater_cv_models:
+    cmd:
+      - python -m src.multiscale.skater_cv_models
+      - python scripts/multiscale_dashboard.py
+    params:
+      - multiscale
+      - skater_cv
+    deps:
+      - src/multiscale/
+      - scripts/multiscale_dashboard.py
+      - results/multiscale/partitions/
+      - results/multiscale/baselines/
+      - ${all.paths.data.dvc.add_population_info.dengue_per_capita}
+      - ${all.paths.data.dvc.add_population_info.centroids_idw}
+      - ${all.paths.data.dvc.process_population_data.sectors_geojson}
+    outs:
+      - results/multiscale/skater_cv/:
+          persist: true
+      - results/multiscale/summary.csv:
+          persist: true
+      - results/multiscale/multiscale_tradeoff.html:
           persist: true

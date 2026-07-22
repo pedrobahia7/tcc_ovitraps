@@ -30,7 +30,7 @@ import pandas as pd
 
 from .adjacency import build_adjacency
 from .config import load_config
-from .data import load_data
+from .data import SkaterData, load_data
 from .mst import build_mst
 from .prune import Snapshot, StopInfo, greedy_prune
 
@@ -131,39 +131,54 @@ def _save_graph_structures(
     )
 
 
-# ── Pipeline entry point ──────────────────────────────────────────────
+# ── Reusable pipeline ─────────────────────────────────────────────────
 
-def main() -> None:
-    """Run the full SKATER pipeline end-to-end."""
-    logging.basicConfig(
-        level=logging.INFO, format="%(levelname)s: %(message)s"
-    )
-    cfg = load_config()
-    _set_seeds(cfg.seed)
-    logger.info("SkaterConfig: %s", cfg.model_dump())
+def _default_mst_matrix(cfg: SkaterConfig, data: SkaterData) -> np.ndarray:
+    """Select the MST cost matrix exactly as the original pipeline does.
 
-    # Load all data into aligned numpy matrices
-    data = load_data(cfg)
-
-    # Build spatial graph and MST backbone
-    adjacency = build_adjacency(
-        data.geojson, sector_filter=set(data.sector_list)
-    )
-
-    # ── Select data matrix for MST cost based on config ───────────────
-    # egg_corr_dist uses all biweeks (more data, better signal).
-    # case_corr_dist uses epidemic biweeks only (no all-biweek dengue data).
+    egg_corr_dist (and every egg/spearman/euclidean cost) uses all
+    biweeks; only case_corr_dist falls back to the epidemic dengue
+    matrix.  Preserved verbatim so callers that pass no override get
+    identical behaviour.
+    """
     if cfg.mst_cost == "case_corr_dist":
-        mst_data = data.dengue_epic
-    else:
-        mst_data = data.eggs_all
+        return data.dengue_epic
+    return data.eggs_all
 
-    mst = build_mst(adjacency, mst_data, data.sector_list, cfg)
 
-    # Map sector IDs to row indices (needed by pruning functions)
+def run_pipeline(
+    cfg: SkaterConfig,
+    data: SkaterData,
+    adjacency: nx.Graph,
+    out_dir: Path,
+    mst_matrix: np.ndarray | None = None,
+) -> tuple[list[Snapshot], StopInfo]:
+    """Build the MST, prune greedily and persist the full output set.
+
+    This is the single source of truth for the SKATER algorithm run.
+    Both the all-years `main()` and the cross-validated per-fold runs
+    call it, so the CV folds behave exactly like the original algorithm.
+
+    Args:
+        cfg:        Resolved SKATER configuration for this run.
+        data:       Aligned data matrices (already restricted to whatever
+                    epidemic years cfg specifies).
+        adjacency:  Queen contiguity graph (geometry only, reusable).
+        out_dir:    Directory to write all CSV/JSON outputs into.
+        mst_matrix: Optional MST cost matrix override.  None → the exact
+                    matrix the original pipeline would select.  CV passes
+                    a copy with the held-out year's columns removed.
+
+    Returns:
+        (snapshots, stop_info) from greedy_prune.
+    """
+    _set_seeds(cfg.seed)
+    if mst_matrix is None:
+        mst_matrix = _default_mst_matrix(cfg, data)
+
+    mst = build_mst(adjacency, mst_matrix, data.sector_list, cfg)
     sector_idx = {s: i for i, s in enumerate(data.sector_list)}
 
-    # Run greedy pruning → one Snapshot per C value + termination metadata
     snapshots, stop_info = greedy_prune(
         mst=mst,
         sector_idx=sector_idx,
@@ -175,16 +190,12 @@ def main() -> None:
     )
 
     # ── Persist all outputs ───────────────────────────────────────────
-    results_dir = RESULTS_BASE / cfg.run_label
-    results_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Snapshot of config for concordance analysis identification
-    with open(results_dir / "run_params.json", "w") as fh:
+    with open(out_dir / "run_params.json", "w") as fh:
         json.dump(cfg.model_dump(), fh, indent=2)
-    logger.info("Saved run_params.json (run_label=%s)", cfg.run_label)
 
-    # Termination metadata — written after pruning so reason is known
-    with open(results_dir / "stop_info.json", "w") as fh:
+    with open(out_dir / "stop_info.json", "w") as fh:
         json.dump(
             {
                 "reason": stop_info.reason,
@@ -196,17 +207,33 @@ def main() -> None:
             indent=2,
         )
     logger.info(
-        "Saved stop_info.json (reason=%s, C_final=%d)",
-        stop_info.reason, stop_info.C_final,
+        "Saved stop_info.json (reason=%s, C_final=%d) → %s",
+        stop_info.reason, stop_info.C_final, out_dir,
     )
 
-    _save_assignments(snapshots, results_dir)
-    _save_trajectory(snapshots, results_dir)
-    _save_diagnostics(snapshots, results_dir)
-    _save_graph_structures(adjacency, mst, results_dir)
-    logger.info(
-        "SKATER done — C=%d snapshots in %s", len(snapshots), results_dir
+    _save_assignments(snapshots, out_dir)
+    _save_trajectory(snapshots, out_dir)
+    _save_diagnostics(snapshots, out_dir)
+    _save_graph_structures(adjacency, mst, out_dir)
+    logger.info("SKATER done — %d snapshots in %s", len(snapshots), out_dir)
+    return snapshots, stop_info
+
+
+# ── Pipeline entry point ──────────────────────────────────────────────
+
+def main() -> None:
+    """Run the full all-years SKATER pipeline end-to-end."""
+    logging.basicConfig(
+        level=logging.INFO, format="%(levelname)s: %(message)s"
     )
+    cfg = load_config()
+    logger.info("SkaterConfig: %s", cfg.model_dump())
+
+    data = load_data(cfg)
+    adjacency = build_adjacency(
+        data.geojson, sector_filter=set(data.sector_list)
+    )
+    run_pipeline(cfg, data, adjacency, RESULTS_BASE / cfg.run_label)
 
 
 if __name__ == "__main__":
