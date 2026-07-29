@@ -153,18 +153,24 @@ def plot_graph_panel(
         edge_alpha: Line opacity for edges.
         node_size: Marker size for centroid nodes.
     """
-    sectors.plot(ax=ax, color="#F2F2F2", edgecolor="#CCCCCC", linewidth=0.15)
+    sectors.plot(
+        ax=ax, color="#F2F2F2", edgecolor="#CCCCCC", linewidth=0.15,
+        rasterized=True,
+    )
 
     src_xy = centroids.loc[edges["src"], ["centroid_longitude", "centroid_latitude"]].to_numpy()
     dst_xy = centroids.loc[edges["dst"], ["centroid_longitude", "centroid_latitude"]].to_numpy()
     segments = np.stack([src_xy, dst_xy], axis=1)
     ax.add_collection(
-        LineCollection(segments, colors=edge_color, linewidths=edge_lw, alpha=edge_alpha)
+        LineCollection(
+            segments, colors=edge_color, linewidths=edge_lw, alpha=edge_alpha,
+            rasterized=True,
+        )
     )
 
     ax.scatter(
         centroids["centroid_longitude"], centroids["centroid_latitude"],
-        s=node_size, color=NODE_COLOR, linewidths=0, zorder=3,
+        s=node_size, color=NODE_COLOR, linewidths=0, zorder=3, rasterized=True,
     )
 
 
@@ -203,7 +209,7 @@ def build_figure() -> None:
 
     fig.tight_layout()
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUTPUT_PATH, bbox_inches="tight")
+    fig.savefig(OUTPUT_PATH, bbox_inches="tight", dpi=300)
     plt.close(fig)
 
     print(f"Sectors (nodes): {len(centroids)}")

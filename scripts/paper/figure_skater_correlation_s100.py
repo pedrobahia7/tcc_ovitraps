@@ -155,8 +155,7 @@ def main() -> None:
         )
         style_map_panel(ax, bounds, mean_lat, f"C = {c}")
 
-    fig.suptitle(r"$S_{\min} = 100$", fontsize=14, fontweight="bold")
-    fig.tight_layout(rect=[0, 0, 0.9, 0.96])
+    fig.tight_layout(rect=[0, 0, 0.9, 1])
 
     cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
     fig.colorbar(

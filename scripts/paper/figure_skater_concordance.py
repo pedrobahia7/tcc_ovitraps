@@ -77,10 +77,7 @@ def build_figure(concordance: pd.DataFrame) -> None:
         ax.grid(alpha=0.3)
 
     ax_nmi.set_xlabel("Number of clusters (C)")
-    ax_ari.legend(
-        loc="lower center", bbox_to_anchor=(0.5, 1.35),
-        ncol=2, frameon=False, fontsize=7,
-    )
+    ax_nmi.legend(loc="lower right", ncol=2, frameon=False, fontsize=7)
 
     fig.tight_layout()
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
