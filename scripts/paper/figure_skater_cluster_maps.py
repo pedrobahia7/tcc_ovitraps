@@ -82,16 +82,15 @@ def load_final_partition(run_dir: Path) -> tuple[pd.DataFrame, int, int]:
 
 
 def style_map_panel(
-    ax: Axes, bounds: np.ndarray, mean_lat: float, title: str, caption: str
+    ax: Axes, bounds: np.ndarray, mean_lat: float, title: str
 ) -> None:
-    """Apply shared framing, aspect, title and caption to a map panel.
+    """Apply shared framing, aspect, and title to a map panel.
 
     Args:
         ax: Target axes.
         bounds: (minx, miny, maxx, maxy) shared across all panels.
         mean_lat: Mean latitude, used for a geographic aspect ratio.
         title: Bold title drawn above the map.
-        caption: Caption drawn below the map.
     """
     minx, miny, maxx, maxy = bounds
     pad_x = (maxx - minx) * MAP_PADDING_FRAC
@@ -104,11 +103,6 @@ def style_map_panel(
     for spine in ax.spines.values():
         spine.set_visible(False)
     ax.set_title(title, fontsize=11, fontweight="bold", pad=6)
-    ax.text(
-        0.5, -0.04, caption,
-        transform=ax.transAxes,
-        ha="center", va="top", fontsize=9,
-    )
 
 
 def main() -> None:
@@ -132,8 +126,7 @@ def main() -> None:
         )
         style_map_panel(
             ax, bounds, mean_lat,
-            f"$S_{{\\min}}$ = {s_min}",
-            f"K = {k_final} regions",
+            f"$S_{{\\min}}$ = {s_min} (K = {k_final})",
         )
         logger.info("%s: S_min=%d, K=%d", run_label, s_min, k_final)
 

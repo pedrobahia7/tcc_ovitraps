@@ -153,14 +153,14 @@ def main() -> None:
             ax=ax, column="q_c", cmap=CMAP, vmin=vmin, vmax=vmax,
             edgecolor="#333333", linewidth=0.15,
         )
-        style_map_panel(ax, bounds, mean_lat, f"C = {c}")
+        style_map_panel(ax, bounds, mean_lat, f"K = {c}")
 
     fig.tight_layout(rect=[0, 0, 0.9, 1])
 
     cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
     fig.colorbar(
         ScalarMappable(norm=Normalize(vmin=vmin, vmax=vmax), cmap=CMAP),
-        cax=cbar_ax, label=r"$\rho_c$ (lagged Spearman correlation)",
+        cax=cbar_ax,
     )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

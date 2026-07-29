@@ -1,9 +1,9 @@
-"""SKATER objective-trajectory figure -- Q vs C for all four runs.
+"""SKATER objective-trajectory figure -- F vs C for all four runs.
 
 Builds a Results figure (sections/results.tex,
 \\label{fig:skater_q_trajectory}): the global population-weighted
-objective Q (Section~\\ref{sec:methodology}) as a function of the
-number of clusters C, one line per S_min run, with a marker at each
+objective F (Section~\\ref{sec:methodology}) as a function of the
+number of regions K, one line per S_min run, with a marker at each
 run's final stopping point (results/skater/<run>/stop_info.json).
 
 Inputs:
@@ -41,14 +41,15 @@ RUN_COLORS = {
 
 
 def load_run_trajectory(run_dir: Path) -> tuple[pd.DataFrame, int, dict]:
-    """Load one run's Q-vs-C trajectory, S_min, and stop reason.
+    """Load one run's F-vs-K trajectory, S_min, and stop reason.
 
     Args:
         run_dir: Path to a results/skater/<run_label> directory.
 
     Returns:
         (trajectory, s_min, stop_info):
-          trajectory -- DataFrame with columns [C, Q].
+          trajectory -- DataFrame with columns [C, Q] (K and F in the
+            paper's notation; column names match the source CSV).
           s_min      -- the run's configured minimum region size.
           stop_info  -- parsed stop_info.json dict.
     """
@@ -61,7 +62,7 @@ def load_run_trajectory(run_dir: Path) -> tuple[pd.DataFrame, int, dict]:
 
 
 def build_figure(runs: list[tuple[str, pd.DataFrame, int, dict]]) -> None:
-    """Draw the Q-vs-C trajectory figure and save it to OUTPUT_PATH.
+    """Draw the F-vs-K trajectory figure and save it to OUTPUT_PATH.
 
     Args:
         runs: List of (run_label, trajectory, s_min, stop_info) tuples.
@@ -70,7 +71,7 @@ def build_figure(runs: list[tuple[str, pd.DataFrame, int, dict]]) -> None:
 
     for run_label, trajectory, s_min, stop_info in runs:
         color = RUN_COLORS.get(run_label)
-        label = f"$S_{{\\min}}$ = {s_min} ({stop_info['reason']})"
+        label = f"$S_{{\\min}}$ = {s_min}"
         ax.plot(
             trajectory["C"], trajectory["Q"],
             color=color, linewidth=1.8, label=label,
@@ -81,12 +82,8 @@ def build_figure(runs: list[tuple[str, pd.DataFrame, int, dict]]) -> None:
             color=color, zorder=5, s=40, edgecolor="white", linewidth=0.8,
         )
 
-    ax.set_xlabel("Number of clusters (C)")
-    ax.set_ylabel(r"Global objective $Q$")
-    ax.set_title(
-        "SKATER objective trajectory by minimum region size",
-        fontsize=11, fontweight="bold",
-    )
+    ax.set_xlabel("Number of regions (K)")
+    ax.set_ylabel("Global objective (F)")
     ax.grid(alpha=0.3)
     ax.legend(loc="lower right", fontsize=8, frameon=False)
 

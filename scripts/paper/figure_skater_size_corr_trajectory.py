@@ -111,7 +111,7 @@ def build_figure(runs: list[tuple[str, pd.DataFrame, int, dict]]) -> None:
 
     for run_label, trajectory, s_min, stop_info in runs:
         color = RUN_COLORS.get(run_label)
-        label = f"$S_{{\\min}}$ = {s_min} ({stop_info['reason']})"
+        label = f"$S_{{\\min}}$ = {s_min}"
         ax.plot(
             trajectory["C"], trajectory["spearman_rho"],
             color=color, linewidth=1.8, label=label,
@@ -128,14 +128,8 @@ def build_figure(runs: list[tuple[str, pd.DataFrame, int, dict]]) -> None:
             )
 
     ax.axhline(0.0, color="grey", linewidth=0.8, linestyle=":")
-    ax.set_xlabel("Number of clusters (C)")
-    ax.set_ylabel(
-        r"Spearman correlation(n_sectors, $\rho_c$)"
-    )
-    ax.set_title(
-        "Cluster-size vs objective correlation by minimum region size",
-        fontsize=11, fontweight="bold",
-    )
+    ax.set_xlabel("Number of regions (K)")
+    ax.set_ylabel("Spearman correlation")
     ax.grid(alpha=0.3)
     ax.legend(loc="best", fontsize=8, frameon=False)
 

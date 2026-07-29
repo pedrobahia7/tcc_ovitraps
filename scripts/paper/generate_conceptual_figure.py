@@ -32,6 +32,7 @@ Outputs:
   6a441e20c1f1a66c183b3c38/Figures/skater_learned_regions.png —
     standalone SKATER partition map, saved for later use.
 """
+
 from __future__ import annotations
 
 import logging
@@ -48,13 +49,9 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 # ── Paths ─────────────────────────────────────────────────────────
-SECTORS_PATH = Path(
-    "data/processed/bh_sectors_2022_with_populations.geojson"
-)
+SECTORS_PATH = Path("data/processed/bh_sectors_2022_with_populations.geojson")
 OVITRAPS_PATH = Path("data/processed/ovitraps_data.csv")
-CLUSTERS_PATH = Path(
-    "results/skater/spearman_100/cluster_assignments.csv"
-)
+CLUSTERS_PATH = Path("results/skater/spearman_100/cluster_assignments.csv")
 FIGURES_DIR = Path("6a441e20c1f1a66c183b3c38/Figures")
 COMPOSITE_OUTPUT_PATH = FIGURES_DIR / "conceptual_figure.png"
 SKATER_OUTPUT_PATH = FIGURES_DIR / "skater_learned_regions.png"
@@ -66,6 +63,9 @@ EDGE_COLOR = "white"
 ACCURACY_COLOR = "#2E7D32"
 USEFULNESS_COLOR = "#C62828"
 MAP_PADDING_FRAC = 0.03
+# AAAI figure* at \textwidth = 6.9999in (see
+# scripts/paper/FIGURE_GUIDELINES.md).
+TEXTWIDTH_IN = 6.9999
 
 
 def load_sectors(path: Path) -> gpd.GeoDataFrame:
@@ -95,14 +95,10 @@ def load_ovitraps(path: Path) -> pd.DataFrame:
     """
     cols = ["idarmad", "latitude", "longitude"]
     df = pd.read_csv(path, usecols=cols)
-    return df.dropna(subset=["latitude", "longitude"]).drop_duplicates(
-        "idarmad"
-    )
+    return df.dropna(subset=["latitude", "longitude"]).drop_duplicates("idarmad")
 
 
-def attach_learned_clusters(
-    sectors: gpd.GeoDataFrame, path: Path
-) -> gpd.GeoDataFrame:
+def attach_learned_clusters(sectors: gpd.GeoDataFrame, path: Path) -> gpd.GeoDataFrame:
     """Join the final SKATER partition onto the sector polygons.
 
     Args:
@@ -154,9 +150,13 @@ def style_map_panel(
         spine.set_visible(False)
     ax.set_title(title, fontsize=12, fontweight="bold", pad=8)
     ax.text(
-        0.5, -0.05, caption,
+        0.5,
+        -0.05,
+        caption,
         transform=ax.transAxes,
-        ha="center", va="top", fontsize=9,
+        ha="center",
+        va="top",
+        fontsize=9,
     )
 
 
@@ -164,26 +164,37 @@ def plot_ovitrap_panel(
     ax: Axes, sectors: gpd.GeoDataFrame, ovitraps: pd.DataFrame
 ) -> None:
     """Fine spatial scale: city outline + individual ovitraps."""
-    sectors.plot(
-        ax=ax, color="#EAEAEA", edgecolor="#BBBBBB", linewidth=0.2
-    )
+    # No sector-boundary stroke: at ~5,000 sectors, any visible line
+    # width >= 0.5pt (the AAAI floor) renders as a solid mass, and
+    # this panel only needs a flat background, not sector shapes.
+    sectors.plot(ax=ax, color="#EAEAEA", edgecolor="none")
     ax.scatter(
-        ovitraps["longitude"], ovitraps["latitude"],
-        s=3, color=OVITRAP_COLOR, alpha=0.6, linewidths=0,
+        ovitraps["longitude"],
+        ovitraps["latitude"],
+        s=1,
+        color=OVITRAP_COLOR,
+        alpha=0.6,
+        linewidths=0,
     )
 
 
 def plot_admin_panel(ax: Axes, sectors: gpd.GeoDataFrame) -> None:
     """Intermediate spatial scale: predefined administrative regions."""
-    sectors.plot(
-        ax=ax, column="NM_SUBDIST", cmap="tab10",
-        edgecolor=EDGE_COLOR, linewidth=0.15,
+    # Dissolved to one polygon per region before plotting: at ~5,000
+    # sectors, drawing fill+boundary per sector leaves a dense mesh
+    # (even with edgecolor="none", adjacent-polygon antialiasing
+    # bleeds through) and a per-sector boundary at the 0.5pt AAAI
+    # floor is a solid mass. Dissolving first means the only boundary
+    # drawn is the one that carries region identity in grayscale.
+    dissolved = sectors.dissolve(by="NM_SUBDIST").reset_index()
+    dissolved.plot(
+        ax=ax,
+        column="NM_SUBDIST",
+        cmap="tab10",
+        edgecolor=EDGE_COLOR,
+        linewidth=0.5,
     )
     n_regions = sectors["NM_SUBDIST"].nunique()
-    ax.text(
-        0.98, 0.02, f"{n_regions} regions (Regionais)",
-        transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
-    )
 
 
 def plot_city_panel(ax: Axes, sectors: gpd.GeoDataFrame) -> None:
@@ -194,14 +205,29 @@ def plot_city_panel(ax: Axes, sectors: gpd.GeoDataFrame) -> None:
 
 def plot_learned_panel(ax: Axes, sectors_learned: gpd.GeoDataFrame) -> None:
     """Learned SKATER operational regions (standalone figure only)."""
-    sectors_learned.plot(
-        ax=ax, column="cluster_id", cmap="tab20",
-        edgecolor=EDGE_COLOR, linewidth=0.15,
+    # Dissolved to one polygon per cluster before plotting: at ~5,000
+    # sectors, drawing fill+boundary per sector leaves a dense mesh
+    # (even with edgecolor="none", adjacent-polygon antialiasing
+    # bleeds through) and a per-sector boundary at the 0.5pt AAAI
+    # floor is a solid mass. Dissolving first means the only boundary
+    # drawn is the one that carries region identity in grayscale.
+    dissolved = sectors_learned.dissolve(by="cluster_id").reset_index()
+    dissolved.plot(
+        ax=ax,
+        column="cluster_id",
+        cmap="tab20",
+        edgecolor=EDGE_COLOR,
+        linewidth=0.5,
     )
     n_regions = sectors_learned["cluster_id"].nunique()
     ax.text(
-        0.98, 0.02, f"K={n_regions} regions",
-        transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
+        0.98,
+        0.02,
+        f"K={n_regions} regions",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=9,
     )
 
 
@@ -223,11 +249,17 @@ def plot_tradeoff(ax: Axes) -> None:
     usefulness = 1.0 - accuracy
 
     ax.plot(
-        x, accuracy, color=ACCURACY_COLOR, linewidth=2.5,
+        x,
+        accuracy,
+        color=ACCURACY_COLOR,
+        linewidth=2.5,
         label="Prediction accuracy",
     )
     ax.plot(
-        x, usefulness, color=USEFULNESS_COLOR, linewidth=2.5,
+        x,
+        usefulness,
+        color=USEFULNESS_COLOR,
+        linewidth=2.5,
         label="Operational usefulness",
     )
     ax.axvline(0.5, color="#888888", linestyle="--", linewidth=1.2)
@@ -238,23 +270,21 @@ def plot_tradeoff(ax: Axes) -> None:
     ax.set_yticks([])
     ax.set_xticks([0.0, 0.5, 1.0])
     ax.set_xticklabels(
-        ["Fine\n(individual ovitraps)",
-         "Intermediate\n(administrative regions)",
-         "Coarse\n(entire city)"],
+        [
+            "Fine\n(individual ovitraps)",
+            "Intermediate\n(administrative regions)",
+            "Coarse\n(entire city)",
+        ],
         fontsize=9,
     )
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
     ax.legend(
-        loc="upper center", bbox_to_anchor=(0.5, 1.22),
-        ncol=2, frameon=False, fontsize=9,
-    )
-    ax.text(
-        0.5, -0.28,
-        "Goal: learn an operational geographic scale that balances "
-        "predictive accuracy and geographically targeted intervention.",
-        transform=ax.transAxes, ha="center", va="top",
-        fontsize=9, fontweight="bold", wrap=True,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.22),
+        ncol=2,
+        frameon=False,
+        fontsize=9,
     )
 
 
@@ -275,13 +305,15 @@ def save_skater_panel(
     fig, ax = plt.subplots(figsize=(5, 5.3))
     plot_learned_panel(ax, sectors_learned)
     style_map_panel(
-        ax, bounds, mean_lat,
+        ax,
+        bounds,
+        mean_lat,
         "Learned operational regions (SKATER)",
         "Data-driven operational partition",
     )
-    fig.tight_layout()
+    fig.tight_layout(pad=0.3)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=300, bbox_inches="tight")
+    fig.savefig(path, dpi=300)
     plt.close(fig)
     logger.info("Saved standalone SKATER panel to %s", path)
 
@@ -298,8 +330,22 @@ def main() -> None:
     mean_lat = float((bounds[1] + bounds[3]) / 2.0)
 
     # ── Composite: 3 map panels + trade-off row ──────────────
-    fig = plt.figure(figsize=(12, 8.5))
-    gs = GridSpec(2, 3, height_ratios=[3, 1.3], hspace=0.55, wspace=0.15)
+    plt.rcParams.update({"font.family": "Nimbus Sans", "font.size": 9})
+    fig = plt.figure(figsize=(TEXTWIDTH_IN, TEXTWIDTH_IN * 8.5 / 12))
+    # left/right/top/bottom reserve fixed figure-fraction margins so the
+    # two-line tick labels and the footer text below never overlap,
+    # regardless of the physical figure size.
+    gs = GridSpec(
+        2,
+        3,
+        height_ratios=[3, 1.3],
+        hspace=0.35,
+        wspace=0.15,
+        left=0.08,
+        right=0.95,
+        top=0.90,
+        bottom=0.07,
+    )
 
     ax_fine = fig.add_subplot(gs[0, 0])
     ax_admin = fig.add_subplot(gs[0, 1])
@@ -311,22 +357,33 @@ def main() -> None:
     plot_city_panel(ax_coarse, sectors)
 
     style_map_panel(
-        ax_fine, bounds, mean_lat,
-        "Fine spatial scale", "One model per ovitrap",
+        ax_fine,
+        bounds,
+        mean_lat,
+        "Fine spatial scale",
+        "One model per ovitrap",
     )
     style_map_panel(
-        ax_admin, bounds, mean_lat,
-        "Intermediate spatial scale", "Region-specific models",
+        ax_admin,
+        bounds,
+        mean_lat,
+        "Intermediate spatial scale",
+        "Region-specific models",
     )
     style_map_panel(
-        ax_coarse, bounds, mean_lat,
-        "Coarse spatial scale", "One citywide model",
+        ax_coarse,
+        bounds,
+        mean_lat,
+        "Coarse spatial scale",
+        "One citywide model",
     )
 
     plot_tradeoff(ax_tradeoff)
+    # Pinned to the figure, not the axes: stays clear of the two-line
+    # tick labels regardless of how the axes itself is sized.
 
     COMPOSITE_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(COMPOSITE_OUTPUT_PATH, dpi=300, bbox_inches="tight")
+    fig.savefig(COMPOSITE_OUTPUT_PATH, dpi=300)
     plt.close(fig)
     logger.info("Saved figure to %s", COMPOSITE_OUTPUT_PATH)
 

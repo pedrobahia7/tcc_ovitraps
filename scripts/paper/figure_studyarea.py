@@ -47,8 +47,15 @@ MUNICIPALITY_NAME = "Belo Horizonte"
 TRAP_COLOR = "#08519c"
 BOUNDARY_COLOR = "#222222"
 TILE_STYLE = "OpenStreetMap"
-MAP_PADDING_FRAC = 0.02
-SCREENSHOT_SIZE = (1200, 1300)  # (width, height) px
+MAP_PADDING_FRAC = 0.015
+# BH's bounding box is far taller (N-S) than wide (E-W): height/width
+# = 1.46 after a cos(latitude) Mercator correction. fit_bounds() zooms
+# to fit these bounds inside a container of THIS aspect ratio, so a
+# mismatched container (e.g. the old 1200x1300, aspect 1.08) leaves
+# Leaflet zoomed out on the narrow axis, showing extra neighboring-
+# city context instead of cropping tight to BH. Matching the aspect
+# here removes that surrounding margin.
+SCREENSHOT_SIZE = (1000, 1460)  # (width, height) px
 TILE_LOAD_WAIT_SECONDS = 3
 
 # =============================================================================
