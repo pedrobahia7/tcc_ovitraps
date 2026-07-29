@@ -63,9 +63,17 @@ OTHER_C_VALUES = [1, 2, 3, 4]
 CMAP = "coolwarm"
 HIGHLIGHT_PADDING_FACTOR = 1.5
 HIGHLIGHT_COLOR = "black"
-# How far out the shared map extent reaches around the split region,
-# as a multiple of the region's own bounding-box size.
+# How far out the shared map extent reaches around the split region
+# (x-direction), as a multiple of the region's own bounding-box size.
+# The y-extent is derived in compute_zoom_bounds to match PANEL_ASPECT
+# instead of using an independent factor, so the map fills its panel
+# with no letterboxing.
 ZOOM_PADDING_FACTOR = 6.0
+# height/width of one panel's plot box, measured from the actual 1x2
+# + colorbar layout in build_figure (fig.get_position() on either map
+# axes after fig.tight_layout(rect=[0, 0, 0.9, 1]) at figsize=(9, 5)).
+# Keep in sync if that layout changes.
+PANEL_ASPECT = 1.298
 
 
 def load_sectors(path: Path) -> gpd.GeoDataFrame:
@@ -182,26 +190,37 @@ def compute_zoom_bounds(
             region, from find_new_small_region().
 
     Returns:
-        (minx, miny, maxx, maxy) extent, padded by
-        ZOOM_PADDING_FACTOR times the region's own bounding-box size.
+        (minx, miny, maxx, maxy) extent, x-padded by
+        ZOOM_PADDING_FACTOR times the region's own bounding-box width
+        and y-padded to make the extent's displayed aspect (after the
+        cos-latitude correction in style_map_panel) match PANEL_ASPECT
+        exactly, so the map fills its panel with no letterboxing.
     """
     highlight = merged[merged["CD_SETOR"].isin(highlight_sectors)]
     hx0, hy0, hx1, hy1 = highlight.total_bounds
-    pad_x = (hx1 - hx0) * ZOOM_PADDING_FACTOR
-    pad_y = (hy1 - hy0) * ZOOM_PADDING_FACTOR
-    return np.array([hx0 - pad_x, hy0 - pad_y, hx1 + pad_x, hy1 + pad_y])
+    cx, cy = (hx0 + hx1) / 2, (hy0 + hy1) / 2
+    mean_lat = cy
+    final_xrange = (hx1 - hx0) * (1 + 2 * ZOOM_PADDING_FACTOR)
+    # Derived from ax.set_aspect(1 / cos(mean_lat)): the displayed
+    # height/width of the plotted extent equals
+    # (yrange / xrange) / cos(mean_lat). Solving for yrange so that
+    # ratio equals PANEL_ASPECT gives the fill-the-box y-extent.
+    final_yrange = final_xrange * PANEL_ASPECT * np.cos(np.radians(mean_lat))
+    return np.array([
+        cx - final_xrange / 2, cy - final_yrange / 2,
+        cx + final_xrange / 2, cy + final_yrange / 2,
+    ])
 
 
 def style_map_panel(
-    ax: Axes, bounds: np.ndarray, mean_lat: float, title: str
+    ax: Axes, bounds: np.ndarray, mean_lat: float
 ) -> None:
-    """Apply shared framing, aspect, and title to a map panel.
+    """Apply shared framing and aspect to a map panel (no in-map title).
 
     Args:
         ax: Target axes.
         bounds: (minx, miny, maxx, maxy) shared across all panels.
         mean_lat: Mean latitude, used for a geographic aspect ratio.
-        title: Bold title drawn above the map.
     """
     minx, miny, maxx, maxy = bounds
     pad_x = (maxx - minx) * 0.02
@@ -213,7 +232,6 @@ def style_map_panel(
     ax.set_yticks([])
     for spine in ax.spines.values():
         spine.set_visible(False)
-    ax.set_title(title, fontsize=11, fontweight="bold", pad=6)
 
 
 def draw_highlight_square(
@@ -275,7 +293,7 @@ def main() -> None:
             ax=ax, column="q_c", cmap=CMAP, vmin=vmin, vmax=vmax,
             edgecolor="#333333", linewidth=0.3,
         )
-        style_map_panel(ax, zoom_bounds, mean_lat, f"K = {c}")
+        style_map_panel(ax, zoom_bounds, mean_lat)
 
         if c == C_AFTER:
             draw_highlight_square(ax, merged, highlight_region)
