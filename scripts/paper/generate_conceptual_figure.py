@@ -63,9 +63,9 @@ EDGE_COLOR = "white"
 ACCURACY_COLOR = "#2E7D32"
 USEFULNESS_COLOR = "#C62828"
 MAP_PADDING_FRAC = 0.03
-# AAAI figure* at \textwidth = 6.9999in (see
+# AAAI single-column figure at \columnwidth = 3.3125in (see
 # scripts/paper/FIGURE_GUIDELINES.md).
-TEXTWIDTH_IN = 6.9999
+COL_WIDTH_IN = 3.3125
 
 
 def load_sectors(path: Path) -> gpd.GeoDataFrame:
@@ -148,10 +148,10 @@ def style_map_panel(
     ax.set_yticks([])
     for spine in ax.spines.values():
         spine.set_visible(False)
-    ax.set_title(title, fontsize=12, fontweight="bold", pad=8)
+    ax.set_title(title, fontsize=9, fontweight="bold", pad=6)
     ax.text(
         0.5,
-        -0.05,
+        -0.06,
         caption,
         transform=ax.transAxes,
         ha="center",
@@ -253,14 +253,17 @@ def plot_tradeoff(ax: Axes) -> None:
         accuracy,
         color=ACCURACY_COLOR,
         linewidth=2.5,
-        label="Prediction accuracy",
+        # Shortened from "Prediction accuracy"/"Operational
+        # usefulness" -- at \columnwidth a two-column legend with the
+        # full phrases doesn't fit without overflowing the figure.
+        label="Accuracy",
     )
     ax.plot(
         x,
         usefulness,
         color=USEFULNESS_COLOR,
         linewidth=2.5,
-        label="Operational usefulness",
+        label="Usefulness",
     )
     ax.axvline(0.5, color="#888888", linestyle="--", linewidth=1.2)
     ax.scatter([0.5], [0.5], color="black", zorder=5, s=35)
@@ -269,19 +272,16 @@ def plot_tradeoff(ax: Axes) -> None:
     ax.set_ylim(0.0, 1.0)
     ax.set_yticks([])
     ax.set_xticks([0.0, 0.5, 1.0])
-    ax.set_xticklabels(
-        [
-            "Fine\n(individual ovitraps)",
-            "Intermediate\n(administrative regions)",
-            "Coarse\n(entire city)",
-        ],
-        fontsize=9,
-    )
+    # Single-word labels -- the parenthetical detail ("individual
+    # ovitraps" etc.) is redundant with the map captions directly
+    # above each x position, and at \columnwidth the full two-line
+    # phrases collide with their neighbors.
+    ax.set_xticklabels(["Fine", "Intermediate", "Coarse"], fontsize=9)
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
     ax.legend(
         loc="upper center",
-        bbox_to_anchor=(0.5, 1.22),
+        bbox_to_anchor=(0.5, 1.32),
         ncol=2,
         frameon=False,
         fontsize=9,
@@ -331,26 +331,40 @@ def main() -> None:
 
     # ── Composite: 3 map panels + trade-off row ──────────────
     plt.rcParams.update({"font.family": "Nimbus Sans", "font.size": 9})
-    fig = plt.figure(figsize=(TEXTWIDTH_IN, TEXTWIDTH_IN * 8.5 / 12))
+    # Single-column figure: much narrower than the old \textwidth
+    # figure*, so the layout is taller relative to its width to keep
+    # each of the three maps legible at roughly a third of
+    # \columnwidth apiece.
+    fig = plt.figure(figsize=(COL_WIDTH_IN, COL_WIDTH_IN * 1.15))
     # left/right/top/bottom reserve fixed figure-fraction margins so the
-    # two-line tick labels and the footer text below never overlap,
+    # two-line titles/captions and the footer text below never overlap,
     # regardless of the physical figure size.
     gs = GridSpec(
         2,
         3,
-        height_ratios=[3, 1.3],
-        hspace=0.35,
+        height_ratios=[1.6, 0.5],
+        hspace=0.12,
         wspace=0.15,
-        left=0.08,
+        left=0.1,
         right=0.95,
         top=0.90,
-        bottom=0.07,
+        bottom=0.09,
     )
 
     ax_fine = fig.add_subplot(gs[0, 0])
     ax_admin = fig.add_subplot(gs[0, 1])
     ax_coarse = fig.add_subplot(gs[0, 2])
     ax_tradeoff = fig.add_subplot(gs[1, :])
+    # Narrowed to 3/4 of the full row width, centered -- the
+    # trade-off curve doesn't need the full row to stay legible.
+    pos = ax_tradeoff.get_position()
+    narrowed_width = pos.width * 0.75
+    ax_tradeoff.set_position([
+        pos.x0 + (pos.width - narrowed_width) / 2,
+        pos.y0,
+        narrowed_width,
+        pos.height,
+    ])
 
     plot_ovitrap_panel(ax_fine, sectors, ovitraps)
     plot_admin_panel(ax_admin, sectors)
@@ -360,22 +374,22 @@ def main() -> None:
         ax_fine,
         bounds,
         mean_lat,
-        "Fine spatial scale",
-        "One model per ovitrap",
+        "Fine\nspatial scale",
+        "Ovitrap",
     )
     style_map_panel(
         ax_admin,
         bounds,
         mean_lat,
-        "Intermediate spatial scale",
-        "Region-specific models",
+        "Intermediate\nspatial scale",
+        "Administrative\nRegion",
     )
     style_map_panel(
         ax_coarse,
         bounds,
         mean_lat,
-        "Coarse spatial scale",
-        "One citywide model",
+        "Coarse\nspatial scale",
+        "Citywide",
     )
 
     plot_tradeoff(ax_tradeoff)

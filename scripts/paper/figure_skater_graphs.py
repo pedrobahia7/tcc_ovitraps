@@ -1,17 +1,16 @@
 """
-SKATER graph figures - Belo Horizonte
+SKATER graph figure - Belo Horizonte
 
-Builds two Results/Methodology figures (main.tex,
-\\label{fig:skater_adjacency} and \\label{fig:skater_mst}): the
-weighted spatial adjacency graph and its minimum spanning tree, each
-drawn as its own single-column figure over sector centroids on top
-of the census-sector outlines. Split from a single two-panel
-figure* so each map sits at \\columnwidth next to the paragraph that
-discusses it, instead of one wide figure* far from both. Static
-matplotlib rendering -- with 5,166 nodes, a real street basemap adds
-visual noise without adding information for this abstract
-graph-structure diagram (unlike Figure 2, which follows a
-real-basemap/folium convention -- see project memory).
+Builds a Methodology figure (main.tex, \\label{fig:skater_graphs}):
+the weighted spatial adjacency graph (left) and its minimum spanning
+tree (right), side by side in a single \\columnwidth figure, drawn
+over sector centroids on top of the census-sector outlines. Node
+markers are kept small relative to the edges -- the edges (which
+carry the graph structure) are the point of the figure, not the
+node positions. Static matplotlib rendering -- with 5,166 nodes, a
+real street basemap adds visual noise without adding information for
+this abstract graph-structure diagram (unlike Figure 2, which
+follows a real-basemap/folium convention -- see project memory).
 
 Inputs:
   data/processed/bh_sectors_2022_with_populations.geojson
@@ -19,8 +18,7 @@ Inputs:
   results/skater/spearman_100/adjacency_edges.csv
   results/skater/spearman_100/mst_edges.csv
 Output:
-  6a441e20c1f1a66c183b3c38/Figures/figure_skater_adjacency.pdf
-  6a441e20c1f1a66c183b3c38/Figures/figure_skater_mst.pdf
+  6a441e20c1f1a66c183b3c38/Figures/figure_skater_graphs.pdf
 """
 
 from __future__ import annotations
@@ -47,19 +45,20 @@ CENTROIDS_CSV = Path("data/dvc/add_population_info/bh_sectors_2022_centroids.csv
 ADJACENCY_CSV = Path("results/skater/spearman_100/adjacency_edges.csv")
 MST_CSV = Path("results/skater/spearman_100/mst_edges.csv")
 
-FIGURES_DIR = Path("6a441e20c1f1a66c183b3c38/Figures")
-ADJACENCY_OUTPUT = FIGURES_DIR / "figure_skater_adjacency.pdf"
-MST_OUTPUT = FIGURES_DIR / "figure_skater_mst.pdf"
+OUTPUT_PATH = Path("6a441e20c1f1a66c183b3c38/Figures/figure_skater_graphs.pdf")
 
 NODE_COLOR = "#08519c"
 ADJACENCY_EDGE_COLOR = "#999999"
 MST_EDGE_COLOR = "#B0302A"
+# Small relative to the edges -- the point of the figure is the edge
+# structure (adjacency vs. MST), not the node positions.
+NODE_SIZE = 0.3
 # AAAI single-column figure at \columnwidth = 3.3125in (see
-# scripts/paper/FIGURE_GUIDELINES.md). No in-map title/caption text,
-# so the panel can be close to square instead of reserving vertical
-# space for either.
+# scripts/paper/FIGURE_GUIDELINES.md). Two panels side by side, each
+# narrower than the earlier single-panel split, so the figure is
+# taller relative to its width to keep each map legible.
 COL_WIDTH_IN = 3.3125
-FIGSIZE = (COL_WIDTH_IN, COL_WIDTH_IN * 0.82)
+FIGSIZE = (COL_WIDTH_IN, COL_WIDTH_IN * 0.95)
 MAP_PADDING_FRAC = 0.02
 
 # =============================================================================
@@ -141,7 +140,6 @@ def plot_graph_panel(
     edge_color: str,
     edge_lw: float,
     edge_alpha: float,
-    node_size: float,
 ) -> None:
     """Draw sector outlines with a graph (nodes + edges) overlaid.
 
@@ -154,7 +152,6 @@ def plot_graph_panel(
         edge_color: Line color for edges.
         edge_lw: Line width for edges.
         edge_alpha: Line opacity for edges.
-        node_size: Marker size for centroid nodes.
     """
     # No sector-boundary stroke: at 5,166 sectors any visible line
     # width >= 0.5pt (the AAAI floor) renders as a solid mass.
@@ -175,52 +172,12 @@ def plot_graph_panel(
 
     ax.scatter(
         centroids["centroid_longitude"], centroids["centroid_latitude"],
-        s=node_size, color=NODE_COLOR, linewidths=0, zorder=3, rasterized=True,
+        s=NODE_SIZE, color=NODE_COLOR, linewidths=0, zorder=3, rasterized=True,
     )
 
 
-def build_single_panel_figure(
-    output_path: Path,
-    sectors: gpd.GeoDataFrame,
-    centroids: pd.DataFrame,
-    edges: pd.DataFrame,
-    bounds: np.ndarray,
-    mean_lat: float,
-    edge_color: str,
-    edge_lw: float,
-    edge_alpha: float,
-) -> None:
-    """Draw one graph panel as its own figure and save it.
-
-    Args:
-        output_path: Destination PDF path.
-        sectors: Sector polygons, from load_sectors().
-        centroids: Per-sector centroid coordinates, from
-            load_centroids().
-        edges: Edge list (src, dst sector ids), from load_edges().
-        bounds: (minx, miny, maxx, maxy) shared across both figures.
-        mean_lat: Mean latitude, used for a geographic aspect ratio.
-        edge_color: Line color for edges.
-        edge_lw: Line width for edges.
-        edge_alpha: Line opacity for edges.
-    """
-    fig, ax = plt.subplots(figsize=FIGSIZE)
-    plot_graph_panel(
-        ax, sectors, centroids, edges,
-        edge_color=edge_color, edge_lw=edge_lw, edge_alpha=edge_alpha,
-        node_size=1.5,
-    )
-    style_map_panel(ax, bounds, mean_lat)
-
-    fig.tight_layout(pad=0.1)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=300)
-    plt.close(fig)
-    print(f"Saved figure to {output_path}")
-
-
-def build_figures() -> None:
-    """Build and save the adjacency-graph and MST figures."""
+def build_figure() -> None:
+    """Assemble the two-panel figure and save it to OUTPUT_PATH."""
     sectors = load_sectors()
     centroids = load_centroids()
     adjacency_edges = load_edges(ADJACENCY_CSV)
@@ -230,20 +187,30 @@ def build_figures() -> None:
     mean_lat = float((bounds[1] + bounds[3]) / 2.0)
 
     mpl.rcParams.update({"font.family": "Nimbus Sans", "font.size": 9})
+    fig, (ax_adj, ax_mst) = plt.subplots(1, 2, figsize=FIGSIZE)
 
-    build_single_panel_figure(
-        ADJACENCY_OUTPUT, sectors, centroids, adjacency_edges, bounds, mean_lat,
+    plot_graph_panel(
+        ax_adj, sectors, centroids, adjacency_edges,
         edge_color=ADJACENCY_EDGE_COLOR, edge_lw=0.5, edge_alpha=0.6,
     )
-    build_single_panel_figure(
-        MST_OUTPUT, sectors, centroids, mst_edges, bounds, mean_lat,
+    style_map_panel(ax_adj, bounds, mean_lat)
+
+    plot_graph_panel(
+        ax_mst, sectors, centroids, mst_edges,
         edge_color=MST_EDGE_COLOR, edge_lw=0.7, edge_alpha=0.9,
     )
+    style_map_panel(ax_mst, bounds, mean_lat)
+
+    fig.tight_layout(pad=0.1, w_pad=0.3)
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(OUTPUT_PATH, dpi=300)
+    plt.close(fig)
 
     print(f"Sectors (nodes): {len(centroids)}")
     print(f"Adjacency edges: {len(adjacency_edges)}")
     print(f"MST edges: {len(mst_edges)}")
+    print(f"Saved figure to {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
-    build_figures()
+    build_figure()

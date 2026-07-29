@@ -1,19 +1,20 @@
-"""SKATER transition correlation map -- S_min=3, C in {18,19,24,25}.
+"""SKATER transition correlation map -- S_min=3, C in {24,25}, zoomed.
 
 Builds a Results figure (sections/results.tex,
-\\label{fig:skater_correlation_s3}): four pruning steps of the
-S_min=3 run, colored by each region's pruning objective rho_c (best
-signed Spearman correlation, lagged eggs vs dengue rate), on the
-same color scale as figure_skater_correlation_s100.py.
+\\label{fig:skater_correlation_s3}): one before/after pruning step of
+the S_min=3 run (C=24 -> C=25), colored by each region's pruning
+objective rho_c (best signed Spearman correlation, lagged eggs vs
+dengue rate), on the same color scale as
+figure_skater_correlation_s100.py.
 
-The steps are two before/after pairs, (18,19) and (24,25), each
-capturing one specific MST cut. Each pair creates its own new
-region -- one born between C=18 and C=19, a different one born
-between C=24 and C=25 -- detected programmatically
-(find_new_small_region: smallest cluster present after the cut but
-not before it) and marked with a black square (padded bounding box)
-only in the "after" panel of its own pair (C=19, C=25) -- region
-identity/highlighting is independent of the rho_c color scale.
+The step captures one specific MST cut that creates a new region,
+detected programmatically (find_new_small_region: smallest cluster
+present after the cut but not before it) and marked with a black
+square (padded bounding box) in the "after" panel. Both panels are
+zoomed to a padded window around that region -- at full-city scale
+the new region (22 sectors) is too small to read -- so region
+identity/highlighting is independent of the rho_c color scale, but
+the map extent itself is centered on the split.
 
 Inputs:
   data/processed/bh_sectors_2022_with_populations.geojson
@@ -48,10 +49,9 @@ SECTORS_PATH = Path(
 )
 RESULTS_DIR = Path("results/skater")
 RUN_LABEL = "spearman_3"
-C_VALUES = [18, 19, 24, 25]
-# Each (before, after) pair's own newly-created region, marked only
-# in that pair's "after" panel.
-HIGHLIGHT_PAIRS = {19: (18, 19), 25: (24, 25)}
+C_BEFORE = 24
+C_AFTER = 25
+C_VALUES = [C_BEFORE, C_AFTER]
 OUTPUT_PATH = Path(
     "6a441e20c1f1a66c183b3c38/Figures/figure_skater_correlation_s3.png"
 )
@@ -63,6 +63,9 @@ OTHER_C_VALUES = [1, 2, 3, 4]
 CMAP = "coolwarm"
 HIGHLIGHT_PADDING_FACTOR = 1.5
 HIGHLIGHT_COLOR = "black"
+# How far out the shared map extent reaches around the split region,
+# as a multiple of the region's own bounding-box size.
+ZOOM_PADDING_FACTOR = 6.0
 
 
 def load_sectors(path: Path) -> gpd.GeoDataFrame:
@@ -167,6 +170,28 @@ def shared_color_range() -> tuple[float, float]:
     return float(all_q.min()), float(all_q.max())
 
 
+def compute_zoom_bounds(
+    merged: gpd.GeoDataFrame, highlight_sectors: frozenset[str]
+) -> np.ndarray:
+    """Compute a padded map extent centered on the split region.
+
+    Args:
+        merged: Sector polygons for the "after" pruning step, already
+            carrying a q_c column.
+        highlight_sectors: Sector ids making up the newly created
+            region, from find_new_small_region().
+
+    Returns:
+        (minx, miny, maxx, maxy) extent, padded by
+        ZOOM_PADDING_FACTOR times the region's own bounding-box size.
+    """
+    highlight = merged[merged["CD_SETOR"].isin(highlight_sectors)]
+    hx0, hy0, hx1, hy1 = highlight.total_bounds
+    pad_x = (hx1 - hx0) * ZOOM_PADDING_FACTOR
+    pad_y = (hy1 - hy0) * ZOOM_PADDING_FACTOR
+    return np.array([hx0 - pad_x, hy0 - pad_y, hx1 + pad_x, hy1 + pad_y])
+
+
 def style_map_panel(
     ax: Axes, bounds: np.ndarray, mean_lat: float, title: str
 ) -> None:
@@ -198,11 +223,6 @@ def draw_highlight_square(
 ) -> None:
     """Mark the highlighted region's bounding box with a black square.
 
-    The highlighted region is only ~0.006 x 0.004 degrees, invisible
-    as a shape outline at full-city scale, so instead of tracing its
-    exact boundary this draws a padded bounding-box square around it
-    -- easy to spot without needing a zoomed inset.
-
     Args:
         ax: Main map panel axes to draw the square on.
         merged: Sector polygons for this pruning step, already
@@ -223,39 +243,42 @@ def draw_highlight_square(
 
 
 def main() -> None:
-    """Build and save the four-panel transition correlation figure."""
+    """Build and save the two-panel zoomed transition correlation figure."""
     sectors = load_sectors(SECTORS_PATH)
-    bounds = sectors.total_bounds
-    mean_lat = float((bounds[1] + bounds[3]) / 2.0)
-    vmin, vmax = shared_color_range()
-    logger.info("Shared color scale: [%.3f, %.3f]", vmin, vmax)
 
     run_dir = RESULTS_DIR / RUN_LABEL
     assignments = load_cluster_assignments(run_dir)
-    highlights_by_after_c = {}
-    for after_c, (before_c, after_c_) in HIGHLIGHT_PAIRS.items():
-        region = find_new_small_region(assignments, before_c, after_c_)
-        highlights_by_after_c[after_c] = region
-        logger.info(
-            "Highlighted region: %d sectors, born between C=%d and C=%d",
-            len(region), before_c, after_c_,
-        )
+    highlight_region = find_new_small_region(assignments, C_BEFORE, C_AFTER)
+    logger.info(
+        "Highlighted region: %d sectors, born between C=%d and C=%d",
+        len(highlight_region), C_BEFORE, C_AFTER,
+    )
 
-    fig, axes = plt.subplots(2, 2, figsize=(9, 9.5))
+    after_snapshot = load_correlation_snapshot(assignments, run_dir, C_AFTER)
+    after_merged = sectors.merge(
+        after_snapshot, left_on="CD_SETOR", right_on="sector_id", how="inner"
+    )
+    zoom_bounds = compute_zoom_bounds(after_merged, highlight_region)
+    mean_lat = float((zoom_bounds[1] + zoom_bounds[3]) / 2.0)
 
-    for ax, c in zip(axes.flat, C_VALUES):
+    vmin, vmax = shared_color_range()
+    logger.info("Shared color scale: [%.3f, %.3f]", vmin, vmax)
+
+    fig, axes = plt.subplots(1, 2, figsize=(9, 5))
+
+    for ax, c in zip(axes, C_VALUES):
         snapshot = load_correlation_snapshot(assignments, run_dir, c)
         merged = sectors.merge(
             snapshot, left_on="CD_SETOR", right_on="sector_id", how="inner"
         )
         merged.plot(
             ax=ax, column="q_c", cmap=CMAP, vmin=vmin, vmax=vmax,
-            edgecolor="#333333", linewidth=0.15,
+            edgecolor="#333333", linewidth=0.3,
         )
-        style_map_panel(ax, bounds, mean_lat, f"K = {c}")
+        style_map_panel(ax, zoom_bounds, mean_lat, f"K = {c}")
 
-        if c in highlights_by_after_c:
-            draw_highlight_square(ax, merged, highlights_by_after_c[c])
+        if c == C_AFTER:
+            draw_highlight_square(ax, merged, highlight_region)
 
     fig.tight_layout(rect=[0, 0, 0.9, 1])
 

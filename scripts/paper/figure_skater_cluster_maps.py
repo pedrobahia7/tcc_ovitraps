@@ -112,7 +112,7 @@ def main() -> None:
     bounds = sectors.total_bounds
     mean_lat = float((bounds[1] + bounds[3]) / 2.0)
 
-    fig, axes = plt.subplots(2, 2, figsize=(9, 9.5))
+    fig, axes = plt.subplots(2, 2, figsize=(9, 7.0))
 
     for ax, run_label in zip(axes.flat, RUN_LABELS):
         run_dir = RESULTS_DIR / run_label
