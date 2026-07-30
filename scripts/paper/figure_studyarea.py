@@ -119,7 +119,13 @@ def build_map(boundary: gpd.GeoDataFrame, traps: pd.DataFrame) -> folium.Map:
     pad_x = (maxx - minx) * MAP_PADDING_FRAC
     pad_y = (maxy - miny) * MAP_PADDING_FRAC
 
-    fmap = folium.Map(tiles=TILE_STYLE, control_scale=True, zoom_control=False)
+    # zoomSnap=0 allows a continuous (non-integer) zoom level, so
+    # fit_bounds lands on the exact tight fit instead of snapping down
+    # to the nearest whole zoom -- the snapping was leaving a visible
+    # margin around the boundary on every side.
+    fmap = folium.Map(
+        tiles=TILE_STYLE, control_scale=True, zoom_control=False, zoomSnap=0
+    )
     fmap.fit_bounds([[miny - pad_y, minx - pad_x], [maxy + pad_y, maxx + pad_x]])
 
     folium.GeoJson(
@@ -160,6 +166,19 @@ def screenshot_map(html_path: Path, png_path: Path, size: tuple[int, int]) -> No
 
     driver = webdriver.Chrome(options=options)
     try:
+        # --window-size sets the OUTER window, not the viewport -- headless
+        # Chrome still reserves ~140px for a phantom toolbar, so the
+        # screenshot comes out shorter than `size`. Force the viewport to
+        # the exact target via CDP instead of trusting the window flag.
+        driver.execute_cdp_cmd(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": size[0],
+                "height": size[1],
+                "deviceScaleFactor": 1,
+                "mobile": False,
+            },
+        )
         driver.get(f"file://{html_path.resolve()}")
         time.sleep(TILE_LOAD_WAIT_SECONDS)  # let map tiles finish loading
         driver.save_screenshot(str(png_path))
